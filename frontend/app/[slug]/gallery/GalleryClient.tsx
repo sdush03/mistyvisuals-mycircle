@@ -131,7 +131,7 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
     if (!google || !event || !btnContainer) return
 
     google.accounts.id.initialize({
-      client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '1047124976775-mock.apps.googleusercontent.com',
+      client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '813548862884-nisdjmc8avi1p5c5joj7pp6o6lg7j6as.apps.googleusercontent.com',
       callback: handleGoogleCredentialResponse
     })
 
