@@ -118,12 +118,12 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
 
 
 
-  // Initialize Google Identity Services on page load/event load
+  // Initialize Google Identity Services on page load/event load or modal toggle
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).google && event) {
       initializeGoogle()
     }
-  }, [event])
+  }, [event, showLoginModal])
 
   const initializeGoogle = () => {
     const google = (window as any).google
