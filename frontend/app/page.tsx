@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Script from 'next/script'
 import { useRouter } from 'next/navigation'
 import { CameraCaptureModal } from '@/components/CameraCaptureModal'
+import { GuestLoginFlow } from '@/components/GuestLoginFlow'
 
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
@@ -35,6 +36,7 @@ export default function CirclePage() {
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null)
+  const [showLoginModal, setShowLoginModal] = useState(false)
 
   // Helper to fetch selfie image with auth and return a blob URL
   const fetchAuthenticatedSelfie = async (selfieGuestId: number, authToken?: string) => {
@@ -203,12 +205,7 @@ export default function CirclePage() {
     }
   }
 
-  // Initialize Google Sign-in on mount if script is ready and not logged in
-  useEffect(() => {
-    if (!token && typeof window !== 'undefined' && (window as any).google) {
-      initializeGoogle()
-    }
-  }, [token])
+
 
   const fetchEvents = async (authToken: string) => {
     try {
@@ -246,44 +243,15 @@ export default function CirclePage() {
     }
   }
 
-  const initializeGoogle = () => {
-    const google = (window as any).google
-    const btnContainer = document.getElementById('google-signin-btn')
-    if (!google || !btnContainer) return
-
-    google.accounts.id.initialize({
-      client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '813548862884-nisdjmc8avi1p5c5joj7pp6o6lg7j6as.apps.googleusercontent.com',
-      callback: handleGoogleCredentialResponse
-    })
-
-    google.accounts.id.renderButton(
-      btnContainer,
-      { theme: 'filled_black', size: 'large', width: '280', shape: 'rectangular' }
-    )
-  }
-
-  const handleGoogleCredentialResponse = async (response: any) => {
-    try {
-      setLoading(true)
-      const res = await fetch(`${apiUrl}/api/gallery/family/auth`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token: response.credential
-        })
-      })
-
-      if (!res.ok) throw new Error('Google authentication failed')
-      const data = await res.json()
-
-      localStorage.setItem('mv_circle_token', data.token)
-      localStorage.setItem('mv_circle_profile', JSON.stringify(data.profile))
-      setToken(data.token)
-      setProfile(data.profile)
-      fetchEvents(data.token)
-    } catch (err: any) {
-      setError(err.message)
-      setLoading(false)
+  const handleLoginSuccess = (profile: any, token: string) => {
+    localStorage.setItem('mv_circle_token', token)
+    localStorage.setItem('mv_circle_profile', JSON.stringify(profile))
+    setToken(token)
+    setProfile(profile)
+    setShowLoginModal(false)
+    fetchEvents(token)
+    if (profile.selfieGuestId) {
+      fetchAuthenticatedSelfie(profile.selfieGuestId, token)
     }
   }
 
@@ -305,9 +273,6 @@ export default function CirclePage() {
     setSelfieUrl(null)
     setError(null)
     setShowProfileModal(false)
-    setTimeout(() => {
-      initializeGoogle()
-    }, 100)
   }
 
   const openProfile = () => {
@@ -440,11 +405,7 @@ export default function CirclePage() {
         rel="stylesheet" 
       />
 
-      <Script 
-        src="https://accounts.google.com/gsi/client" 
-        onLoad={initializeGoogle}
-        strategy="afterInteractive"
-      />
+
 
       {/* ── Global Header Navbar ── */}
       <header style={{
@@ -617,55 +578,35 @@ export default function CirclePage() {
             `}</style>
           </div>
         ) : !token ? (
-          /* Login Card styling: Sleek, centered, subtle borders */
-          <div style={{
-            background: '#ffffff',
-            border: '1px solid #ddd8d0',
-            borderRadius: '2px',
-            padding: '3.5rem 2.5rem',
-            width: '100%',
-            maxWidth: '460px',
-            textAlign: 'center',
-            marginTop: '1rem',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.02)'
-          }}>
-            <h2 style={{
-              fontSize: '1.25rem',
-              fontWeight: 500,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              marginBottom: '1rem',
-              color: '#1c1a18'
-            }}>
-              Join the Circle
-            </h2>
-            <p style={{
-              color: '#8c867e',
-              fontSize: '0.8125rem',
-              lineHeight: 1.6,
-              marginBottom: '2.5rem'
-            }}>
-              Sign in with Google to dynamically verify your guest credentials and securely unlock all weddings you attended.
-            </p>
-
-            {error && (
-              <div style={{
-                background: '#fff5f5',
-                border: '1px solid #feb2b2',
-                color: '#c53030',
-                padding: '0.75rem 1rem',
-                borderRadius: '2px',
+          /* Elegant, minimalist Unlock CTA matching the wedding gallery */
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '2rem' }}>
+            <button 
+              onClick={() => setShowLoginModal(true)}
+              style={{
+                fontFamily: 'Montserrat, system-ui, sans-serif',
                 fontSize: '0.75rem',
-                marginBottom: '1.5rem',
-                textAlign: 'left'
-              }}>
-                {error}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <div id="google-signin-btn"></div>
-            </div>
+                fontWeight: 500,
+                color: '#1c1a18',
+                letterSpacing: '0.2em',
+                textTransform: 'uppercase',
+                border: '1px solid #1c1a18',
+                borderRadius: '0px',
+                padding: '1rem 2.5rem',
+                backgroundColor: 'transparent',
+                cursor: 'pointer',
+                transition: 'all 0.3s'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = '#1c1a18'
+                e.currentTarget.style.color = '#ffffff'
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent'
+                e.currentTarget.style.color = '#1c1a18'
+              }}
+            >
+              Unlock My Circle
+            </button>
           </div>
         ) : (
           /* Logged In Dashboard styling */
@@ -1113,6 +1054,12 @@ export default function CirclePage() {
           </div>
         </div>
       )}
+
+      <GuestLoginFlow
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onSuccess={handleLoginSuccess}
+      />
 
       <CameraCaptureModal
         isOpen={showCameraCaptureModal}
