@@ -135,6 +135,7 @@ export function CameraCaptureModal({
       }, 100)
       return () => {
         clearTimeout(timer)
+        stopCamera()
       }
     } else {
       stopCamera()
@@ -150,8 +151,10 @@ export function CameraCaptureModal({
 
   useEffect(() => {
     return () => {
+      isOpenRef.current = false
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop())
+        streamRef.current = null
       }
     }
   }, [])
