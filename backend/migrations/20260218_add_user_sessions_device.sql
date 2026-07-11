@@ -1,0 +1,3 @@
+ALTER TABLE user_sessions
+  ADD COLUMN IF NOT EXISTS device_type TEXT,
+  ADD COLUMN IF NOT EXISTS user_agent TEXT;

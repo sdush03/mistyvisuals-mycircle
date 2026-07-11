@@ -1,0 +1,182 @@
+[
+  {
+    "timestamp": "2026-07-06T22:28:00.213Z",
+    "eventId": 1,
+    "guestEmail": "demoguest@mistyvisuals.com",
+    "actionType": "selfie_search",
+    "queryExpanded": false,
+    "seeds": [],
+    "matchesCount": 0,
+    "highestScore": null
+  },
+  {
+    "timestamp": "2026-07-06T22:28:23.117Z",
+    "eventId": 1,
+    "guestEmail": "demoguest@mistyvisuals.com",
+    "actionType": "selfie_search",
+    "queryExpanded": false,
+    "seeds": [],
+    "matchesCount": 0,
+    "highestScore": null
+  },
+  {
+    "timestamp": "2026-07-06T22:29:59.982Z",
+    "eventId": 1,
+    "guestEmail": "demoguest@mistyvisuals.com",
+    "actionType": "selfie_search",
+    "queryExpanded": true,
+    "seeds": [
+      1362,
+      1284,
+      1265
+    ],
+    "matchesCount": 88,
+    "highestScore": 0.8810505867004395
+  },
+  {
+    "timestamp": "2026-07-06T22:32:32.561Z",
+    "eventId": 1,
+    "guestEmail": "demoguest@mistyvisuals.com",
+    "actionType": "selfie_search",
+    "queryExpanded": true,
+    "seeds": [
+      1288,
+      1185,
+      1255
+    ],
+    "matchesCount": 80,
+    "highestScore": 0.9444018006324768
+  },
+  {
+    "timestamp": "2026-07-06T22:33:06.597Z",
+    "eventId": 1,
+    "guestEmail": "demoguest@mistyvisuals.com",
+    "actionType": "selfie_search",
+    "queryExpanded": true,
+    "seeds": [
+      1317,
+      1237,
+      1231
+    ],
+    "matchesCount": 82,
+    "highestScore": 0.943903386592865
+  },
+  {
+    "timestamp": "2026-07-06T22:33:41.459Z",
+    "eventId": 1,
+    "guestEmail": "demoguest@mistyvisuals.com",
+    "actionType": "selfie_search",
+    "queryExpanded": true,
+    "seeds": [
+      1328,
+      1234,
+      1307
+    ],
+    "matchesCount": 81,
+    "highestScore": 0.914237916469574
+  },
+  {
+    "timestamp": "2026-07-06T22:33:47.273Z",
+    "eventId": 1,
+    "guestEmail": "demoguest@mistyvisuals.com",
+    "actionType": "selfie_search",
+    "queryExpanded": true,
+    "seeds": [
+      1339,
+      1301,
+      1250
+    ],
+    "matchesCount": 81,
+    "highestScore": 0.92754727602005
+  },
+  {
+    "timestamp": "2026-07-06T22:34:02.548Z",
+    "eventId": 1,
+    "guestEmail": "demoguest@mistyvisuals.com",
+    "actionType": "selfie_search",
+    "queryExpanded": true,
+    "seeds": [
+      1312,
+      1264,
+      1370
+    ],
+    "matchesCount": 98,
+    "highestScore": 0.875250518321991
+  },
+  {
+    "timestamp": "2026-07-06T22:34:35.466Z",
+    "eventId": 1,
+    "guestEmail": "demoguest@mistyvisuals.com",
+    "actionType": "selfie_search",
+    "queryExpanded": true,
+    "seeds": [
+      1266,
+      1179,
+      1299
+    ],
+    "matchesCount": 80,
+    "highestScore": 0.9460954666137695
+  },
+  {
+    "timestamp": "2026-07-06T22:45:33.254Z",
+    "eventId": 1,
+    "guestEmail": "demoguest@mistyvisuals.com",
+    "actionType": "selfie_search",
+    "queryExpanded": "two-stage",
+    "seeds": [
+      1362,
+      1284,
+      1265,
+      1194,
+      1189
+    ],
+    "matchesCount": 89,
+    "highestScore": 0.8207824230194092
+  },
+  {
+    "timestamp": "2026-07-06T22:46:43.492Z",
+    "eventId": 1,
+    "guestEmail": "demoguest@mistyvisuals.com",
+    "actionType": "selfie_search",
+    "queryExpanded": "one-stage",
+    "seeds": [
+      1317,
+      1237,
+      1231
+    ],
+    "matchesCount": 82,
+    "highestScore": 0.9567791819572449
+  },
+  {
+    "timestamp": "2026-07-07T06:22:25.200Z",
+    "eventId": 1,
+    "guestEmail": "demoguest@mistyvisuals.com",
+    "actionType": "selfie_search",
+    "queryExpanded": "two-stage",
+    "seeds": [
+      1362,
+      1284,
+      1265,
+      1194,
+      1189
+    ],
+    "matchesCount": 89,
+    "highestScore": 0.8207824230194092
+  },
+  {
+    "timestamp": "2026-07-07T11:49:03.383Z",
+    "eventId": 1,
+    "guestEmail": "demoguest@mistyvisuals.com",
+    "actionType": "selfie_search",
+    "queryExpanded": "two-stage",
+    "seeds": [
+      1362,
+      1284,
+      1265,
+      1194,
+      1189
+    ],
+    "matchesCount": 89,
+    "highestScore": 0.8207824230194092
+  }
+]

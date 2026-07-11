@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS lead_activities (
+  id SERIAL PRIMARY KEY,
+  lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  activity_type TEXT NOT NULL,
+  metadata JSONB NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);

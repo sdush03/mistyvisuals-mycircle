@@ -1,0 +1,30 @@
+# Node dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js builds and cache
+.next/
+out/
+build/
+dist/
+
+# Env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Large models and installers
+backend/models/w600k_r50.onnx
+frontend/public/downloads/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Deployment / Local temp files
+deploy-logs/
+*.log

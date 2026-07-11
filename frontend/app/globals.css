@@ -1,0 +1,236 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400;1,500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@100..900&display=swap');
+@import "tailwindcss";
+
+:root {
+  --background: #f5f4f0;
+  --foreground: #111111;
+  --surface: #ffffff;
+  --surface-muted: #f8f7f3;
+  --surface-strong: #f1efe8;
+  --border: #e6e3d9;
+  --border-strong: #d8d4c7;
+  --accent: #0f172a;
+  --accent-soft: #e8ecf7;
+  --success: #166534;
+  --warning: #9a3412;
+  --color-white: #ffffff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+.force-light {
+  --background: #f5f4f0;
+  --foreground: #111111;
+  --surface: #ffffff;
+  --surface-muted: #f8f7f3;
+  --surface-strong: #f1efe8;
+  --border: #e6e3d9;
+  --border-strong: #d8d4c7;
+  --accent: #0f172a;
+  --accent-soft: #e8ecf7;
+  --success: #166534;
+  --warning: #9a3412;
+
+  --color-white: #ffffff;
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f5f5f5;
+  --color-neutral-200: #e5e5e5;
+  --color-neutral-300: #d4d4d4;
+  --color-neutral-400: #a3a3a3;
+  --color-neutral-500: #737373;
+  --color-neutral-600: #525252;
+  --color-neutral-700: #404040;
+  --color-neutral-800: #262626;
+  --color-neutral-900: #171717;
+
+  background-color: var(--background);
+  color: var(--foreground);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+    --surface: #121212;
+    --surface-muted: #1e1e1e;
+    --surface-strong: #2a2a2a;
+    --border: #333333;
+    --border-strong: #404040;
+    --accent: #f8fafc;
+    --accent-soft: #1e293b;
+    --success: #22c55e;
+    --warning: #f97316;
+
+    /* Tailwind v4 CSS Variable Automatic Inversion for Global Dark Mode */
+    --color-white: #111111;
+    --color-neutral-50: #1a1a1a;
+    --color-neutral-100: #262626;
+    --color-neutral-200: #333333;
+    --color-neutral-300: #404040;
+    --color-neutral-400: #737373;
+    --color-neutral-500: #a3a3a3;
+    --color-neutral-600: #d4d4d4;
+    --color-neutral-700: #e5e5e5;
+    --color-neutral-800: #f5f5f5;
+    --color-neutral-900: #ffffff;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro", "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--foreground);
+  caret-color: var(--foreground);
+  transition: background-color 9999s ease-out 0s;
+  box-shadow: 0 0 0 1000px var(--surface) inset;
+  font-family: inherit;
+}
+
+h1, h2, h3 {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+[role="button"],
+a,
+select,
+summary,
+input[type="button"],
+input[type="submit"],
+input[type="checkbox"],
+input[type="radio"],
+label {
+  cursor: pointer;
+}
+
+a.btn-pill,
+button.btn-pill {
+  color: #ffffff;
+}
+
+/* Opt-in smooth scrolling for specific scroll containers only */
+.smooth-scroll {
+  scroll-behavior: smooth;
+}
+
+.field-error {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 1px #dc2626 !important;
+}
+
+.shake {
+  animation: shake 0.25s ease-in-out;
+}
+
+/* Proposal inputs: remove number spinners but keep arrow key increments */
+.proposal-number::-webkit-outer-spin-button,
+.proposal-number::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.proposal-number {
+  -moz-appearance: textfield;
+}
+
+@keyframes shake {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  50% { transform: translateX(4px); }
+  75% { transform: translateX(-3px); }
+  100% { transform: translateX(0); }
+}
+
+.kanban-hover-actions {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.kanban-hover-preview {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition-delay: 0.2s;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .kanban-card:hover .kanban-hover-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .kanban-card:hover .kanban-hover-preview {
+    opacity: 1;
+    pointer-events: none;
+    transform: translateY(0);
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .kanban-hover-preview {
+    display: none !important;
+  }
+}
+@keyframes waterfall {
+  from {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-waterfall {
+  animation: waterfall 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@supports (app-region: drag) or (-webkit-app-region: drag) {
+  .drag-region {
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+  .no-drag-region {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+}

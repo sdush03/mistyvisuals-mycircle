@@ -1,0 +1,1 @@
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS original_file_size INTEGER;

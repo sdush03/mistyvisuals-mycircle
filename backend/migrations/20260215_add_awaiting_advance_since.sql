@@ -1,0 +1,2 @@
+ALTER TABLE leads
+  ADD COLUMN IF NOT EXISTS awaiting_advance_since TIMESTAMP NULL;

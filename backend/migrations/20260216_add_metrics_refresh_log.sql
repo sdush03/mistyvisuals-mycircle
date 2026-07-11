@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS metrics_refresh_log (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  last_run_at TIMESTAMP NOT NULL
+);

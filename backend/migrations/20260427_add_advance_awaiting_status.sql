@@ -1,0 +1,2 @@
+-- Add ADVANCE_AWAITING to quote_status enum
+ALTER TYPE quote_status ADD VALUE IF NOT EXISTS 'ADVANCE_AWAITING' AFTER 'SENT';

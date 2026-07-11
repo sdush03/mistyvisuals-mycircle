@@ -1,0 +1,2 @@
+ALTER TABLE leads
+  ADD COLUMN IF NOT EXISTS not_contacted_count INTEGER DEFAULT 0;

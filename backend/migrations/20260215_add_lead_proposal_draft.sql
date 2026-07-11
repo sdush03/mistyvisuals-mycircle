@@ -1,0 +1,2 @@
+ALTER TABLE leads
+ADD COLUMN IF NOT EXISTS proposal_draft JSONB;

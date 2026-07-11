@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS known_internal_ips (
+  ip TEXT PRIMARY KEY,
+  last_seen_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+);

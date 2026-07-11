@@ -1,0 +1,2 @@
+ALTER TABLE leads
+ADD COLUMN IF NOT EXISTS intake_completed BOOLEAN NOT NULL DEFAULT false;

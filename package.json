@@ -1,0 +1,14 @@
+{
+  "name": "mistyvisuals-mycircle",
+  "version": "1.0.0",
+  "description": "Guest gallery and Circle app workspace",
+  "scripts": {
+    "install:all": "npm install --prefix backend && npm install --prefix frontend",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev": "npx concurrently --kill-others \"npm run dev:backend\" \"npm run dev:frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

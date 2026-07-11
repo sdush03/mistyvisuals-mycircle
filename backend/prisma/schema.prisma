@@ -1,0 +1,1366 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model QuoteGroup {
+  id        Int            @id @default(autoincrement())
+  leadId    Int            @map("lead_id")
+  title     String
+  createdAt DateTime       @default(now()) @map("created_at")
+  projects  projects[]
+  versions  QuoteVersion[]
+
+  @@index([leadId])
+  @@map("quote_groups")
+}
+
+model QuoteVersion {
+  id                 Int                @id @default(autoincrement())
+  quoteGroupId       Int                @map("quote_group_id")
+  versionNumber      Int                @map("version_number")
+  status             QuoteStatus        @default(DRAFT)
+  calculatedPrice    Decimal?           @map("calculated_price")
+  salesOverridePrice Decimal?           @map("sales_override_price")
+  overrideReason     String?            @map("override_reason")
+  targetPrice        Decimal?           @map("target_price")
+  softDiscountPrice  Decimal?           @map("soft_discount_price")
+  minimumPrice       Decimal?           @map("minimum_price")
+  draftDataJson      Json?              @map("draft_data_json")
+  isLatest           Boolean            @default(true) @map("is_latest")
+  createdBy          Int?               @map("created_by")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  projects           projects[]
+
+  quoteGroup        QuoteGroup         @relation(fields: [quoteGroupId], references: [id])
+  items             QuotePricingItem[]
+  negotiations      QuoteNegotiation[]
+  approvals         QuoteApproval[]
+  proposalSnapshots ProposalSnapshot[]
+
+  @@unique([quoteGroupId, versionNumber], map: "quote_versions_group_version_unique")
+  @@index([status])
+  @@index([quoteGroupId], map: "quote_versions_group_idx")
+  @@map("quote_versions")
+}
+
+model QuotePricingItem {
+  id             Int             @id @default(autoincrement())
+  quoteVersionId Int             @map("quote_version_id")
+  itemType       PricingItemType @map("item_type")
+  catalogId      Int             @map("catalog_id")
+  quantity       Int             @default(1)
+  unitPrice      Decimal         @map("unit_price")
+  totalPrice     Decimal         @map("total_price")
+  phase          String?         @default("WEDDING") @db.VarChar(20)
+
+  quoteVersion QuoteVersion @relation(fields: [quoteVersionId], references: [id])
+
+  @@index([quoteVersionId], map: "quote_pricing_items_version_idx")
+  @@map("quote_pricing_items")
+}
+
+model TeamRoleCatalog {
+  id                Int              @id @default(autoincrement())
+  name              String
+  price             Decimal
+  unitType          UnitType         @map("unit_type")
+  active            Boolean          @default(true)
+  createdAt         DateTime         @default(now()) @map("created_at")
+  operationalRoleId Int?             @map("operational_role_id")
+  operationalRole   OperationalRole? @relation(fields: [operationalRoleId], references: [id])
+
+  @@map("team_role_catalog")
+}
+
+model OperationalRole {
+  id        Int              @id @default(autoincrement())
+  category  String
+  name      String           @unique
+  active    Boolean          @default(true)
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  teamRoles TeamRoleCatalog[]
+
+  @@map("operational_roles")
+}
+
+model DeliverableCatalog {
+  id               Int                 @id @default(autoincrement())
+  name             String
+  price            Decimal
+  unitType         UnitType            @map("unit_type")
+  active           Boolean             @default(true)
+  createdAt        DateTime            @default(now()) @map("created_at")
+  category         DeliverableCategory @default(OTHER)
+  description      String?
+  deliveryTimeline String?             @map("delivery_timeline")
+  deliveryPhase    String?             @default("WEDDING") @map("delivery_phase") @db.VarChar(20)
+
+  @@map("deliverable_catalog")
+}
+
+model PricingRule {
+  id                      Int      @id @default(autoincrement())
+  ruleName                String   @map("rule_name")
+  conditionsJson          Json     @map("conditions_json")
+  defaultTeamJson         Json     @map("default_team_json")
+  defaultDeliverablesJson Json     @map("default_deliverables_json")
+  priority                Int      @default(0)
+  active                  Boolean  @default(true)
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  @@map("pricing_rules")
+}
+
+model QuoteNegotiation {
+  id             Int             @id @default(autoincrement())
+  quoteVersionId Int             @map("quote_version_id")
+  type           NegotiationType
+  message        String
+  createdBy      Int?            @map("created_by")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  quoteVersion QuoteVersion @relation(fields: [quoteVersionId], references: [id])
+
+  @@index([quoteVersionId], map: "quote_negotiations_version_idx")
+  @@map("quote_negotiations")
+}
+
+model QuoteApproval {
+  id             Int       @id @default(autoincrement())
+  quoteVersionId Int       @map("quote_version_id")
+  approvedBy     Int?      @map("approved_by")
+  approvedAt     DateTime? @map("approved_at")
+  note           String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  quoteVersion QuoteVersion @relation(fields: [quoteVersionId], references: [id])
+
+  @@index([quoteVersionId], map: "quote_approvals_version_idx")
+  @@map("quote_approvals")
+}
+
+model ProposalSnapshot {
+  id                       Int        @id @default(autoincrement())
+  quoteVersionId           Int        @map("quote_version_id")
+  proposalToken            String     @unique @map("proposal_token")
+  snapshotJson             Json       @map("snapshot_json")
+  createdAt                DateTime   @default(now()) @map("created_at")
+  expiresAt                DateTime?  @map("expires_at")
+  viewCount                Int        @default(0) @map("view_count")
+  lastViewedAt             DateTime?  @map("last_viewed_at")
+  total_time_spent_seconds Int        @default(0)
+  projects                 projects[]
+
+  quoteVersion QuoteVersion @relation(fields: [quoteVersionId], references: [id])
+
+  @@index([quoteVersionId], map: "proposal_snapshots_version_idx")
+  @@map("proposal_snapshots")
+}
+
+model ProposalView {
+  id                 Int      @id @default(autoincrement())
+  proposalSnapshotId Int      @map("proposal_snapshot_id")
+  ip                 String?
+  device             String?
+  createdAt          DateTime @default(now()) @map("created_at")
+  duration_seconds   Int      @default(0)
+
+  @@index([createdAt], map: "proposal_views_created_idx")
+  @@index([proposalSnapshotId], map: "proposal_views_snapshot_idx")
+  @@map("proposal_views")
+}
+
+model SystemSettings {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value Json
+
+  @@map("system_settings")
+}
+
+model admin_audit_log {
+  id         Int       @id @default(autoincrement())
+  user_id    Int?
+  action     String?
+  ip         String?
+  metadata   Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([ip], map: "idx_admin_audit_log_ip")
+}
+
+model cities {
+  id          Int           @id @default(autoincrement())
+  name        String        @db.VarChar(100)
+  state_id    Int?
+  created_at  DateTime?     @default(now()) @db.Timestamptz(6)
+  state       String?       @db.VarChar(100)
+  country     String?       @default("India") @db.VarChar(100)
+  lead_cities lead_cities[]
+}
+
+model compensation_components {
+  id                            Int                             @id @default(autoincrement())
+  name                          String
+  component_type                String                          @default("earning")
+  is_variable                   Boolean                         @default(false)
+  rule_type                     String?
+  calculation_note              String?
+  created_at                    DateTime?                       @default(now()) @db.Timestamp(6)
+  employee_compensation_entries employee_compensation_entries[]
+}
+
+model employee_compensation_entries {
+  id                      Int                     @id @default(autoincrement())
+  user_id                 Int
+  component_id            Int
+  amount                  Decimal                 @default(0) @db.Decimal
+  month                   DateTime                @db.Date
+  lead_id                 Int?
+  notes                   String?
+  created_at              DateTime?               @default(now()) @db.Timestamp(6)
+  compensation_components compensation_components @relation(fields: [component_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                   users                   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model employee_compensation_profiles {
+  id              Int       @id @default(autoincrement())
+  user_id         Int       @unique
+  employment_type String    @default("salaried")
+  base_amount     Decimal?  @default(0) @db.Decimal
+  is_active       Boolean   @default(true)
+  created_at      DateTime? @default(now()) @db.Timestamp(6)
+  updated_at      DateTime? @default(now()) @db.Timestamp(6)
+  users           users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model employee_payouts {
+  id                     Int       @id @default(autoincrement())
+  user_id                Int
+  month                  DateTime  @db.Date
+  total_payable          Decimal?  @default(0) @db.Decimal
+  total_paid             Decimal?  @default(0) @db.Decimal
+  payout_date            DateTime? @db.Date
+  finance_transaction_id Int?
+  base_salary            Decimal?  @default(0) @db.Decimal
+  incentives             Decimal?  @default(0) @db.Decimal
+  leave_deduction        Decimal?  @default(0) @db.Decimal
+  manual_adjustment      Decimal?  @default(0) @db.Decimal
+  carry_forward_prev     Decimal?  @default(0) @db.Decimal
+  amount_paid            Decimal?  @default(0) @db.Decimal
+  carry_forward_next     Decimal?  @default(0) @db.Decimal
+  advance_next           Decimal?  @default(0) @db.Decimal
+  created_at             DateTime? @default(now()) @db.Timestamp(6)
+  users                  users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, month])
+}
+
+model finance_categories {
+  id                   Int                    @id @default(autoincrement())
+  name                 String
+  type                 String
+  parent_id            Int?
+  created_at           DateTime?              @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime?              @default(now()) @db.Timestamp(6)
+  finance_transactions finance_transactions[]
+}
+
+model finance_transaction_audits {
+  id                   Int                  @id @default(autoincrement())
+  transaction_id       Int
+  field                String
+  old_value            String?
+  new_value            String?
+  edited_by            Int?
+  created_at           DateTime             @default(now()) @db.Timestamp(6)
+  users                users?               @relation(fields: [edited_by], references: [id], onUpdate: NoAction)
+  finance_transactions finance_transactions @relation(fields: [transaction_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([transaction_id], map: "fta_tx_idx")
+}
+
+model finance_transactions {
+  id                         Int                          @id @default(autoincrement())
+  amount                     Decimal                      @default(0) @db.Decimal(12, 2)
+  type                       String?
+  category_id                Int?
+  description                String?
+  date                       DateTime?                    @db.Date
+  project_id                 Int?
+  vendor_id                  Int?
+  user_id                    Int?
+  metadata                   Json?
+  created_at                 DateTime?                    @default(now()) @db.Timestamptz(6)
+  project_uuid               String?                      @db.Uuid
+  direction                  String?                      @default("out")
+  is_deleted                 Boolean                      @default(false)
+  is_transfer                Boolean                      @default(false)
+  updated_at                 DateTime                     @default(now()) @db.Timestamp(6)
+  updated_by                 Int?
+  money_source_id            Int?
+  lead_id                    Int?
+  vendor_bill_id             Int?
+  transaction_type           String?
+  transfer_group_id          String?
+  reference_code             String?
+  is_overhead                Boolean?                     @default(false)
+  note                       String?
+  finance_transaction_audits finance_transaction_audits[]
+  finance_categories         finance_categories?          @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  projects                   projects?                    @relation(fields: [project_uuid], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                      users?                       @relation(fields: [updated_by], references: [id], onUpdate: NoAction)
+
+  @@index([date])
+  @@index([date], map: "idx_finance_transactions_date")
+}
+
+model GalleryEvent {
+  id                     Int      @id @default(autoincrement())
+  leadId                 Int?     @map("lead_id")
+  slug                   String   @unique @db.VarChar(255)
+  title                  String   @db.VarChar(255)
+  date                   DateTime @db.Timestamp(6)
+  qrToken                String   @unique @map("qr_token") @db.VarChar(255)
+  coverPhotoUrl          String?  @map("cover_photo_url") @db.VarChar(1024)
+  active                 Boolean  @default(true)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt              DateTime @default(now()) @map("updated_at") @db.Timestamp(6)
+  coverPhotoMobileUrl    String?  @map("cover_photo_mobile_url")
+  projectId              String?  @unique @map("project_id")
+  tabs                   String[] @default([])
+  clustersDirty          Boolean  @default(true) @map("clusters_dirty")
+  clustersCache          Json?    @map("clusters_cache")
+  coverPhotoSquareUrl    String?  @map("cover_photo_square_url")
+  galleryFacesComplete   Boolean  @default(true) @map("gallery_faces_complete")
+  guests                 Guest[]
+  photos                 Photo[]
+
+  @@index([qrToken], map: "idx_gallery_events_qr_token")
+  @@index([slug], map: "idx_gallery_events_slug")
+  @@map("gallery_events")
+}
+
+model Guest {
+  id              Int          @id @default(autoincrement())
+  eventId         Int          @map("event_id")
+  email           String       @db.VarChar(255)
+  name            String?      @db.VarChar(255)
+  phoneNumber     String?      @map("phone_number") @db.VarChar(50)
+  provider        String       @default("google") @db.VarChar(50)
+  providerId      String       @map("provider_id") @db.VarChar(255)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamp(6)
+  hasFullAccess   Boolean?     @default(false) @map("has_full_access")
+  galleryEvent    GalleryEvent @relation(fields: [eventId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  likes           PhotoLike[]
+
+  @@unique([eventId, email])
+  @@index([eventId], map: "idx_guests_event_id")
+  @@map("guests")
+}
+
+model indian_states {
+  id      Int    @id @default(autoincrement())
+  name    String @unique
+  country String @default("India")
+}
+
+model invoice_line_items {
+  id                  Int       @id @default(autoincrement())
+  invoice_id          Int?
+  description         String?
+  amount              Decimal?  @db.Decimal(12, 2)
+  quantity            Int?      @default(1)
+  unit_price          Decimal?  @default(0) @db.Decimal
+  line_total          Decimal?  @default(0) @db.Decimal
+  is_billable_expense Boolean?  @default(false)
+  vendor_bill_id      Int?
+  invoices            invoices? @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model invoice_payment_schedule {
+  id         Int       @id @default(autoincrement())
+  invoice_id Int?
+  due_date   DateTime? @db.Date
+  amount     Decimal?  @db.Decimal(12, 2)
+  status     String?   @default("pending")
+  label      String?
+  percentage Decimal?  @db.Decimal
+  step_order Int?      @default(1)
+  invoices   invoices? @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model invoice_payments {
+  id                     Int       @id @default(autoincrement())
+  invoice_id             Int?
+  amount                 Decimal?  @db.Decimal(12, 2)
+  paid_at                DateTime? @default(now()) @db.Timestamptz(6)
+  method                 String?
+  note                   String?
+  amount_applied         Decimal?  @db.Decimal
+  finance_transaction_id Int?
+  created_at             DateTime? @default(now()) @db.Timestamp(6)
+  invoices               invoices? @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model invoices {
+  id                                     Int                        @id @default(autoincrement())
+  lead_id                                Int?
+  quote_group_id                         Int?
+  total_amount                           Decimal?                   @db.Decimal(12, 2)
+  status                                 String?                    @default("draft")
+  metadata                               Json?
+  created_at                             DateTime?                  @default(now()) @db.Timestamptz(6)
+  project_id                             String?                    @db.Uuid
+  advance_amount                         Decimal?                   @default(0) @db.Decimal(12, 2)
+  balance_amount                         Decimal?                   @default(0) @db.Decimal(12, 2)
+  advance_paid                           Boolean?                   @default(false)
+  due_date                               DateTime?                  @db.Date
+  invoice_number                         String?
+  invoice_type                           String?                    @default("non_gst")
+  payment_structure_id                   Int?
+  subtotal                               Decimal?                   @default(0) @db.Decimal
+  tax_amount                             Decimal?                   @default(0) @db.Decimal
+  issue_date                             DateTime?                  @db.Date
+  notes                                  String?
+  updated_at                             DateTime?                  @default(now()) @db.Timestamp(6)
+  share_token                            String?                    @unique(map: "invoices_share_token_idx") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  is_verified                            Boolean?                   @default(false)
+  invoice_line_items                     invoice_line_items[]
+  invoice_payment_schedule               invoice_payment_schedule[]
+  invoice_payments                       invoice_payments[]
+  leads                                  leads?                     @relation(fields: [lead_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  projects_invoices_project_idToprojects projects?                  @relation("invoices_project_idToprojects", fields: [project_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  projects_projects_invoice_idToinvoices projects[]                 @relation("projects_invoice_idToinvoices")
+}
+
+model known_internal_ips {
+  ip           String    @id
+  last_seen_at DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model lead_activities {
+  id            Int       @id @default(autoincrement())
+  lead_id       Int?
+  activity_type String
+  metadata      Json?
+  created_at    DateTime? @default(now()) @db.Timestamp(6)
+  user_id       Int?
+  leads         leads?    @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users         users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([lead_id, created_at], map: "idx_lead_activities_lead_id_created_at")
+  @@index([activity_type, created_at], map: "idx_lead_activities_type_created_at")
+}
+
+model lead_cities {
+  id         Int       @id @default(autoincrement())
+  lead_id    Int
+  city_id    Int
+  is_primary Boolean?  @default(false)
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  cities     cities    @relation(fields: [city_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leads      leads     @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([lead_id, city_id])
+  @@index([lead_id], map: "idx_lead_cities_lead_id")
+}
+
+model lead_enrichment_logs {
+  id         Int      @id @default(autoincrement())
+  lead_id    Int
+  payload    Json?
+  user_id    Int?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  leads      leads    @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users      users?   @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([lead_id], map: "idx_lead_enrichment_logs_lead_id")
+}
+
+model lead_events {
+  id             Int              @id @default(autoincrement())
+  lead_id        Int
+  event_type     String?          @db.VarChar(100)
+  event_date     DateTime?        @db.Date
+  pax            Int?
+  venue          String?          @db.VarChar(200)
+  description    String?
+  start_time     String?          @db.VarChar(10)
+  end_time       String?          @db.VarChar(10)
+  slot           String?          @db.VarChar(50)
+  city_id        Int?
+  venue_id       String?
+  venue_metadata Json?
+  date_status    String?          @default("confirmed") @db.VarChar(20)
+  position       Int?             @default(1)
+  created_at     DateTime?        @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime?        @default(now()) @db.Timestamptz(6)
+  leads          leads            @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  project_events project_events[]
+
+  @@index([lead_id], map: "idx_lead_events_lead_id")
+}
+
+model lead_followups {
+  id                   Int      @id @default(autoincrement())
+  lead_id              Int
+  follow_up_at         DateTime @db.Timestamptz(6)
+  type                 String
+  note                 String?
+  outcome              String?
+  follow_up_mode       String?
+  discussed_topics     Json?
+  not_connected_reason String?
+  user_id              Int?
+  created_at           DateTime @default(now()) @db.Timestamptz(6)
+  leads                leads    @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                users?   @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([lead_id, follow_up_at], map: "idx_lead_followups_lead_id_follow_up_at")
+}
+
+model lead_lost_reasons {
+  id      Int       @id @default(autoincrement())
+  lead_id Int       @unique
+  reason  String
+  note    String?
+  user_id Int?
+  lost_at DateTime? @default(now()) @db.Timestamptz(6)
+  leads   leads     @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model lead_metrics {
+  lead_id                    Int       @id
+  total_followups            Int       @default(0)
+  connected_followups        Int       @default(0)
+  not_connected_count        Int       @default(0)
+  avg_days_between_followups Decimal?  @db.Decimal
+  total_time_spent_seconds   Int       @default(0)
+  last_activity_at           DateTime? @db.Timestamp(6)
+  days_to_first_contact      Decimal?  @db.Decimal
+  days_to_conversion         Decimal?  @db.Decimal
+  reopen_count               Int       @default(0)
+  leads                      leads     @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model lead_negotiations {
+  id         Int      @id @default(autoincrement())
+  lead_id    Int
+  topic      String
+  note       String
+  user_id    Int?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  leads      leads    @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users      users?   @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([lead_id], map: "idx_lead_negotiations_lead_id")
+}
+
+model lead_notes {
+  id             Int       @id @default(autoincrement())
+  lead_id        Int
+  note_text      String
+  created_at     DateTime? @default(now()) @db.Timestamp(6)
+  status_at_time String?
+  user_id        Int?
+  leads          leads     @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users          users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([lead_id, created_at], map: "idx_lead_notes_lead_id_created_at")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model lead_pricing_logs {
+  id         Int       @id @default(autoincrement())
+  lead_id    Int?
+  field_type String?
+  amount     Decimal   @db.Decimal
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  user_id    Int?
+  leads      leads?    @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users      users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([lead_id], map: "idx_lead_pricing_logs_lead_id")
+}
+
+model lead_quotes {
+  id                Int       @id @default(autoincrement())
+  lead_id           Int?
+  quote_number      String
+  generated_text    String
+  amount_quoted     Decimal?  @db.Decimal
+  discounted_amount Decimal?  @db.Decimal
+  created_at        DateTime? @default(now()) @db.Timestamp(6)
+  created_by        Int?
+  users             users?    @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leads             leads?    @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([lead_id], map: "idx_lead_quotes_lead_id")
+}
+
+model lead_usage_logs {
+  id               Int       @id @default(autoincrement())
+  user_id          Int
+  lead_id          Int
+  entered_at       DateTime  @default(now()) @db.Timestamp(6)
+  left_at          DateTime? @db.Timestamp(6)
+  duration_seconds Int?
+  leads            leads     @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users            users     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([lead_id], map: "idx_lead_usage_logs_lead_id")
+  @@index([user_id], map: "idx_lead_usage_logs_user_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model leads {
+  id                       Int                    @id @default(autoincrement())
+  name                     String
+  source                   String
+  status                   String                 @default("New")
+  created_at               DateTime?              @default(now()) @db.Timestamp(6)
+  previous_status          String?
+  updated_at               DateTime?              @default(now()) @db.Timestamp(6)
+  heat                     String?                @default("Cold")
+  event_type               String?                @default("Wedding")
+  is_destination           Boolean?               @default(false)
+  country                  String?                @default("India")
+  phone_primary            String
+  phone_secondary          String?
+  email                    String?
+  bride_name               String?
+  bride_phone_primary      String?
+  bride_phone_secondary    String?
+  bride_email              String?
+  bride_instagram          String?
+  groom_name               String?
+  groom_phone_primary      String?
+  groom_phone_secondary    String?
+  groom_email              String?
+  groom_instagram          String?
+  instagram                String?
+  next_followup_date       DateTime?              @db.Date
+  client_budget_amount     Decimal?               @db.Decimal
+  amount_quoted            Decimal?               @db.Decimal
+  source_name              String?
+  rejected_reason          String?
+  potential                Boolean                @default(false)
+  important                Boolean                @default(false)
+  client_offer_amount      Decimal?               @db.Decimal
+  discounted_amount        Decimal?               @db.Decimal
+  coverage_scope           String                 @default("Both Sides")
+  lead_number              Int?                   @unique
+  intake_completed         Boolean                @default(false)
+  assigned_user_id         Int?
+  awaiting_advance_since   DateTime?              @db.Timestamp(6)
+  first_contacted_at       DateTime?              @db.Timestamp(6)
+  converted_at             DateTime?              @db.Timestamp(6)
+  negotiation_since        DateTime?              @db.Timestamp(6)
+  entered_awaiting_advance Boolean?               @default(false)
+  conversion_count         Int?                   @default(0)
+  not_contacted_count      Int?                   @default(0)
+  proposal_draft           Json?
+  fb_lead_quality          String?                @db.VarChar(20)
+  fb_is_spam               Boolean?               @default(false)
+  invoices                 invoices[]
+  lead_activities          lead_activities[]
+  lead_cities              lead_cities[]
+  lead_enrichment_logs     lead_enrichment_logs[]
+  lead_events              lead_events[]
+  lead_followups           lead_followups[]
+  lead_lost_reasons        lead_lost_reasons?
+  lead_metrics             lead_metrics?
+  lead_negotiations        lead_negotiations[]
+  lead_notes               lead_notes[]
+  lead_pricing_logs        lead_pricing_logs[]
+  lead_quotes              lead_quotes[]
+  lead_usage_logs          lead_usage_logs[]
+  projects                 projects?
+
+  @@index([assigned_user_id], map: "idx_leads_assigned_user_id")
+  @@index([bride_phone_primary], map: "idx_leads_bride_phone_primary")
+  @@index([groom_phone_primary], map: "idx_leads_groom_phone_primary")
+  @@index([phone_primary], map: "idx_leads_phone_primary")
+}
+
+model lost_reason_defaults {
+  terminal_status_code String   @id
+  lost_reason_id       Int
+  created_at           DateTime @default(now()) @db.Timestamp(6)
+  updated_at           DateTime @default(now()) @db.Timestamp(6)
+}
+
+model lost_reasons {
+  id         Int      @id @default(autoincrement())
+  label      String   @unique
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @default(now()) @db.Timestamp(6)
+}
+
+model metrics_refresh_log {
+  id          Int      @id @default(1)
+  last_run_at DateTime @db.Timestamp(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model money_sources {
+  id         Int      @id @default(autoincrement())
+  name       String   @unique
+  type       String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @default(now()) @db.Timestamp(6)
+}
+
+model notifications {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id            Int?
+  role_target        String?   @db.VarChar(50)
+  category           String    @db.VarChar(50)
+  type               String    @default("INFO") @db.VarChar(50)
+  title              String    @db.VarChar(255)
+  message            String
+  link_url           String?   @db.VarChar(255)
+  is_read            Boolean   @default(false)
+  created_at         DateTime? @default(now()) @db.Timestamptz(6)
+  read_at            DateTime? @db.Timestamptz(6)
+  is_action_required Boolean   @default(false)
+
+  @@index([is_read], map: "idx_notifications_is_read")
+  @@index([role_target], map: "idx_notifications_role_target")
+  @@index([user_id], map: "idx_notifications_user_id")
+}
+
+model payment_methods {
+  id         Int      @id @default(autoincrement())
+  name       String   @unique
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @default(now()) @db.Timestamp(6)
+}
+
+model payment_structure_steps {
+  id                   Int     @id @default(autoincrement())
+  payment_structure_id Int
+  label                String
+  percentage           Decimal @db.Decimal
+  step_order           Int
+}
+
+model payment_structures {
+  id         Int       @id @default(autoincrement())
+  name       String
+  is_default Boolean?  @default(false)
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model photo_library {
+  id           Int      @id @default(autoincrement())
+  file_name    String
+  file_url     String
+  tags         String[] @default([])
+  created_at   DateTime @default(now()) @db.Timestamp(6)
+  updated_at   DateTime @default(now()) @db.Timestamp(6)
+  content_hash String?
+
+  @@index([content_hash])
+  @@index([created_at(sort: Desc)])
+  @@index([tags], type: Gin)
+}
+
+model PhotoLike {
+  id         Int      @id @default(autoincrement())
+  photoId    Int      @map("photo_id")
+  guestId    Int      @map("guest_id")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  guest      Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  photo      Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([photoId, guestId])
+  @@index([guestId], map: "idx_photo_likes_guest_id")
+  @@index([photoId], map: "idx_photo_likes_photo_id")
+  @@map("photo_likes")
+}
+
+model Photo {
+  id                 Int          @id @default(autoincrement())
+  eventId            Int          @map("event_id")
+  r2Url              String       @map("r2_url") @db.VarChar(1024)
+  filename           String       @db.VarChar(255)
+  fileSize           Int          @map("file_size")
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamp(6)
+  tabName            String?      @map("tab_name")
+  exif               Json?
+  capturedAt         DateTime?    @map("captured_at") @db.Timestamp(6)
+  originalFileSize   Int?         @map("original_file_size")
+  thumbnailUrl       String?      @map("thumbnail_url")
+  facesScanned       Boolean      @default(true) @map("faces_scanned")
+  width              Int?
+  height             Int?
+  likes              PhotoLike[]
+  galleryEvent       GalleryEvent @relation(fields: [eventId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([eventId], map: "idx_photos_event_id")
+  @@index([eventId, facesScanned], map: "idx_photos_event_id_faces_scanned")
+  @@map("photos")
+}
+
+model project_checklist {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id   String    @db.Uuid
+  title        String
+  phase        String
+  is_completed Boolean?  @default(false)
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  projects     projects  @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model project_deliverables {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id String    @db.Uuid
+  title      String
+  type       String?
+  quantity   Int?      @default(1)
+  due_date   DateTime? @db.Date
+  status     String    @default("pending")
+  notes      String?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  projects   projects  @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model project_events {
+  id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id               String                     @db.Uuid
+  lead_event_id            Int?
+  event_type               String?
+  event_date               DateTime?                  @db.Date
+  pax                      Int?
+  venue                    String?
+  venue_address            String?
+  start_time               String?
+  end_time                 String?
+  slot                     String?
+  notes                    String?
+  created_at               DateTime?                  @default(now()) @db.Timestamptz(6)
+  is_verified              Boolean?                   @default(false)
+  lead_events              lead_events?               @relation(fields: [lead_event_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  projects                 projects                   @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  project_team_assignments project_team_assignments[]
+}
+
+model project_team_assignments {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_event_id String         @db.Uuid
+  user_id          Int
+  role             String
+  call_time        String?
+  wrap_time        String?
+  notes            String?
+  created_at       DateTime?      @default(now()) @db.Timestamptz(6)
+  project_events   project_events @relation(fields: [project_event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users            users          @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model projects {
+  id                                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id                                Int                    @unique(map: "idx_projects_lead_id")
+  quote_group_id                         Int?
+  quote_version_id                       Int?
+  proposal_snapshot_id                   Int?
+  name                                   String
+  status                                 String                 @default("upcoming")
+  start_date                             DateTime?              @db.Date
+  end_date                               DateTime?              @db.Date
+  city                                   String?
+  is_destination                         Boolean?               @default(false)
+  project_manager_id                     Int?
+  notes                                  String?
+  created_at                             DateTime?              @default(now()) @db.Timestamptz(6)
+  invoice_id                             Int?
+  slug                                   String?                @unique(map: "idx_projects_slug") @db.VarChar(255)
+  passcode                               String?                @db.VarChar(50)
+  finance_transactions                   finance_transactions[]
+  invoices_invoices_project_idToprojects invoices[]             @relation("invoices_project_idToprojects")
+  project_checklist                      project_checklist[]
+  project_deliverables                   project_deliverables[]
+  project_events                         project_events[]
+  invoices_projects_invoice_idToinvoices invoices?              @relation("projects_invoice_idToinvoices", fields: [invoice_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leads                                  leads                  @relation(fields: [lead_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                                  users?                 @relation(fields: [project_manager_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  proposal_snapshots                     ProposalSnapshot?      @relation(fields: [proposal_snapshot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  quote_groups                           QuoteGroup?            @relation(fields: [quote_group_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  quote_versions                         QuoteVersion?          @relation(fields: [quote_version_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model proposal_events {
+  id                   Int       @id @default(autoincrement())
+  proposal_snapshot_id Int
+  session_id           String
+  event_type           String
+  event_data           Json?     @default("{}")
+  ip                   String?
+  device               String?
+  referrer             String?
+  created_at           DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([session_id], map: "idx_proposal_events_session")
+  @@index([proposal_snapshot_id], map: "idx_proposal_events_snapshot")
+}
+
+model push_subscriptions {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      Int
+  endpoint     String
+  p256dh       String
+  auth         String
+  user_agent   String?
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  last_used_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@unique([user_id, endpoint])
+  @@index([user_id], map: "idx_push_subscriptions_user_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model quote_presets {
+  id         Int       @id @default(autoincrement())
+  name       String
+  type       String
+  items_json Json      @default("[]")
+  active     Boolean   @default(true)
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  updated_at DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([type, active], map: "idx_quote_presets_type_active")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model rate_card_types {
+  id         Int      @id @default(autoincrement())
+  name       String   @unique
+  unit       String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @default(now()) @db.Timestamp(6)
+}
+
+model ref_budget_buckets {
+  value String @id
+}
+
+model ref_event_types {
+  value String @id
+}
+
+model ref_function_types {
+  value String @id
+}
+
+model roles {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  label String
+}
+
+model schema_migrations {
+  filename   String   @id
+  applied_at DateTime @default(now()) @db.Timestamp(6)
+}
+
+model smart_notification_log {
+  notif_key  String
+  sent_date  DateTime  @db.Date
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@id([notif_key, sent_date])
+  @@index([sent_date], map: "idx_smart_notif_log_date")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model system_defaults {
+  id                      Int      @id
+  default_followup_mode   String
+  default_assignment_rule String
+  created_at              DateTime @default(now()) @db.Timestamp(6)
+  updated_at              DateTime @default(now()) @db.Timestamp(6)
+}
+
+model testimonials {
+  id               Int      @id @default(autoincrement())
+  couple_names     String
+  testimonial_text String
+  media_url        String?
+  media_type       String?  @default("photo")
+  created_at       DateTime @default(now()) @db.Timestamp(6)
+  updated_at       DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([created_at(sort: Desc)])
+}
+
+model user_metrics_daily {
+  user_id                           Int
+  metric_date                       DateTime @db.Date
+  total_sessions                    Int      @default(0)
+  total_session_duration_seconds    Int      @default(0)
+  leads_opened_count                Int      @default(0)
+  total_time_spent_on_leads_seconds Int      @default(0)
+  followups_done                    Int      @default(0)
+  negotiations_done                 Int      @default(0)
+  quotes_generated                  Int      @default(0)
+  conversions                       Int      @default(0)
+
+  @@id([user_id, metric_date])
+  @@index([metric_date], map: "idx_user_metrics_daily_date")
+}
+
+model user_roles {
+  user_id     Int
+  role_id     Int
+  assigned_at DateTime @default(now()) @db.Timestamp(6)
+
+  @@id([user_id, role_id])
+}
+
+model user_sessions {
+  id               Int       @id @default(autoincrement())
+  user_id          Int
+  login_at         DateTime  @default(now()) @db.Timestamp(6)
+  logout_at        DateTime? @db.Timestamp(6)
+  duration_seconds Int?
+  device_type      String?
+  user_agent       String?
+  client_kind      String?
+  platform         String?
+  client_name      String?
+  client_version   String?
+  last_seen_at     DateTime? @db.Timestamp(6)
+
+  @@index([user_id], map: "idx_user_sessions_user_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model users {
+  id                             Int                             @id @default(autoincrement())
+  email                          String?                         @unique
+  password_hash                  String
+  role                           String
+  created_at                     DateTime?                       @default(now()) @db.Timestamp(6)
+  name                           String?
+  profile_photo                  String?
+  job_title                      String?
+  nickname                       String?
+  phone                          String?
+  is_active                      Boolean                         @default(true)
+  force_password_reset           Boolean                         @default(false)
+  updated_at                     DateTime                        @default(now()) @db.Timestamp(6)
+  crew_type                      String?
+  is_login_enabled               Boolean?                        @default(true)
+  operational_role_id            Int?
+  signature_image                String?
+  signature_image_dark           String?
+  employee_compensation_entries  employee_compensation_entries[]
+  employee_compensation_profiles employee_compensation_profiles?
+  employee_payouts               employee_payouts[]
+  finance_transaction_audits     finance_transaction_audits[]
+  finance_transactions           finance_transactions[]
+  lead_activities                lead_activities[]
+  lead_enrichment_logs           lead_enrichment_logs[]
+  lead_followups                 lead_followups[]
+  lead_negotiations              lead_negotiations[]
+  lead_notes                     lead_notes[]
+  lead_pricing_logs              lead_pricing_logs[]
+  lead_quotes                    lead_quotes[]
+  lead_usage_logs                lead_usage_logs[]
+  project_team_assignments       project_team_assignments[]
+  projects                       projects[]
+}
+
+model vendor_bill_attachments {
+  id             Int      @id @default(autoincrement())
+  vendor_bill_id Int
+  file_url       String
+  uploaded_at    DateTime @default(now()) @db.Timestamp(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model vendor_bills {
+  id                    Int       @id @default(autoincrement())
+  vendor_id             Int
+  lead_id               Int?
+  bill_date             DateTime? @db.Date
+  bill_amount           Decimal   @default(0) @db.Decimal
+  bill_category         String
+  is_billable_to_client Boolean   @default(false)
+  status                String    @default("submitted")
+  notes                 String?
+  created_at            DateTime  @default(now()) @db.Timestamp(6)
+  updated_at            DateTime  @default(now()) @db.Timestamp(6)
+
+  @@index([lead_id])
+  @@index([status])
+  @@index([vendor_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model vendor_rate_cards {
+  id             Int      @id @default(autoincrement())
+  vendor_id      Int
+  rate_type      String
+  rates          Json
+  is_active      Boolean  @default(true)
+  effective_from DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
+  created_at     DateTime @default(now()) @db.Timestamp(6)
+  updated_at     DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([vendor_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model vendors {
+  id          Int      @id @default(autoincrement())
+  name        String
+  vendor_type String
+  user_id     Int?
+  phone       String?
+  email       String?
+  notes       String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now()) @db.Timestamp(6)
+  updated_at  DateTime @default(now()) @db.Timestamp(6)
+}
+
+model video_library {
+  id         Int      @id @default(autoincrement())
+  file_name  String
+  file_url   String
+  file_hash  String?  @unique
+  tags       String[] @default([])
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([created_at(sort: Desc)])
+  @@index([tags], type: Gin)
+}
+
+model website_analytics_events {
+  id           Int      @id @default(autoincrement())
+  session_hash String
+  event_name   String
+  event_data   Json     @default("{}")
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([event_name], map: "idx_analytics_events_name")
+}
+
+model website_analytics_views {
+  id           Int      @id @default(autoincrement())
+  session_hash String
+  path         String
+  referrer     String?
+  country      String?
+  city         String?
+  browser      String?
+  os           String?
+  device_type  String?
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at(sort: Desc)], map: "idx_analytics_views_created")
+  @@index([path], map: "idx_analytics_views_path")
+  @@index([session_hash], map: "idx_analytics_views_session")
+}
+
+model website_films {
+  id               Int              @id @default(autoincrement())
+  title            String
+  subtitle         String?
+  location         String?
+  year             Int?
+  thumbnail_url    String?
+  thumbnail_blur   String?
+  hls_url          String?
+  transcode_status String           @default("pending")
+  transcode_error  String?
+  is_featured      Boolean          @default(false)
+  display_order    Int              @default(0)
+  is_published     Boolean          @default(false)
+  created_at       DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime         @default(now()) @db.Timestamptz(6)
+  youtube_url      String?
+  youtube_video_id String?
+  category         String?
+  story_id         Int?
+  website_stories  website_stories? @relation(fields: [story_id], references: [id], onUpdate: NoAction)
+
+  @@index([is_featured, is_published, display_order], map: "idx_website_films_featured")
+}
+
+model website_hero {
+  id         Int      @id @default(autoincrement())
+  media_type String   @default("image")
+  media_url  String
+  mobile_url String?
+  poster_url String?
+  headline   String?
+  subline    String?
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model website_reels {
+  id               Int              @id @default(autoincrement())
+  story_id         Int?
+  title            String           @db.VarChar(255)
+  youtube_video_id String           @db.VarChar(50)
+  thumbnail_url    String?          @db.VarChar(255)
+  thumbnail_blur   String?
+  display_order    Int?             @default(0)
+  is_published     Boolean?         @default(true)
+  created_at       DateTime?        @default(now()) @db.Timestamp(6)
+  updated_at       DateTime?        @default(now()) @db.Timestamp(6)
+  website_stories  website_stories? @relation(fields: [story_id], references: [id], onUpdate: NoAction)
+}
+
+model website_sections {
+  id            Int     @id @default(autoincrement())
+  key           String  @unique
+  label         String
+  is_visible    Boolean @default(true)
+  display_order Int     @default(0)
+  content       Json    @default("{}")
+}
+
+model website_stories {
+  id                     Int                    @id @default(autoincrement())
+  slug                   String                 @unique
+  title                  String
+  subtitle               String?
+  location               String?
+  date                   String?
+  category               String?
+  cover_image_url        String?
+  cover_image_mobile_url String?
+  cover_blur_data_url    String?
+  is_featured            Boolean                @default(false)
+  display_order          Int                    @default(0)
+  is_published           Boolean                @default(false)
+  created_at             DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime               @default(now()) @db.Timestamptz(6)
+  tabs                   Json?                  @default("[]")
+  grid_image_url         String?
+  website_films          website_films[]
+  website_reels          website_reels[]
+  website_story_photos   website_story_photos[]
+
+  @@index([is_featured, is_published, display_order], map: "idx_website_stories_featured")
+}
+
+model website_story_photos {
+  id                Int             @id @default(autoincrement())
+  story_id          Int
+  file_url          String
+  file_url_mobile   String?
+  file_url_thumb    String?
+  blur_data_url     String?
+  original_filename String?
+  display_order     Int             @default(0)
+  is_cover          Boolean         @default(false)
+  created_at        DateTime        @default(now()) @db.Timestamptz(6)
+  tab_name          String?         @default("All")
+  website_stories   website_stories @relation(fields: [story_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([story_id, display_order], map: "idx_website_story_photos_story")
+}
+
+model website_testimonials {
+  id            Int      @id @default(autoincrement())
+  quote         String
+  client_name   String
+  location      String?
+  year          Int?
+  display_order Int      @default(0)
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([is_active, display_order], map: "idx_website_testimonials_active")
+}
+
+model whatsapp_action_status_messages {
+  action_key     String
+  lead_status_id Int
+  message_body   String   @default("")
+  created_at     DateTime @default(now()) @db.Timestamp(6)
+  updated_at     DateTime @default(now()) @db.Timestamp(6)
+
+  @@id([action_key, lead_status_id])
+}
+
+model whatsapp_action_templates {
+  action_key   String   @id
+  label        String
+  message_body String   @default("")
+  created_at   DateTime @default(now()) @db.Timestamp(6)
+  updated_at   DateTime @default(now()) @db.Timestamp(6)
+}
+
+model whatsapp_templates {
+  stage      String    @id
+  message    String
+  updated_at DateTime? @default(now()) @db.Timestamp(6)
+}
+
+enum QuoteStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  ADVANCE_AWAITING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  ADMIN_REJECTED
+  SUPERSEDED
+
+  @@map("quote_status")
+}
+
+enum PricingItemType {
+  TEAM_ROLE
+  DELIVERABLE
+
+  @@map("pricing_item_type")
+}
+
+enum UnitType {
+  PER_DAY
+  PER_UNIT
+  FLAT
+  PER_EVENT
+
+  @@map("unit_type")
+}
+
+enum DeliverableCategory {
+  PHOTO
+  VIDEO
+  OTHER
+  ADDON
+
+  @@map("deliverable_category")
+}
+
+enum NegotiationType {
+  CLIENT_FEEDBACK
+  DISCOUNT_REQUEST
+  COVERAGE_CHANGE
+  INTERNAL_NOTE
+
+  @@map("negotiation_type")
+}

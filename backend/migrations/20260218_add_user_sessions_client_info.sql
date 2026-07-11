@@ -1,0 +1,5 @@
+ALTER TABLE user_sessions
+  ADD COLUMN IF NOT EXISTS client_kind TEXT,
+  ADD COLUMN IF NOT EXISTS platform TEXT,
+  ADD COLUMN IF NOT EXISTS client_name TEXT,
+  ADD COLUMN IF NOT EXISTS client_version TEXT;

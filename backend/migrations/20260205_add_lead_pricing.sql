@@ -1,0 +1,2 @@
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS client_budget_amount NUMERIC;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS amount_quoted NUMERIC;

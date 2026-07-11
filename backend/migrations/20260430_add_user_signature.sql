@@ -1,0 +1,2 @@
+ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_image TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_image_dark TEXT;
