@@ -88,7 +88,9 @@ rollback() {
   cd "$REPO_ROOT/frontend"
   npm install
   rm -f .next/lock
-  NODE_OPTIONS="--max-old-space-size=768" npm run build
+  echo "[deploy] Memory status before rollback build:"
+  free -h || true
+  NODE_OPTIONS="--max-old-space-size=512" npm run build
   pm2 restart mycircle-frontend --update-env
 
   echo "[deploy] Rollback complete."
@@ -96,6 +98,8 @@ rollback() {
 
 trap 'rollback; cleanup_lock' ERR
 
+echo "[deploy] Memory status before pull:"
+free -h || true
 echo "[deploy] Pulling latest code..."
 git checkout main 2>/dev/null || true
 git pull origin main
@@ -149,7 +153,9 @@ if [[ -n "$FRONTEND_CHANGED" ]]; then
 
   echo "[deploy] Building frontend..."
   rm -f .next/lock
-  NODE_OPTIONS="--max-old-space-size=768" npm run build
+  echo "[deploy] Memory status before main build:"
+  free -h || true
+  NODE_OPTIONS="--max-old-space-size=512" npm run build
 
   echo "[deploy] Restarting frontend..."
   pm2 restart mycircle-frontend --update-env
