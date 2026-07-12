@@ -17,10 +17,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport = {
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f5f4f0' },
-    { media: '(prefers-color-scheme: dark)', color: '#000000' },
-  ],
+  themeColor: '#f5f4f0',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -33,7 +30,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" style={{ colorScheme: 'light' }}>
       <body className="bg-[var(--background)] text-[var(--foreground)]">
         <ScrollRestoration />
         <LayoutWrapper>

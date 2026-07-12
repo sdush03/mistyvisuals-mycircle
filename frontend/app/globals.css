@@ -55,34 +55,6 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --surface: #121212;
-    --surface-muted: #1e1e1e;
-    --surface-strong: #2a2a2a;
-    --border: #333333;
-    --border-strong: #404040;
-    --accent: #f8fafc;
-    --accent-soft: #1e293b;
-    --success: #22c55e;
-    --warning: #f97316;
-
-    /* Tailwind v4 CSS Variable Automatic Inversion for Global Dark Mode */
-    --color-white: #111111;
-    --color-neutral-50: #1a1a1a;
-    --color-neutral-100: #262626;
-    --color-neutral-200: #333333;
-    --color-neutral-300: #404040;
-    --color-neutral-400: #737373;
-    --color-neutral-500: #a3a3a3;
-    --color-neutral-600: #d4d4d4;
-    --color-neutral-700: #e5e5e5;
-    --color-neutral-800: #f5f5f5;
-    --color-neutral-900: #ffffff;
-  }
-}
 
 body {
   background: var(--background);
