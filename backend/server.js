@@ -10,6 +10,21 @@ const fs = require('fs')
 const path = require('path')
 const authRoutes = require('./routes/auth')
 
+/* ===================== BOOTSTRAP DIRS ===================== */
+// Ensure all required upload directories exist before handling any requests.
+// mkdirSync with { recursive: true } is safe to call even if the dir already exists.
+;[
+  path.join(__dirname, 'uploads', 'photos', 'selfies'),
+  path.join(__dirname, 'uploads', 'photos'),
+  path.join(__dirname, 'db'),
+].forEach(dir => {
+  try {
+    fs.mkdirSync(dir, { recursive: true })
+  } catch (e) {
+    console.error(`[bootstrap] Failed to create dir ${dir}:`, e.message)
+  }
+})
+
 /* ===================== DB ===================== */
 const { pool } = require('./db.js')
 
