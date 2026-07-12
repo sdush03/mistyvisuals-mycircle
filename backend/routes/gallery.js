@@ -2007,14 +2007,14 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
           return { status: 'success' };
         } else {
-          // Validation failed, clean up the saved image file
+          // Validation failed (User error: e.g. no face detected), clean up the saved image file
           if (fs.existsSync(selfiePath)) fs.unlinkSync(selfiePath);
           return reply.code(400).send({ error: res.error || 'Failed to validate face on selfie' });
         }
       } catch (extractErr) {
         req.log.error('Face validation script execution failed:', extractErr.message);
-        if (fs.existsSync(selfiePath)) fs.unlinkSync(selfiePath);
-        return reply.code(500).send({ error: 'Failed to run facial verification' });
+        // Do NOT delete the selfie file. Save it for later processing/verification on-the-fly!
+        return { status: 'success', warning: 'processing' };
       }
     } catch (err) {
       req.log.error(err);

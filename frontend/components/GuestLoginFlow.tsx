@@ -213,18 +213,42 @@ export function GuestLoginFlow({
         formData.append('name', tempProfile.name)
       }
 
-      const res = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${tempToken}`
-        },
-        body: formData
-      })
+      let attempts = 0
+      const maxAttempts = 5
+      const retryDelay = 3000
 
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to verify selfie.')
+      const executeUpload = async (): Promise<any> => {
+        try {
+          const res = await fetch(uploadUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${tempToken}`
+            },
+            body: formData
+          })
 
+          if (res.status === 502 || res.status === 503 || res.status === 504) {
+            throw new Error('Server is updating')
+          }
+
+          const data = await res.json()
+          if (!res.ok) throw new Error(data.error || 'Failed to verify selfie.')
+          return data
+        } catch (err: any) {
+          const isNetworkOrUpdateError = err instanceof TypeError || err.message === 'Server is updating' || err.message.includes('fetch')
+          if (isNetworkOrUpdateError && attempts < maxAttempts) {
+            attempts++
+            setSelfieError(`We are performing a quick system update. This may take a few minutes. Retrying... (Attempt ${attempts}/${maxAttempts})`)
+            await new Promise(resolve => setTimeout(resolve, retryDelay))
+            return executeUpload()
+          }
+          throw err
+        }
+      }
+
+      await executeUpload()
       setValidationStatus('accepted')
+      setSelfieError('')
     } catch (err: any) {
       setValidationStatus('rejected')
       setSelfieError(err.message || 'Verification failed. Please retake the photo.')
