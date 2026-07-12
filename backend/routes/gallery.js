@@ -1897,6 +1897,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
       // Generate a new secure JWT session token with upgraded permissions
       const sessionToken = fastify.jwt.sign({
         guestId: updatedGuest.id,
+        userId: req.guest.userId,
         eventId: event.id,
         email: updatedGuest.email,
         role: 'guest',
@@ -1912,7 +1913,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
           email: updatedGuest.email,
           phoneNumber: updatedGuest.phoneNumber,
           hasFullAccess: true,
-          hasSelfie: checkGuestSelfie(updatedGuest.id)
+          hasSelfie: checkUserSelfie(req.guest.userId)
         }
       };
     } catch (err) {

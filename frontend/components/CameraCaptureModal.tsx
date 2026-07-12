@@ -500,7 +500,7 @@ export function CameraCaptureModal({
                   </button>
                   <button
                     type="button"
-                    onClick={onContinue}
+                    onClick={() => { stopCamera(); onContinue(); }}
                     style={{
                       flex: 2,
                       padding: '0.9rem',
@@ -615,7 +615,7 @@ export function CameraCaptureModal({
 
               <button
                 type="button"
-                onClick={onGoBackCustom || onClose}
+                onClick={() => { stopCamera(); (onGoBackCustom || onClose)(); }}
                 style={{
                   marginTop: '1rem',
                   fontSize: '0.65rem',
