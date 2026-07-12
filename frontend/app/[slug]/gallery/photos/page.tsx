@@ -547,18 +547,16 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
   const handleDownload = async (url: string, filename: string) => {
     try {
-      const res = await fetch(url)
-      const blob = await res.blob()
-      const blobUrl = URL.createObjectURL(blob)
+      // Force native download via backend download-proxy (setting Content-Disposition header)
+      const downloadUrl = `${apiUrl}/api/gallery/public/download-proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`
       const a = document.createElement('a')
-      a.href = blobUrl
+      a.href = downloadUrl
       a.download = filename
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-      URL.revokeObjectURL(blobUrl)
     } catch (err) {
-      console.warn('Blob download failed, falling back to direct link:', err)
+      console.warn('Proxy download failed, falling back to direct link:', err)
       const a = document.createElement('a')
       a.href = url
       a.download = filename
@@ -1098,7 +1096,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
                         <div
                           key={p.r2Url}
                           onClick={() => setActivePhotoIndex(globalIdx)}
-                          style={{ cursor: 'pointer', overflow: 'hidden', lineHeight: 0, aspectRatio: p._gridAspect || '2/3', position: 'relative' }}
+                          onContextMenu={(e) => e.preventDefault()}
+                          style={{ cursor: 'pointer', overflow: 'hidden', lineHeight: 0, aspectRatio: p._gridAspect || '2/3', position: 'relative', userSelect: 'none', WebkitTouchCallout: 'none' }}
                           className="gallery-item group"
                         >
                           <img src={p.thumbnailUrl || p.r2Url} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
@@ -1207,7 +1206,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
                         <div
                           key={p.r2Url}
                           onClick={() => setActivePhotoIndex(globalIdx)}
-                          style={{ cursor: 'pointer', overflow: 'hidden', lineHeight: 0, aspectRatio: p._gridAspect || '2/3', position: 'relative' }}
+                          onContextMenu={(e) => e.preventDefault()}
+                          style={{ cursor: 'pointer', overflow: 'hidden', lineHeight: 0, aspectRatio: p._gridAspect || '2/3', position: 'relative', userSelect: 'none', WebkitTouchCallout: 'none' }}
                           className="gallery-item group"
                         >
                           <img src={p.thumbnailUrl || p.r2Url} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
@@ -1323,7 +1323,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
                           <div
                             key={p.r2Url}
                             onClick={() => setActivePhotoIndex(globalIdx)}
-                            style={{ cursor: 'pointer', overflow: 'hidden', lineHeight: 0, aspectRatio: p._gridAspect || '2/3', position: 'relative' }}
+                            onContextMenu={(e) => e.preventDefault()}
+                            style={{ cursor: 'pointer', overflow: 'hidden', lineHeight: 0, aspectRatio: p._gridAspect || '2/3', position: 'relative', userSelect: 'none', WebkitTouchCallout: 'none' }}
                             className="gallery-item group"
                           >
                             <img src={p.thumbnailUrl || p.r2Url} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
@@ -1524,34 +1525,50 @@ export default function GuestGalleryPhotos({ params }: Props) {
                   }}
                 />
               )}
-              <img
-                src={activePhotosList[activePhotoIndex].r2Url}
-                alt=""
-                onLoad={() => setHighResLoaded(true)}
-                onDoubleClick={() => handleLightboxDoubleTap(activePhotosList[activePhotoIndex].id, activePhotosList[activePhotoIndex].isLiked)}
-                onTouchEnd={e => {
-                  const now = Date.now();
-                  if (now - lastTapRef.current < 300) {
-                    handleLightboxDoubleTap(activePhotosList[activePhotoIndex].id, activePhotosList[activePhotoIndex].isLiked);
-                  }
-                  lastTapRef.current = now;
-                }}
-                onDragStart={(e) => e.preventDefault()}
-                onContextMenu={(e) => e.preventDefault()}
-                style={{
-                  maxWidth: 'min(88vw, calc(100vw - 160px))',
-                  maxHeight: 'calc(100vh - 160px)',
-                  objectFit: 'contain',
-                  userSelect: 'none',
-                  borderRadius: '3px',
-                  display: 'block',
-                  opacity: highResLoaded ? 1 : 0,
-                  transition: 'opacity 0.35s ease',
-                  position: 'relative',
-                  zIndex: 2,
-                  imageOrientation: 'from-image',
-                }}
-              />
+              <div style={{ position: 'relative', display: 'block', userSelect: 'none', WebkitTouchCallout: 'none' }}>
+                {/* Transparent overlay capturing all pointer events to prevent right click & touch hold menus */}
+                <div
+                  onDoubleClick={() => handleLightboxDoubleTap(activePhotosList[activePhotoIndex].id, activePhotosList[activePhotoIndex].isLiked)}
+                  onTouchEnd={e => {
+                    const now = Date.now();
+                    if (now - lastTapRef.current < 300) {
+                      handleLightboxDoubleTap(activePhotosList[activePhotoIndex].id, activePhotosList[activePhotoIndex].isLiked);
+                    }
+                    lastTapRef.current = now;
+                  }}
+                  onContextMenu={(e) => e.preventDefault()}
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    zIndex: 10,
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    WebkitTouchCallout: 'none'
+                  }}
+                />
+                <img
+                  src={activePhotosList[activePhotoIndex].r2Url}
+                  alt=""
+                  onLoad={() => setHighResLoaded(true)}
+                  onDragStart={(e) => e.preventDefault()}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className="pointer-events-none select-none"
+                  style={{
+                    maxWidth: 'min(88vw, calc(100vw - 160px))',
+                    maxHeight: 'calc(100vh - 160px)',
+                    objectFit: 'contain',
+                    userSelect: 'none',
+                    borderRadius: '3px',
+                    display: 'block',
+                    opacity: highResLoaded ? 1 : 0,
+                    transition: 'opacity 0.35s ease',
+                    position: 'relative',
+                    zIndex: 2,
+                    imageOrientation: 'from-image',
+                    WebkitTouchCallout: 'none',
+                  }}
+                />
+              </div>
               {showHeartPop && (
                 <div
                   className="animate-heart-pop"

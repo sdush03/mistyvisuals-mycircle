@@ -2857,6 +2857,30 @@ module.exports = async function galleryRoutes(fastify, opts) {
     reply.type('image/jpeg');
     return reply.send(fs.createReadStream(selfiePath));
   });
+
+  // Proxy endpoint to force download files (works on both PC and mobile by setting Content-Disposition header)
+  fastify.get('/api/gallery/public/download-proxy', async (req, reply) => {
+    const { url, filename } = req.query;
+    if (!url) return reply.code(400).send({ error: 'URL is required' });
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to fetch file');
+
+      const contentType = response.headers.get('content-type') || 'application/octet-stream';
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      reply.header('Content-Type', contentType);
+      reply.header('Content-Disposition', `attachment; filename="${filename || 'download.jpg'}"`);
+      reply.header('Access-Control-Allow-Origin', '*');
+
+      return reply.send(buffer);
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to download file' });
+    }
+  });
 };
 
 function purgeOrphanedFacesBackground(log) {
