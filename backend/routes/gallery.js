@@ -142,6 +142,11 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
     try {
       const events = await prisma.galleryEvent.findMany({
+        where: {
+          NOT: {
+            slug: 'system-directory'
+          }
+        },
         orderBy: { date: 'desc' }
       });
 
