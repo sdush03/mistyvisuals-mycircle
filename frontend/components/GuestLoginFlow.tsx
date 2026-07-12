@@ -238,7 +238,7 @@ export function GuestLoginFlow({
           const isNetworkOrUpdateError = err instanceof TypeError || err.message === 'Server is updating' || err.message.includes('fetch')
           if (isNetworkOrUpdateError && attempts < maxAttempts) {
             attempts++
-            setSelfieError(`We are performing a quick system update. This may take a few minutes. Retrying... (Attempt ${attempts}/${maxAttempts})`)
+            setSelfieError('We are performing a quick system update. This may take a few minutes. Please wait...')
             await new Promise(resolve => setTimeout(resolve, retryDelay))
             return executeUpload()
           }
