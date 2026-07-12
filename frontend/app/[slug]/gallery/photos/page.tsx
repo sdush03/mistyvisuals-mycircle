@@ -776,6 +776,27 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
 
 
+  const renderSkeletons = () => (
+    <div style={{ display: 'flex', gap: '12px', width: '100%', padding: '16px clamp(0.75rem, 3vw, 2.5rem) 32px', background: '#fff' }} className="story-masonry">
+      {[1, 2, 3].map((colIdx) => {
+        const aspects = colIdx === 1 ? ['2/3', '3/4', '2/3'] :
+                        colIdx === 2 ? ['3/4', '2/3', '3/4'] :
+                                       ['2/3', '2/3', '3/4'];
+        return (
+          <div key={colIdx} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {aspects.map((aspect, idx) => (
+              <div 
+                key={idx}
+                className="skeleton-card"
+                style={{ aspectRatio: aspect }}
+              />
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="relative min-h-screen w-full text-[#111111] flex flex-col justify-between force-light" style={{ colorScheme: 'light', background: '#ffffff' }}>
       <style dangerouslySetInnerHTML={{ __html: `
@@ -809,6 +830,31 @@ export default function GuestGalleryPhotos({ params }: Props) {
         #gallery-tabs-row {
           -ms-overflow-style: none;
           scrollbar-width: none;
+        }
+        .skeleton-card {
+          width: 100%;
+          background: #eae8e3;
+          position: relative;
+          overflow: hidden;
+          border-radius: 0px;
+        }
+        .skeleton-card::after {
+          content: "";
+          position: absolute;
+          top: 0; right: 0; bottom: 0; left: 0;
+          background: linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0.5) 50%,
+            rgba(255, 255, 255, 0) 100%
+          );
+          transform: translateX(-100%);
+          animation: shimmer-anim 1.6s infinite;
+        }
+        @keyframes shimmer-anim {
+          100% {
+            transform: translateX(100%);
+          }
         }
       `}} />
       
@@ -1127,10 +1173,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
             {viewMode === 'matched' && (
           <div className="w-full flex flex-col items-center animate-waterfall">
             {loadingMatched ? (
-              <div className="py-20 flex flex-col items-center justify-center">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#0f172a] border-t-transparent mb-4"></div>
-                <p className="font-sans text-xs text-neutral-500">Finding your photos...</p>
-              </div>
+              renderSkeletons()
             ) : photos.length > 0 ? (
               <div style={{ display: 'flex', gap: '12px', width: '100%', background: '#fff', padding: '16px clamp(0.75rem, 3vw, 2.5rem) 32px' }} className="story-masonry">
                 {getBalancedColumns(photos).map((colPhotos, colIdx) => (
@@ -1353,9 +1396,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
         {viewMode === 'all' && (
           <div className="w-full flex flex-col items-center animate-waterfall">
             {allPhotos.length === 0 && loadingMore ? (
-              <div className="flex py-20 items-center justify-center">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#0f172a] border-t-transparent"></div>
-              </div>
+              renderSkeletons()
             ) : allPhotos.length > 0 ? (
               <>
                 {/* Masonry Grid — allPhotos is already tab-filtered by backend */}
