@@ -88,7 +88,7 @@ rollback() {
   cd "$REPO_ROOT/frontend"
   npm install
   rm -f .next/lock
-  NODE_OPTIONS="--max-old-space-size=1024" npm run build
+  NODE_OPTIONS="--max-old-space-size=768" npm run build
   pm2 restart mycircle-frontend --update-env
 
   echo "[deploy] Rollback complete."
@@ -148,8 +148,8 @@ if [[ -n "$FRONTEND_CHANGED" ]]; then
   pkill -f "jest-worker/processChild.js" || true
 
   echo "[deploy] Building frontend..."
-  rm -rf .next
-  NODE_OPTIONS="--max-old-space-size=1024" npm run build
+  rm -f .next/lock
+  NODE_OPTIONS="--max-old-space-size=768" npm run build
 
   echo "[deploy] Restarting frontend..."
   pm2 restart mycircle-frontend --update-env
