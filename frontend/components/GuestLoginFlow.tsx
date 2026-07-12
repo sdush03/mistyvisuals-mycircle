@@ -92,7 +92,7 @@ export function GuestLoginFlow({
     try {
       // 1. Google OAuth Authentication
       const authUrl = eventSlug 
-        ? `${apiUrl}/api/gallery/events/${eventSlug}/auth`
+        ? `${apiUrl}/api/gallery/public/events/${eventSlug}/auth`
         : `${apiUrl}/api/gallery/family/auth`
 
       const res = await fetch(authUrl, {
