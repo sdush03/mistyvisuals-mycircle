@@ -5,6 +5,7 @@ import Script from 'next/script'
 import { useRouter } from 'next/navigation'
 import { CameraCaptureModal } from '@/components/CameraCaptureModal'
 import { GuestLoginFlow } from '@/components/GuestLoginFlow'
+import { UserAvatarDropdown } from '@/components/UserAvatarDropdown'
 
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
@@ -433,71 +434,12 @@ export default function CirclePage() {
         </a>
 
         {token && profile && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <button 
-              onClick={openProfile}
-              style={{
-                background: 'none',
-                border: '1px solid #ddd8d0',
-                color: '#1c1a18',
-                padding: '0.5rem 1.25rem',
-                borderRadius: '2px',
-                cursor: 'pointer',
-                fontSize: '0.6875rem',
-                fontWeight: 500,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                transition: 'all 0.2s',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.borderColor = '#1c1a18'
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.borderColor = '#ddd8d0'
-              }}
-            >
-              {selfieUrl ? (
-                <img 
-                  src={selfieUrl} 
-                  alt="Selfie" 
-                  style={{ width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover' }} 
-                  onError={(e) => { e.currentTarget.style.display = 'none' }}
-                />
-              ) : (
-                <span>👤</span>
-              )}
-              My Profile
-            </button>
-            <button 
-              onClick={handleLogout}
-              style={{
-                background: 'none',
-                border: '1px solid #ddd8d0',
-                color: '#8c867e',
-                padding: '0.5rem 1.25rem',
-                borderRadius: '2px', // Clean square styling
-                cursor: 'pointer',
-                fontSize: '0.6875rem',
-                fontWeight: 500,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                transition: 'all 0.2s'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.borderColor = '#1c1a18'
-                e.currentTarget.style.color = '#1c1a18'
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.borderColor = '#ddd8d0'
-                e.currentTarget.style.color = '#8c867e'
-              }}
-            >
-              Sign Out
-            </button>
-          </div>
+          <UserAvatarDropdown
+            selfieUrl={selfieUrl}
+            onProfileClick={openProfile}
+            onLogoutClick={handleLogout}
+            darkTheme={false}
+          />
         )}
       </header>
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, use, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { CameraCaptureModal } from '@/components/CameraCaptureModal'
+import { UserAvatarDropdown } from '@/components/UserAvatarDropdown'
 
 
 type Props = {
@@ -826,28 +827,12 @@ export default function GuestGalleryPhotos({ params }: Props) {
           display: 'flex', alignItems: 'center', gap: 'clamp(0.5rem, 2vw, 1rem)',
           zIndex: 40,
         }}>
-          <button 
-            onClick={openProfile}
-            className="text-[9px] sm:text-[10px] font-sans text-white hover:text-[#111] hover:bg-white border border-white/40 rounded-full px-2.5 sm:px-4 py-1 sm:py-1.5 transition-colors cursor-pointer uppercase tracking-wider font-semibold flex items-center gap-1.5"
-          >
-            {selfiePreview ? (
-              <img 
-                src={selfiePreview} 
-                alt="Selfie" 
-                style={{ width: '12px', height: '12px', borderRadius: '50%', objectFit: 'cover' }} 
-                onError={(e) => { e.currentTarget.style.display = 'none' }}
-              />
-            ) : (
-              <span>👤</span>
-            )}
-            My Profile
-          </button>
-          <button 
-            onClick={handleLogout}
-            className="text-[9px] sm:text-[10px] font-sans text-white hover:text-[#111] hover:bg-white border border-white/40 rounded-full px-2.5 sm:px-4 py-1 sm:py-1.5 transition-colors cursor-pointer uppercase tracking-wider font-semibold"
-          >
-            Sign Out
-          </button>
+          <UserAvatarDropdown
+            selfieUrl={selfiePreview}
+            onProfileClick={openProfile}
+            onLogoutClick={handleLogout}
+            darkTheme={true}
+          />
         </div>
 
         <div style={{
