@@ -624,6 +624,15 @@ export default function GuestGalleryPhotos({ params }: Props) {
     }
   }
 
+  const handleDownloadMyPhotos = () => {
+    const token = localStorage.getItem(`mv_gallery_token_${slug}`)
+    if (!token) {
+      alert('Authentication token not found. Please refresh or log in again.')
+      return
+    }
+    window.location.href = `${apiUrl}/api/gallery/public/events/${slug}/download-my-photos?token=${encodeURIComponent(token)}`
+  }
+
   const handleSelfieUploadClick = () => {
     fileInputRef.current?.click()
   }
@@ -1201,8 +1210,50 @@ export default function GuestGalleryPhotos({ params }: Props) {
             </button>
           ))}
           </div>
+          {/* Matched Photos Download Button (only in My Photos tab) */}
+          {viewMode === 'matched' && event?.allowDownloads !== false && (
+            <button
+              onClick={handleDownloadMyPhotos}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                background: 'none',
+                border: '1px solid #ddd8d0',
+                borderRadius: '2px',
+                color: '#1c1a18',
+                padding: '0.5rem 1rem',
+                fontSize: '0.5625rem',
+                fontWeight: 600,
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                fontFamily: "'Montserrat', system-ui, sans-serif",
+                transition: 'all 0.2s',
+                flexShrink: 0
+              }}
+              onMouseOver={e => {
+                e.currentTarget.style.backgroundColor = '#1c1a18'
+                e.currentTarget.style.color = '#ffffff'
+                e.currentTarget.style.borderColor = '#1c1a18'
+              }}
+              onMouseOut={e => {
+                e.currentTarget.style.backgroundColor = 'transparent'
+                e.currentTarget.style.color = '#1c1a18'
+                e.currentTarget.style.borderColor = '#ddd8d0'
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Download All
+            </button>
+          )}
 
-          {event?.allowBulkDownloads && (
+          {/* Event-Wide Gallery Download Button (only in other tabs) */}
+          {viewMode === 'all' && event?.allowBulkDownloads && (
             <button
               onClick={() => setShowBulkDownloadModal(true)}
               style={{
@@ -1239,10 +1290,9 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              Bulk Download
+              Download All
             </button>
-          )}
-        </div>
+          )}        </div>
       </div>
 
       {/* Main Container */}
@@ -2211,7 +2261,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 color: '#1c1a18',
                 margin: 0
               }}>
-                Bulk Download Photos
+                Download All Photos
               </h3>
               <button 
                 onClick={() => {
@@ -2241,7 +2291,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 lineHeight: 1.5,
                 marginBottom: '1.5rem'
               }}>
-                Enter the bulk download PIN shared by the event admin to download all high-resolution photos of this event as a ZIP file.
+                Enter the download PIN shared by the event admin to download all high-resolution photos of this event as a ZIP file.
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '1.5rem' }}>
@@ -2254,7 +2304,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                   marginBottom: '0.5rem',
                   fontFamily: 'Montserrat, sans-serif'
                 }}>
-                  Enter Bulk Download PIN
+                  Enter Download PIN
                 </label>
                 <input 
                   type="password"

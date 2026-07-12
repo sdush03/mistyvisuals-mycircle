@@ -132,11 +132,18 @@ module.exports = async function galleryRoutes(fastify, opts) {
   // Middleware helper to verify guest JWT token
   async function verifyGuestAuth(req, reply) {
     try {
+      let token = null;
       const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+      } else if (req.query && req.query.token) {
+        token = req.query.token;
+      }
+
+      if (!token) {
         return reply.code(401).send({ error: 'Missing or invalid token' });
       }
-      const token = authHeader.split(' ')[1];
+
       const decoded = fastify.jwt.verify(token);
       if (decoded.role !== 'guest') {
         return reply.code(403).send({ error: 'Access denied' });
@@ -2209,7 +2216,157 @@ module.exports = async function galleryRoutes(fastify, opts) {
     }
   });
 
-  // Guest upload selfie and search matching event photos
+  // Stream matched photos of the guest as a ZIP file
+  fastify.get('/api/gallery/public/events/:slug/download-my-photos', { preHandler: verifyGuestAuth }, async (req, reply) => {
+    const eventId = req.guest.eventId;
+    const guestKey = `${req.guest.email}_${eventId}`;
+    const userId = req.guest.userId;
+    const guestId = req.guest.guestId;
+
+    try {
+      const event = req.event || await prisma.galleryEvent.findUnique({ where: { id: eventId } });
+      if (!event) return reply.code(404).send({ error: 'Event not found' });
+
+      if (event.allowDownloads === false) {
+        return reply.code(403).send({ error: 'Downloads are disabled for this gallery' });
+      }
+
+      const selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.jpg`);
+      const vectorPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.json`);
+
+      if (!fs.existsSync(selfiePath)) {
+        return reply.code(400).send({ error: 'No selfie captured yet' });
+      }
+
+      // Check if we need to load anchor vector into memory
+      if (!guestAnchors[guestKey] || !guestAnchors[guestKey].anchorVector) {
+        if (fs.existsSync(vectorPath)) {
+          const vector = JSON.parse(fs.readFileSync(vectorPath, 'utf8'));
+          guestAnchors[guestKey] = {
+            anchorVector: vector,
+            extraVectors: []
+          };
+        } else {
+          // Fallback: extract it if vector JSON is missing but image exists
+          try {
+            const res = await faceRecManager.validateSelfie(selfiePath);
+            if (res.success && res.vector) {
+              fs.writeFileSync(vectorPath, JSON.stringify(res.vector), 'utf8');
+              guestAnchors[guestKey] = {
+                anchorVector: res.vector,
+                extraVectors: []
+              };
+            } else {
+              return reply.code(400).send({ error: 'Face could not be parsed from saved selfie' });
+            }
+          } catch (extractErr) {
+            req.log.error('Fallback face extraction failed:', extractErr.message);
+            return reply.code(500).send({ error: 'Failed to process saved selfie' });
+          }
+        }
+      }
+
+      const anchorVector = guestAnchors[guestKey].anchorVector;
+      const extraVectors = guestAnchors[guestKey].extraVectors || [];
+
+      // Find all event photo IDs
+      const validPhotos = await prisma.photo.findMany({
+        where: { eventId },
+        select: { id: true }
+      });
+      const validPhotoIds = new Set(validPhotos.map(p => p.id));
+
+      let photoIds = [];
+      if (qdrant.isMock) {
+        let dbVectors = qdrant.mockCache
+          .filter(item => item.eventId === eventId && validPhotoIds.has(item.photoId))
+          .map(item => ({
+            photoId: item.photoId,
+            faceId: item.faceId,
+            vector: item.vector
+          }));
+
+        if (dbVectors.length > 0) {
+          try {
+            const res = await faceRecManager.matchSelfie(selfiePath, dbVectors, extraVectors);
+            if (res.matches) {
+              photoIds = res.matches.map(m => m.photoId);
+            }
+          } catch (matchErr) {
+            req.log.error('Match execution failed for saved selfie:', matchErr.message);
+          }
+        }
+      } else {
+        // Query matching vectors directly from Qdrant!
+        const mainMatches = await qdrant.searchVectors(eventId, anchorVector, 100, 0.35);
+        const photoIdsSet = new Set(mainMatches.map(m => m.photo_id));
+        
+        for (const extraVec of extraVectors) {
+          const extraMatches = await qdrant.searchVectors(eventId, extraVec, 100, 0.35);
+          extraMatches.forEach(m => photoIdsSet.add(m.photo_id));
+        }
+        photoIds = Array.from(photoIdsSet);
+      }
+
+      // Fallback for dev mode
+      if (photoIds.length === 0 && (process.env.NODE_ENV === 'development' || process.env.MOCK_AI === 'true')) {
+        const fallbackPhotos = await prisma.photo.findMany({
+          where: { eventId },
+          take: 3
+        });
+        photoIds = fallbackPhotos.map(p => p.id);
+      }
+
+      const photos = await prisma.photo.findMany({
+        where: { id: { in: photoIds } }
+      });
+
+      if (photos.length === 0) {
+        return reply.code(400).send({ error: 'No matched photos found' });
+      }
+
+      const archiver = require('archiver');
+      const { getObjectStream } = require('../utils/r2');
+
+      reply.header('Content-Type', 'application/zip');
+      const formattedTitle = event.title.replace(/\s+/g, '_');
+      const guestName = (req.guest.name || 'guest').replace(/\s+/g, '_');
+      reply.header('Content-Disposition', `attachment; filename="${formattedTitle}_${guestName}_matched_photos.zip"`);
+
+      const archive = archiver('zip', {
+        zlib: { level: 9 }
+      });
+
+      reply.send(archive);
+
+      for (const photo of photos) {
+        let key = '';
+        try {
+          const parsed = new URL(photo.r2Url);
+          key = decodeURIComponent(parsed.pathname.substring(1));
+        } catch (e) {
+          key = decodeURIComponent(photo.r2Url.replace(/^\/?api\/photos\/file\//, ''));
+        }
+
+        if (key) {
+          try {
+            const fileStream = await getObjectStream(key);
+            // Segregate by tabName inside user's matched photos zip archive as well
+            const folderName = photo.tabName ? `${photo.tabName}/` : '';
+            archive.append(fileStream, { name: `${folderName}${photo.filename || path.basename(key)}` });
+          } catch (err) {
+            req.log.error(`Failed to append file ${key} to zip:`, err);
+          }
+        }
+      }
+
+      archive.finalize();
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to generate matched photos archive' });
+    }
+  });
+
   fastify.post('/api/gallery/public/events/:slug/search', { preHandler: verifyGuestAuth }, async (req, reply) => {
     const eventId = req.guest.eventId;
     const guestKey = `${req.guest.email}_${eventId}`;
@@ -3108,7 +3265,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
         if (key) {
           try {
             const fileStream = await getObjectStream(key);
-            archive.append(fileStream, { name: photo.filename || path.basename(key) });
+            const folderName = photo.tabName ? `${photo.tabName}/` : 'General/';
+            archive.append(fileStream, { name: `${folderName}${photo.filename || path.basename(key)}` });
           } catch (err) {
             req.log.error(`Failed to append file ${key} to zip:`, err);
           }
