@@ -19,40 +19,36 @@ export default function TermsPage() {
           <div>
             <h2 className="text-sm uppercase tracking-[0.1em] font-bold text-neutral-900 mb-4">1. Acceptance of Terms</h2>
             <p>
-              By accessing or using Misty Visuals Studio OS, you agree to be bound by these Terms and Conditions. 
-              These terms govern the use of our services, including lead management, payment processing, and digital content delivery.
+              By accessing or using Misty Visuals My Circle, which is handled by Misty Visuals Pvt Ltd, you agree to be bound by these Terms and Conditions. 
+              These terms govern the use of our guest services, including photo matching, selfie uploads, and media downloads.
             </p>
           </div>
 
           <div>
-            <h2 className="text-sm uppercase tracking-[0.1em] font-bold text-neutral-900 mb-4">2. Service Description</h2>
+            <h2 className="text-sm uppercase tracking-[0.1em] font-bold text-neutral-900 mb-4">2. Description of Service</h2>
             <p>
-              Misty Visuals provides professional photography and videography services. Our platform allows clients to view proposals, make advances, and track event progress.
+              Misty Visuals My Circle is a secure platform that allows wedding and event guests to view their photos. 
+              By capturing a verification selfie, the platform uses AI facial recognition to search the event gallery and show only the photos you appear in.
             </p>
           </div>
 
           <div>
-            <h2 className="text-sm uppercase tracking-[0.1em] font-bold text-neutral-900 mb-4">3. Payment Terms</h2>
-            <p className="mb-2">Payments are processed for booking advances, milestone payments, and final balances.</p>
+            <h2 className="text-sm uppercase tracking-[0.1em] font-bold text-neutral-900 mb-4">3. Selfie and Account Use</h2>
+            <p className="mb-2">To use the facial search, you agree to the following terms:</p>
             <ul className="list-disc pl-5 space-y-2">
-              <li>Bookings are only confirmed upon receipt of the advance payment as specified in the proposal.</li>
-              <li>GST and other taxes are applicable as per Indian government regulations.</li>
-              <li>Final payment is due before the delivery of final edited media.</li>
+              <li>You must only upload a verification selfie of **yourself**. Uploading photos of other individuals without their consent is strictly prohibited.</li>
+              <li>You agree to use your real name, email, and phone number to verify your identity.</li>
+              <li>You retain the right to delete your verification selfie and face vector from our systems at any time.</li>
             </ul>
           </div>
 
           <div>
-            <h2 className="text-sm uppercase tracking-[0.1em] font-bold text-neutral-900 mb-4">4. Usage Restrictions</h2>
-            <p>
-              Unauthorized access to the Studio OS admin panels or tampering with backend systems is strictly prohibited and may result in legal action.
-            </p>
-          </div>
-
-          <div>
-            <h2 className="text-sm uppercase tracking-[0.1em] font-bold text-neutral-900 mb-4">5. Intellectual Property</h2>
-            <p>
-              All assets, designs, and code within Studio OS are the property of Misty Visuals. All photography deliverables are subject to the copyright terms outlined in your specific service contract.
-            </p>
+            <h2 className="text-sm uppercase tracking-[0.1em] font-bold text-neutral-900 mb-4">4. Content Ownership and Restrictions</h2>
+            <p className="mb-2">All media, designs, and systems in Misty Visuals My Circle are the intellectual property of Misty Visuals Pvt Ltd or respective event organizers.</p>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>Photos displayed are subject to copyright. You are authorized to download and share your matched photos for personal, non-commercial use only.</li>
+              <li>Any attempt to reverse-engineer, exploit, or bypass the authentication systems to access private files is strictly prohibited and subject to legal action.</li>
+            </ul>
           </div>
         </section>
 
