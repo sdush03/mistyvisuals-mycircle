@@ -2468,23 +2468,30 @@ module.exports = async function galleryRoutes(fastify, opts) {
       const guest = await prisma.guest.findUnique({ where: { id: guestId } });
       if (!guest) return reply.code(404).send({ error: 'Guest not found' });
 
-      // Find a representative guest that has a selfie
-      const allGuests = await prisma.guest.findMany({ where: { email } });
-      let hasSelfie = false;
-      let representativeGuestId = null;
-      for (const g of allGuests) {
-        if (checkGuestSelfie(g.id)) {
-          hasSelfie = true;
-          representativeGuestId = g.id;
-          break;
-        }
+      // Find or create global user profile
+      let user = await prisma.circleUser.findUnique({
+        where: { email }
+      });
+      if (!user) {
+        user = await prisma.circleUser.create({
+          data: {
+            email,
+            name: guest.name,
+            phoneNumber: guest.phoneNumber,
+            provider: guest.provider || 'google',
+            providerId: guest.providerId || 'global'
+          }
+        });
       }
 
-      // Generate a global family token
+      const hasSelfie = checkUserSelfie(user.id);
+
+      // Generate a global family token containing global userId
       const familyToken = fastify.jwt.sign({
         email,
         role: 'family',
-        name: guest.name
+        name: guest.name,
+        userId: user.id
       }, { expiresIn: '7d' });
 
       return {
@@ -2494,7 +2501,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
           email,
           phoneNumber: guest.phoneNumber,
           hasSelfie,
-          selfieGuestId: representativeGuestId
+          selfieGuestId: user.id
         }
       };
     } catch (err) {
