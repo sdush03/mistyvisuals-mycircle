@@ -1086,6 +1086,7 @@ export default function CirclePage() {
           setShowCameraCaptureModal(false)
           setValidationStatus('idle')
           setSelfieError('')
+          setShowProfileModal(false)
         }}
         onRetake={() => {
           setValidationStatus('idle')
