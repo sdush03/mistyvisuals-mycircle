@@ -1998,9 +1998,10 @@ module.exports = async function galleryRoutes(fastify, opts) {
     const eventId = req.guest.eventId;
     const guestKey = `${req.guest.email}_${eventId}`;
     const userId = req.guest.userId;
+    const guestId = req.guest.guestId;
 
     try {
-      const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
+      const event = req.event || await prisma.galleryEvent.findUnique({ where: { id: eventId } });
       if (!event) return reply.code(404).send({ error: 'Event not found' });
 
       const selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.jpg`);
@@ -2842,15 +2843,38 @@ module.exports = async function galleryRoutes(fastify, opts) {
       isAdmin = true;
     }
 
+    let resolvedUserId = guestId;
+
     // Non-admin users can only access their own selfie
     if (!isAdmin) {
-      const user = await prisma.circleUser.findUnique({ where: { id: guestId } });
+      // 1. Try to find user by circleUser id
+      let user = await prisma.circleUser.findUnique({ where: { id: guestId } });
+      
+      // 2. If not found, try to find by Guest id and map to CircleUser
+      if (!user) {
+        const dbGuest = await prisma.guest.findUnique({ where: { id: guestId } });
+        if (dbGuest) {
+          user = await prisma.circleUser.findUnique({ where: { email: dbGuest.email } });
+        }
+      }
+
       if (!user || user.email !== authedEmail) {
         return reply.code(403).send({ error: 'You can only view your own selfie' });
       }
+      resolvedUserId = user.id;
+    } else {
+      // For admin fallback checks if guestId is a Guest.id
+      const user = await prisma.circleUser.findUnique({ where: { id: guestId } });
+      if (!user) {
+        const dbGuest = await prisma.guest.findUnique({ where: { id: guestId } });
+        if (dbGuest) {
+          const linkedUser = await prisma.circleUser.findUnique({ where: { email: dbGuest.email } });
+          if (linkedUser) resolvedUserId = linkedUser.id;
+        }
+      }
     }
 
-    const selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${guestId}.jpg`);
+    const selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${resolvedUserId}.jpg`);
     if (!fs.existsSync(selfiePath)) {
       return reply.code(404).send({ error: 'Selfie not found' });
     }

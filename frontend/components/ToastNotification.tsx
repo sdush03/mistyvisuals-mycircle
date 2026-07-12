@@ -21,7 +21,12 @@ export default function ToastNotifications() {
   const isFirstLoad = useRef(true)
   const router = useRouter()
 
-  const { data } = useSWR('/api/notifications', fetcher, {
+  // Disable polling on guest/gallery pages or when loaded inside the MyCircle frame
+  const isGuestPortal = typeof window !== 'undefined' && 
+    (window.location.pathname.includes('/gallery') || 
+     window.location.hostname.includes('mycircle'));
+
+  const { data } = useSWR(isGuestPortal ? null : '/api/notifications', fetcher, {
     refreshInterval: 5000,
   })
 
