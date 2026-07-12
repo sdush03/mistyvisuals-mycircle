@@ -37,6 +37,25 @@ function getDerivedThumbnail(thumbnailUrl, r2Url) {
   return null;
 }
 
+function getArchiver() {
+  const arch = require('archiver');
+  if (typeof arch === 'function') {
+    return arch;
+  }
+  if (arch && typeof arch.default === 'function') {
+    return arch.default;
+  }
+  return function(format, options) {
+    if (format === 'zip') {
+      return new arch.ZipArchive(options);
+    }
+    if (format === 'tar') {
+      return new arch.TarArchive(options);
+    }
+    return new arch.Archiver(format, options);
+  };
+}
+
 module.exports = async function galleryRoutes(fastify, opts) {
   const { pool, requireAdmin, requireAuth } = opts;
 
@@ -2361,7 +2380,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
         return reply.code(400).send({ error: 'No matched photos found' });
       }
 
-      const archiver = require('archiver');
+      const archiver = getArchiver();
       const { getObjectStream } = require('../utils/r2');
 
       reply.header('Content-Type', 'application/zip');
@@ -2403,9 +2422,11 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       })();
 
-      return archive;
+      reply.send(archive);
+      return reply;
     } catch (err) {
       req.log.error(err);
+      reply.header('Content-Type', 'application/json');
       return reply.code(500).send({ error: 'Failed to generate matched photos archive' });
     }
   });
@@ -3286,7 +3307,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
         return reply.code(400).send({ error: 'No photos found in this gallery' });
       }
 
-      const archiver = require('archiver');
+      const archiver = getArchiver();
       const { getObjectStream } = require('../utils/r2');
 
       reply.header('Content-Type', 'application/zip');
@@ -3325,9 +3346,11 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       })();
 
-      return archive;
+      reply.send(archive);
+      return reply;
     } catch (err) {
       req.log.error(err);
+      reply.header('Content-Type', 'application/json');
       return reply.code(500).send({ error: 'Failed to generate bulk download archive' });
     }
   });
