@@ -1943,15 +1943,15 @@ module.exports = async function galleryRoutes(fastify, opts) {
   });
 
   // Guest upload and save verification selfie permanently
-  fastify.post('/api/gallery/public/events/:slug/selfie', { preHandler: verifyGuestAuth }, async (req, reply) => {
+  fastify.post('/api/gallery/public/events/:slug/selfie', { preHandler: verifyGuestAuth, bodyLimit: 10 * 1024 * 1024 }, async (req, reply) => {
     const eventId = req.guest.eventId;
     const guestKey = `${req.guest.email}_${eventId}`;
     const userId = req.guest.userId;
 
-    const data = await req.file();
-    if (!data) return reply.code(400).send({ error: 'No image uploaded' });
-
     try {
+      const data = await req.file();
+      if (!data) return reply.code(400).send({ error: 'No image uploaded' });
+
       const buffer = await data.toBuffer();
       
       const selfiesDir = path.join(__dirname, '..', 'uploads', 'photos', 'selfies');
