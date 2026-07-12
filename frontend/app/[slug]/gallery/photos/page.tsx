@@ -442,6 +442,9 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const loadMatchedPhotos = async () => {
     setLoadingMatched(true)
     const token = localStorage.getItem(`mv_gallery_token_${slug}`)
+    const savedGuest = localStorage.getItem(`mv_gallery_guest_${slug}`)
+    const parsedGuest = savedGuest ? JSON.parse(savedGuest) : null
+
     try {
       const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/matched-photos`, {
         headers: {
@@ -450,8 +453,16 @@ export default function GuestGalleryPhotos({ params }: Props) {
       })
       if (!res.ok) throw new Error('Failed to load matched photos')
       const data = await res.json()
-      setPhotos(data.photos || [])
+      const matchedPhotos = data.photos || []
+      setPhotos(matchedPhotos)
       setHasSearched(true)
+
+      // Default to Highlights if they have partial access and no matched photos
+      if (matchedPhotos.length === 0 && parsedGuest && !parsedGuest.hasFullAccess) {
+        setViewMode('all')
+        setActiveAllTab('Highlights')
+        loadAllPhotos('Highlights')
+      }
     } catch (err) {
       console.error('Failed to load matched photos automatically:', err)
     } finally {
