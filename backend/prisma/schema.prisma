@@ -340,7 +340,7 @@ model GalleryEvent {
   coverPhotoSquareUrl    String?  @map("cover_photo_square_url")
   galleryFacesComplete   Boolean  @default(true) @map("gallery_faces_complete")
   allowDownloads         Boolean  @default(true) @map("allow_downloads")
-  allowBulkDownloads     Boolean  @default(true) @map("allow_bulk_downloads")
+  allowBulkDownloads     Boolean  @default(false) @map("allow_bulk_downloads")
   bulkDownloadPin        String?  @map("bulk_download_pin") @db.VarChar(255)
   guests                 Guest[]
   photos                 Photo[]

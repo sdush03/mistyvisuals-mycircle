@@ -1211,7 +1211,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
           ))}
           </div>
           {/* Matched Photos Download Button (only in My Photos tab) */}
-          {viewMode === 'matched' && event?.allowDownloads !== false && (
+          {viewMode === 'matched' && event?.allowDownloads !== false && photos.length > 1 && (
             <button
               onClick={handleDownloadMyPhotos}
               style={{

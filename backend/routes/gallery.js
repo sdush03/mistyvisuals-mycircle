@@ -2373,30 +2373,37 @@ module.exports = async function galleryRoutes(fastify, opts) {
         zlib: { level: 9 }
       });
 
-      reply.send(archive);
-
-      for (const photo of photos) {
-        let key = '';
+      // Append files and finalize in the background, returning the stream directly to Fastify
+      (async () => {
         try {
-          const parsed = new URL(photo.r2Url);
-          key = decodeURIComponent(parsed.pathname.substring(1));
-        } catch (e) {
-          key = decodeURIComponent(photo.r2Url.replace(/^\/?api\/photos\/file\//, ''));
-        }
+          for (const photo of photos) {
+            let key = '';
+            try {
+              const parsed = new URL(photo.r2Url);
+              key = decodeURIComponent(parsed.pathname.substring(1));
+            } catch (e) {
+              key = decodeURIComponent(photo.r2Url.replace(/^\/?api\/photos\/file\//, ''));
+            }
 
-        if (key) {
-          try {
-            const fileStream = await getObjectStream(key);
-            // Segregate by tabName inside user's matched photos zip archive as well
-            const folderName = photo.tabName ? `${photo.tabName}/` : '';
-            archive.append(fileStream, { name: `${folderName}${photo.filename || path.basename(key)}` });
-          } catch (err) {
-            req.log.error(`Failed to append file ${key} to zip:`, err);
+            if (key) {
+              try {
+                const fileStream = await getObjectStream(key);
+                // Segregate by tabName inside user's matched photos zip archive as well
+                const folderName = photo.tabName ? `${photo.tabName}/` : '';
+                archive.append(fileStream, { name: `${folderName}${photo.filename || path.basename(key)}` });
+              } catch (err) {
+                req.log.error(`Failed to append file ${key} to zip:`, err);
+              }
+            }
           }
+          await archive.finalize();
+        } catch (archiveErr) {
+          req.log.error('Error during archive generation:', archiveErr);
+          archive.destroy(archiveErr);
         }
-      }
+      })();
 
-      archive.finalize();
+      return archive;
     } catch (err) {
       req.log.error(err);
       return reply.code(500).send({ error: 'Failed to generate matched photos archive' });
@@ -3289,29 +3296,36 @@ module.exports = async function galleryRoutes(fastify, opts) {
         zlib: { level: 9 }
       });
 
-      reply.send(archive);
-
-      for (const photo of photos) {
-        let key = '';
+      // Append files and finalize in the background, returning the stream directly to Fastify
+      (async () => {
         try {
-          const parsed = new URL(photo.r2Url);
-          key = decodeURIComponent(parsed.pathname.substring(1));
-        } catch (e) {
-          key = decodeURIComponent(photo.r2Url.replace(/^\/?api\/photos\/file\//, ''));
-        }
+          for (const photo of photos) {
+            let key = '';
+            try {
+              const parsed = new URL(photo.r2Url);
+              key = decodeURIComponent(parsed.pathname.substring(1));
+            } catch (e) {
+              key = decodeURIComponent(photo.r2Url.replace(/^\/?api\/photos\/file\//, ''));
+            }
 
-        if (key) {
-          try {
-            const fileStream = await getObjectStream(key);
-            const folderName = photo.tabName ? `${photo.tabName}/` : 'General/';
-            archive.append(fileStream, { name: `${folderName}${photo.filename || path.basename(key)}` });
-          } catch (err) {
-            req.log.error(`Failed to append file ${key} to zip:`, err);
+            if (key) {
+              try {
+                const fileStream = await getObjectStream(key);
+                const folderName = photo.tabName ? `${photo.tabName}/` : 'General/';
+                archive.append(fileStream, { name: `${folderName}${photo.filename || path.basename(key)}` });
+              } catch (err) {
+                req.log.error(`Failed to append file ${key} to zip:`, err);
+              }
+            }
           }
+          await archive.finalize();
+        } catch (archiveErr) {
+          req.log.error('Error during bulk archive generation:', archiveErr);
+          archive.destroy(archiveErr);
         }
-      }
+      })();
 
-      archive.finalize();
+      return archive;
     } catch (err) {
       req.log.error(err);
       return reply.code(500).send({ error: 'Failed to generate bulk download archive' });
