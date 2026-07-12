@@ -123,10 +123,16 @@ export default function CirclePage() {
   }
 
   useEffect(() => {
-    if (!showProfileModal) {
+    if (showProfileModal) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
       setValidationStatus('idle')
       setSelfieError('')
       setShowCameraCaptureModal(false)
+    }
+    return () => {
+      document.body.style.overflow = ''
     }
   }, [showProfileModal])
 
@@ -768,20 +774,25 @@ export default function CirclePage() {
 
       {/* ── My Profile Modal (Linen Aesthetic) ── */}
       {showProfileModal && profile && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(28, 26, 24, 0.4)',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100,
-          padding: '1rem'
-        }}>
-          <div style={{
-            background: '#ffffff',
-            border: '1px solid #ddd8d0',
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(28, 26, 24, 0.4)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: '1rem'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              border: '1px solid #ddd8d0',
             borderRadius: '2px',
             width: '100%',
             maxWidth: '480px',

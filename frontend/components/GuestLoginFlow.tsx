@@ -69,6 +69,18 @@ export function GuestLoginFlow({
     )
   }
 
+  // Lock body scroll when login overlay is active
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isOpen])
+
   // Effect to make sure Google is drawn on load
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).google) {
@@ -375,6 +387,7 @@ export function GuestLoginFlow({
       {/* Phone Number Modal */}
       {showPhoneModal && (
         <div 
+          onClick={(e) => { e.stopPropagation(); }}
           style={{
             position: 'fixed',
             inset: 0,
@@ -388,6 +401,7 @@ export function GuestLoginFlow({
           }}
         >
           <div 
+            onClick={(e) => e.stopPropagation()}
             style={{
               width: '100%',
               maxWidth: '380px',

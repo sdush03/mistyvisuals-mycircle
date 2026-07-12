@@ -159,10 +159,23 @@ export function CameraCaptureModal({
     }
   }, [])
 
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   return (
     <div 
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
       style={{
         position: 'fixed',
         inset: 0,
@@ -175,6 +188,7 @@ export function CameraCaptureModal({
       }}
     >
       <div 
+        onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
           maxWidth: '400px',
