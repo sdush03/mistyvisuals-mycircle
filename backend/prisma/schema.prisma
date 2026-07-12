@@ -903,6 +903,7 @@ model projects {
   invoice_id                             Int?
   slug                                   String?                @unique(map: "idx_projects_slug") @db.VarChar(255)
   passcode                               String?                @db.VarChar(50)
+  partial_passcode                       String?                @db.VarChar(50)
   finance_transactions                   finance_transactions[]
   invoices_invoices_project_idToprojects invoices[]             @relation("invoices_project_idToprojects")
   project_checklist                      project_checklist[]

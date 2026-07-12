@@ -1656,30 +1656,49 @@ module.exports = async function galleryRoutes(fastify, opts) {
         return reply.code(400).send({ error: 'Unsupported authentication provider' });
       }
 
-      // Check if code matches the project passcode
-      let isCodeValid = false;
-      if (code) {
-        let resolvedProjectId = event.projectId;
-        if (!resolvedProjectId && event.leadId) {
-          const projRes = await pool.query(
-            `SELECT id FROM projects WHERE lead_id = $1 LIMIT 1`,
-            [event.leadId]
-          );
-          if (projRes.rows.length) {
-            resolvedProjectId = projRes.rows[0].id;
-          }
+      // Retrieve passcode and partial_passcode from projects table
+      let dbPasscode = null;
+      let dbPartialPasscode = null;
+      let resolvedProjectId = event.projectId;
+      if (!resolvedProjectId && event.leadId) {
+        const projRes = await pool.query(
+          `SELECT id FROM projects WHERE lead_id = $1 LIMIT 1`,
+          [event.leadId]
+        );
+        if (projRes.rows.length) {
+          resolvedProjectId = projRes.rows[0].id;
         }
-        if (resolvedProjectId) {
-          const passRes = await pool.query(
-            `SELECT passcode FROM projects WHERE id::text = $1 LIMIT 1`,
-            [String(resolvedProjectId)]
-          );
-          if (passRes.rows.length) {
-            const dbPasscode = passRes.rows[0].passcode;
-            if (dbPasscode && code.trim().toLowerCase() === dbPasscode.trim().toLowerCase()) {
-              isCodeValid = true;
-            }
-          }
+      }
+      if (resolvedProjectId) {
+        const passRes = await pool.query(
+          `SELECT passcode, partial_passcode FROM projects WHERE id::text = $1 LIMIT 1`,
+          [String(resolvedProjectId)]
+        );
+        if (passRes.rows.length) {
+          dbPasscode = passRes.rows[0].passcode;
+          dbPartialPasscode = passRes.rows[0].partial_passcode;
+        }
+      }
+
+      // Enforce passcode check
+      let isCodeValid = false; // full access flag
+      
+      // If at least one passcode is configured on the event
+      if (dbPasscode || dbPartialPasscode) {
+        if (!code) {
+          return reply.code(400).send({ error: 'Passcode is required to access this gallery' });
+        }
+        
+        const cleanCode = code.trim().toLowerCase();
+        const cleanFull = dbPasscode ? dbPasscode.trim().toLowerCase() : null;
+        const cleanPartial = dbPartialPasscode ? dbPartialPasscode.trim().toLowerCase() : null;
+
+        if (cleanFull && cleanCode === cleanFull) {
+          isCodeValid = true; // Full access granted
+        } else if (cleanPartial && cleanCode === cleanPartial) {
+          isCodeValid = false; // Partial access granted
+        } else {
+          return reply.code(400).send({ error: 'Invalid passcode' });
         }
       }
 
@@ -1783,30 +1802,49 @@ module.exports = async function galleryRoutes(fastify, opts) {
       const event = await prisma.galleryEvent.findUnique({ where: { slug } });
       if (!event) return reply.code(404).send({ error: 'Event not found' });
 
-      // Check if code matches the project passcode
-      let isCodeValid = false;
-      if (code) {
-        let resolvedProjectId = event.projectId;
-        if (!resolvedProjectId && event.leadId) {
-          const projRes = await pool.query(
-            `SELECT id FROM projects WHERE lead_id = $1 LIMIT 1`,
-            [event.leadId]
-          );
-          if (projRes.rows.length) {
-            resolvedProjectId = projRes.rows[0].id;
-          }
+      // Retrieve passcode and partial_passcode from projects table
+      let dbPasscode = null;
+      let dbPartialPasscode = null;
+      let resolvedProjectId = event.projectId;
+      if (!resolvedProjectId && event.leadId) {
+        const projRes = await pool.query(
+          `SELECT id FROM projects WHERE lead_id = $1 LIMIT 1`,
+          [event.leadId]
+        );
+        if (projRes.rows.length) {
+          resolvedProjectId = projRes.rows[0].id;
         }
-        if (resolvedProjectId) {
-          const passRes = await pool.query(
-            `SELECT passcode FROM projects WHERE id::text = $1 LIMIT 1`,
-            [String(resolvedProjectId)]
-          );
-          if (passRes.rows.length) {
-            const dbPasscode = passRes.rows[0].passcode;
-            if (dbPasscode && code.trim().toLowerCase() === dbPasscode.trim().toLowerCase()) {
-              isCodeValid = true;
-            }
-          }
+      }
+      if (resolvedProjectId) {
+        const passRes = await pool.query(
+          `SELECT passcode, partial_passcode FROM projects WHERE id::text = $1 LIMIT 1`,
+          [String(resolvedProjectId)]
+        );
+        if (passRes.rows.length) {
+          dbPasscode = passRes.rows[0].passcode;
+          dbPartialPasscode = passRes.rows[0].partial_passcode;
+        }
+      }
+
+      // Enforce passcode check
+      let isCodeValid = false; // full access flag
+      
+      // If at least one passcode is configured on the event
+      if (dbPasscode || dbPartialPasscode) {
+        if (!code) {
+          return reply.code(400).send({ error: 'Passcode is required to access this gallery' });
+        }
+        
+        const cleanCode = code.trim().toLowerCase();
+        const cleanFull = dbPasscode ? dbPasscode.trim().toLowerCase() : null;
+        const cleanPartial = dbPartialPasscode ? dbPartialPasscode.trim().toLowerCase() : null;
+
+        if (cleanFull && cleanCode === cleanFull) {
+          isCodeValid = true; // Full access granted
+        } else if (cleanPartial && cleanCode === cleanPartial) {
+          isCodeValid = false; // Partial access granted
+        } else {
+          return reply.code(400).send({ error: 'Invalid passcode' });
         }
       }
 
