@@ -1723,25 +1723,32 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       }
 
+      // Find or create guest (check if they exist first)
+      let guest = await prisma.guest.findFirst({
+        where: { eventId: event.id, email: verifiedEmail }
+      });
+
       // Enforce passcode check
       let isCodeValid = false; // full access flag
       
       // If at least one passcode is configured on the event
       if (dbPasscode || dbPartialPasscode) {
         if (!code) {
-          return reply.code(400).send({ error: 'Passcode is required to access this gallery' });
-        }
-        
-        const cleanCode = code.trim().toLowerCase();
-        const cleanFull = dbPasscode ? dbPasscode.trim().toLowerCase() : null;
-        const cleanPartial = dbPartialPasscode ? dbPartialPasscode.trim().toLowerCase() : null;
-
-        if (cleanFull && cleanCode === cleanFull) {
-          isCodeValid = true; // Full access granted
-        } else if (cleanPartial && cleanCode === cleanPartial) {
-          isCodeValid = false; // Partial access granted
+          if (!guest) {
+            return reply.code(400).send({ error: 'Passcode is required to access this gallery' });
+          }
         } else {
-          return reply.code(400).send({ error: 'Invalid passcode' });
+          const cleanCode = code.trim().toLowerCase();
+          const cleanFull = dbPasscode ? dbPasscode.trim().toLowerCase() : null;
+          const cleanPartial = dbPartialPasscode ? dbPartialPasscode.trim().toLowerCase() : null;
+
+          if (cleanFull && cleanCode === cleanFull) {
+            isCodeValid = true; // Full access granted
+          } else if (cleanPartial && cleanCode === cleanPartial) {
+            isCodeValid = false; // Partial access granted
+          } else {
+            return reply.code(400).send({ error: 'Invalid passcode' });
+          }
         }
       }
 
@@ -1759,11 +1766,6 @@ module.exports = async function galleryRoutes(fastify, opts) {
           }
         });
       }
-
-      // Find or create guest
-      let guest = await prisma.guest.findFirst({
-        where: { eventId: event.id, email: verifiedEmail }
-      });
 
       if (!guest) {
         guest = await prisma.guest.create({

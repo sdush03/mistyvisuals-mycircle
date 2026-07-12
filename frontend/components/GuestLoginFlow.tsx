@@ -192,18 +192,16 @@ export function GuestLoginFlow({
   const handleGoogleCredentialResponse = async (response: any) => {
     try {
       const code = activeCode || inviteCode
-      
-      // If the event has a passcode, but we don't have a code, we show the passcode screen after auth!
-      if (eventSlug && eventHasPasscode && !code) {
+      await authenticateAndContinue(response.credential, 'google', code)
+    } catch (err: any) {
+      if (err.message && (err.message.includes('passcode') || err.message.includes('Passcode'))) {
         setPendingOauthToken(response.credential)
         setPendingOauthProvider('google')
         setShowPasscodeScreenAfterAuth(true)
-        return
+        setPasscodeError('') // Clear previous errors
+      } else {
+        alert(err.message || 'Login failed')
       }
-
-      await authenticateAndContinue(response.credential, 'google', code)
-    } catch (err: any) {
-      alert(err.message || 'Login failed')
     }
   }
 
