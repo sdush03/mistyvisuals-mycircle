@@ -127,8 +127,8 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
       <div 
         className="force-light flex h-screen w-full flex-col items-center justify-center px-4 text-center select-none"
         style={{
-          colorScheme: 'dark',
-          background: 'radial-gradient(circle at center, #18191d 0%, #090a0b 100%)',
+          colorScheme: 'light',
+          background: 'radial-gradient(circle at center, #fbfbfa 0%, #f4f3f0 100%)',
           fontFamily: 'var(--font-sans)',
         }}
       >
@@ -142,18 +142,15 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
           height: '400px',
           borderRadius: '50%',
           background: isUnpublished 
-            ? 'radial-gradient(circle, rgba(245,158,11,0.04) 0%, transparent 70%)'
-            : 'radial-gradient(circle, rgba(59,130,246,0.04) 0%, transparent 70%)',
+            ? 'radial-gradient(circle, rgba(217,119,6,0.06) 0%, transparent 70%)'
+            : 'radial-gradient(circle, rgba(37,99,235,0.06) 0%, transparent 70%)',
           filter: 'blur(40px)',
           zIndex: 1,
           pointerEvents: 'none'
         }} />
 
         <div 
-          className="relative z-10 flex max-w-[440px] w-full flex-col items-center rounded-2xl border border-white/[0.08] bg-neutral-900/40 p-8 md:p-10 shadow-2xl backdrop-blur-xl"
-          style={{
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.05)'
-          }}
+          className="relative z-10 flex max-w-[440px] w-full flex-col items-center rounded-2xl border border-[#eae8e3] bg-white p-8 md:p-10 shadow-[0_20px_50px_rgba(28,26,24,0.06)]"
         >
           {/* Header Logo */}
           <div className="mb-8">
@@ -164,7 +161,7 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
               className="block opacity-90 transition-opacity hover:opacity-100"
             >
               <img 
-                src="/logo-white.png" 
+                src="/logo_black.png" 
                 alt="Misty Visuals Logo" 
                 style={{ height: '3rem', width: 'auto', objectFit: 'contain' }} 
               />
@@ -174,18 +171,18 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
           {/* Status Icon */}
           {isUnpublished ? (
             <div className="relative mb-6 flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full bg-amber-500/10 blur-xl w-16 h-16"></div>
-              <div className="relative flex items-center justify-center w-16 h-16 rounded-full border border-amber-500/20 bg-[#16171a]/85 backdrop-blur-md shadow-inner">
-                <svg className="w-7 h-7 text-amber-500/85 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+              <div className="absolute inset-0 rounded-full bg-amber-500/5 blur-xl w-16 h-16"></div>
+              <div className="relative flex items-center justify-center w-16 h-16 rounded-full border border-amber-200 bg-amber-50/80 shadow-inner">
+                <svg className="w-7 h-7 text-amber-600 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
                 </svg>
               </div>
             </div>
           ) : (
             <div className="relative mb-6 flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full bg-blue-500/10 blur-xl w-16 h-16"></div>
-              <div className="relative flex items-center justify-center w-16 h-16 rounded-full border border-blue-500/20 bg-[#16171a]/85 backdrop-blur-md shadow-inner">
-                <svg className="w-7 h-7 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+              <div className="absolute inset-0 rounded-full bg-blue-500/5 blur-xl w-16 h-16"></div>
+              <div className="relative flex items-center justify-center w-16 h-16 rounded-full border border-blue-200 bg-blue-50/80 shadow-inner">
+                <svg className="w-7 h-7 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                 </svg>
               </div>
@@ -193,12 +190,12 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
           )}
 
           {/* Heading */}
-          <h1 className="font-lora text-2xl font-semibold text-white tracking-wide mb-3">
+          <h1 className="font-lora text-2xl font-semibold text-[#1c1a18] tracking-wide mb-3">
             {isUnpublished ? 'Gallery Unpublished' : 'Connection Offline'}
           </h1>
 
           {/* Message */}
-          <p className="font-sans text-sm text-neutral-400 leading-relaxed mb-8 px-2 max-w-sm">
+          <p className="font-sans text-sm text-neutral-500 leading-relaxed mb-8 px-2 max-w-sm">
             {isUnpublished 
               ? 'This photo gallery is currently set to private or has not been published yet. Please check back later or contact your photographer/host for access details.' 
               : error}
@@ -208,7 +205,7 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
           <div className="flex w-full flex-col gap-3">
             <button 
               onClick={() => window.location.reload()} 
-              className="w-full rounded-lg bg-white py-3 text-black font-sans text-xs font-semibold uppercase tracking-widest shadow-md transition-all hover:bg-neutral-200 active:scale-[0.98] cursor-pointer"
+              className="w-full rounded-lg bg-[#1c1a18] py-3 text-white font-sans text-xs font-semibold uppercase tracking-widest shadow-md transition-all hover:bg-[#2d2a26] active:scale-[0.98] cursor-pointer"
             >
               Refresh Page
             </button>
@@ -217,7 +214,7 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                 href="https://mistyvisuals.com" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="w-full rounded-lg border border-white/10 py-3 text-white font-sans text-xs font-semibold uppercase tracking-widest transition-all hover:bg-white/5 active:scale-[0.98] cursor-pointer flex items-center justify-center"
+                className="w-full rounded-lg border border-[#1c1a18]/15 py-3 text-[#1c1a18] font-sans text-xs font-semibold uppercase tracking-widest transition-all hover:bg-[#1c1a18]/5 active:scale-[0.98] cursor-pointer flex items-center justify-center"
                 style={{ textDecoration: 'none' }}
               >
                 Visit Misty Visuals
