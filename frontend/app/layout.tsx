@@ -6,16 +6,10 @@ import LayoutWrapper from '@/components/LayoutWrapper'
 export const metadata: Metadata = {
   title: 'My Circle | Misty Visuals',
   description: 'Discover your wedding photos and matched celebrations.',
-  manifest: '/manifest.json?v=5',
   icons: {
     icon: '/icons/icon-192x192-v3.png',
     shortcut: '/icons/icon-192x192-v3.png',
     apple: '/icons/icon-512x512-v3.png',
-  },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: 'My Circle',
   },
   verification: {
     google: '58t2nxviEH1qsoDN8yItjYB3QRnmnJ-VuvRFAXX5GvI',

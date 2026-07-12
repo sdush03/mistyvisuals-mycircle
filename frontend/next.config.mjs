@@ -33,29 +33,4 @@ const nextConfig = {
   },
 }
 
-import withPWAInit from '@ducanh2912/next-pwa'
-
-const withPWA = withPWAInit({
-  dest: 'public',
-  disable: process.env.NODE_ENV === 'development',
-  register: true,
-  skipWaiting: true,
-  extendDefaultRuntimeCaching: true,
-  workboxOptions: {
-    runtimeCaching: [
-      {
-        // Never serve /api/ routes from SW cache — always go to network
-        urlPattern: /^https?:\/\/.*\/api\/.*/i,
-        handler: 'NetworkOnly',
-      },
-      {
-        // Bypass service worker cache for document navigations (HTML pages)
-        // to prevent ERR_FAILED on redirects/session state changes
-        urlPattern: ({ request }) => request.mode === 'navigate',
-        handler: 'NetworkOnly',
-      },
-    ],
-  },
-})
-
-export default withPWA(nextConfig)
+export default nextConfig
