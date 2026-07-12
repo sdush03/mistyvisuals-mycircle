@@ -2864,6 +2864,31 @@ module.exports = async function galleryRoutes(fastify, opts) {
     if (!url) return reply.code(400).send({ error: 'URL is required' });
 
     try {
+      // Parse URL to prevent Server-Side Request Forgery (SSRF)
+      const parsedUrl = new URL(url);
+      const hostname = parsedUrl.hostname.toLowerCase();
+
+      // Block local, loopback, and private addresses
+      const isLocal = 
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname === '0.0.0.0' ||
+        hostname === '[::1]' ||
+        hostname.startsWith('10.') ||
+        hostname.startsWith('192.168.') ||
+        hostname.startsWith('169.254.') || // AWS/Cloud Instance metadata endpoints
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname); // 172.16.x.x - 172.31.x.x range
+
+      if (isLocal) {
+        req.log.warn(`Blocked download-proxy request to local network/loopback target: ${url}`);
+        return reply.code(400).send({ error: 'Invalid URL target' });
+      }
+
+      // Only allow HTTP/HTTPS protocols
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return reply.code(400).send({ error: 'Only HTTP and HTTPS protocols are allowed' });
+      }
+
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch file');
 
