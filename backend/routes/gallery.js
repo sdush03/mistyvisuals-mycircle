@@ -79,6 +79,33 @@ module.exports = async function galleryRoutes(fastify, opts) {
     return fs.existsSync(selfiePath);
   };
 
+  const ensureUserSelfieMigrated = async (userId, email) => {
+    if (!userId || !email) return false;
+    const newJpgPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.jpg`);
+    if (fs.existsSync(newJpgPath)) return true;
+
+    try {
+      const guests = await prisma.guest.findMany({ where: { email } });
+      for (const guest of guests) {
+        const oldJpgPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${guest.id}.jpg`);
+        const oldJsonPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${guest.id}.json`);
+        
+        if (fs.existsSync(oldJpgPath)) {
+          const newJsonPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.json`);
+          fs.copyFileSync(oldJpgPath, newJpgPath);
+          if (fs.existsSync(oldJsonPath)) {
+            fs.copyFileSync(oldJsonPath, newJsonPath);
+          }
+          fastify.log.info(`[Selfie On-The-Fly Migration] Migrated guest_${guest.id} -> user_${userId} for ${email}`);
+          return true;
+        }
+      }
+    } catch (err) {
+      fastify.log.error('On-the-fly selfie migration failed:', err);
+    }
+    return false;
+  };
+
   function logTelemetry(entry) {
     const telemetryPath = path.join(__dirname, '..', 'db', 'telemetry.json');
     let data = [];
@@ -1698,6 +1725,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       }
 
+      await ensureUserSelfieMigrated(user.id, verifiedEmail);
       const hasSelfie = checkUserSelfie(user.id);
 
       // Generate secure guest JWT session
@@ -1815,6 +1843,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       }
 
+      await ensureUserSelfieMigrated(user.id, decoded.email);
       const hasSelfie = checkUserSelfie(user.id);
 
       // Generate secure guest JWT session
@@ -2485,6 +2514,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
         });
       }
 
+      await ensureUserSelfieMigrated(user.id, email);
       const hasSelfie = checkUserSelfie(user.id);
 
       // Generate a global family token containing global userId
