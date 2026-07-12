@@ -73,6 +73,12 @@ module.exports = async function galleryRoutes(fastify, opts) {
     return fs.existsSync(selfiePath);
   };
 
+  const checkUserSelfie = (userId) => {
+    if (!userId) return false;
+    const selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.jpg`);
+    return fs.existsSync(selfiePath);
+  };
+
   function logTelemetry(entry) {
     const telemetryPath = path.join(__dirname, '..', 'db', 'telemetry.json');
     let data = [];
@@ -1650,6 +1656,21 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       }
 
+      // Find or create global user profile
+      let user = await prisma.circleUser.findUnique({
+        where: { email: verifiedEmail }
+      });
+      if (!user) {
+        user = await prisma.circleUser.create({
+          data: {
+            email: verifiedEmail,
+            name: verifiedName,
+            provider,
+            providerId
+          }
+        });
+      }
+
       // Find or create guest
       let guest = await prisma.guest.findFirst({
         where: { eventId: event.id, email: verifiedEmail }
@@ -1660,7 +1681,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
           data: {
             eventId: event.id,
             email: verifiedEmail,
-            name: verifiedName,
+            name: user.name,
+            phoneNumber: user.phoneNumber,
             provider,
             providerId,
             hasFullAccess: isCodeValid
@@ -1676,59 +1698,12 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       }
 
-      // Check if we can auto-migrate verified phone and selfie from another event for the same email
-      let hasSelfie = checkGuestSelfie(guest.id);
-      if (!guest.phoneNumber || !hasSelfie) {
-        const otherGuests = await prisma.guest.findMany({
-          where: { email: verifiedEmail }
-        });
-        let sourceGuest = null;
-        for (const g of otherGuests) {
-          if (g.id !== guest.id && g.phoneNumber && checkGuestSelfie(g.id)) {
-            sourceGuest = g;
-            break;
-          }
-        }
-        if (sourceGuest) {
-          // Update database phone number
-          if (!guest.phoneNumber) {
-            guest = await prisma.guest.update({
-              where: { id: guest.id },
-              data: { phoneNumber: sourceGuest.phoneNumber }
-            });
-          }
-          // Copy files
-          if (!hasSelfie) {
-            const selfiesDir = path.join(__dirname, '..', 'uploads', 'photos', 'selfies');
-            const srcSelfie = path.join(selfiesDir, `guest_${sourceGuest.id}.jpg`);
-            const srcVector = path.join(selfiesDir, `guest_${sourceGuest.id}.json`);
-            const destSelfie = path.join(selfiesDir, `guest_${guest.id}.jpg`);
-            const destVector = path.join(selfiesDir, `guest_${guest.id}.json`);
-            try {
-              if (fs.existsSync(srcSelfie) && fs.existsSync(srcVector)) {
-                fs.mkdirSync(selfiesDir, { recursive: true });
-                fs.copyFileSync(srcSelfie, destSelfie);
-                fs.copyFileSync(srcVector, destVector);
-                hasSelfie = true;
-                
-                // Cache vector in memory
-                const guestKey = `${guest.email}_${event.id}`;
-                const vectorContent = fs.readFileSync(destVector, 'utf8');
-                guestAnchors[guestKey] = {
-                  anchorVector: JSON.parse(vectorContent),
-                  extraVectors: []
-                };
-              }
-            } catch (copyErr) {
-              req.log.error(copyErr, 'Failed to copy guest selfie from other event');
-            }
-          }
-        }
-      }
+      const hasSelfie = checkUserSelfie(user.id);
 
       // Generate secure guest JWT session
       const sessionToken = fastify.jwt.sign({
         guestId: guest.id,
+        userId: user.id,
         eventId: event.id,
         email: guest.email,
         role: 'guest',
@@ -1739,9 +1714,9 @@ module.exports = async function galleryRoutes(fastify, opts) {
         token: sessionToken,
         guest: {
           id: guest.id,
-          name: guest.name,
+          name: user.name || guest.name,
           email: guest.email,
-          phoneNumber: guest.phoneNumber,
+          phoneNumber: user.phoneNumber,
           hasFullAccess: guest.hasFullAccess,
           hasSelfie
         }
@@ -1807,6 +1782,12 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       }
 
+      // Find global user profile
+      const user = await prisma.circleUser.findUnique({
+        where: { email: decoded.email }
+      });
+      if (!user) return reply.code(404).send({ error: 'User profile not found' });
+
       // Find or create guest for this wedding event
       let guest = await prisma.guest.findFirst({
         where: { eventId: event.id, email: decoded.email }
@@ -1817,9 +1798,10 @@ module.exports = async function galleryRoutes(fastify, opts) {
           data: {
             eventId: event.id,
             email: decoded.email,
-            name: decoded.name || '',
-            provider: 'google',
-            providerId: 'circle_sync_' + decoded.email,
+            name: user.name,
+            phoneNumber: user.phoneNumber,
+            provider: user.provider,
+            providerId: user.providerId,
             hasFullAccess: isCodeValid
           }
         });
@@ -1833,59 +1815,12 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       }
 
-      // Check if we can auto-migrate verified phone and selfie from another event for the same email
-      let hasSelfie = checkGuestSelfie(guest.id);
-      if (!guest.phoneNumber || !hasSelfie) {
-        const otherGuests = await prisma.guest.findMany({
-          where: { email: decoded.email }
-        });
-        let sourceGuest = null;
-        for (const g of otherGuests) {
-          if (g.id !== guest.id && g.phoneNumber && checkGuestSelfie(g.id)) {
-            sourceGuest = g;
-            break;
-          }
-        }
-        if (sourceGuest) {
-          // Update database phone number
-          if (!guest.phoneNumber) {
-            guest = await prisma.guest.update({
-              where: { id: guest.id },
-              data: { phoneNumber: sourceGuest.phoneNumber }
-            });
-          }
-          // Copy files
-          if (!hasSelfie) {
-            const selfiesDir = path.join(__dirname, '..', 'uploads', 'photos', 'selfies');
-            const srcSelfie = path.join(selfiesDir, `guest_${sourceGuest.id}.jpg`);
-            const srcVector = path.join(selfiesDir, `guest_${sourceGuest.id}.json`);
-            const destSelfie = path.join(selfiesDir, `guest_${guest.id}.jpg`);
-            const destVector = path.join(selfiesDir, `guest_${guest.id}.json`);
-            try {
-              if (fs.existsSync(srcSelfie) && fs.existsSync(srcVector)) {
-                fs.mkdirSync(selfiesDir, { recursive: true });
-                fs.copyFileSync(srcSelfie, destSelfie);
-                fs.copyFileSync(srcVector, destVector);
-                hasSelfie = true;
-                
-                // Cache vector in memory
-                const guestKey = `${guest.email}_${event.id}`;
-                const vectorContent = fs.readFileSync(destVector, 'utf8');
-                guestAnchors[guestKey] = {
-                  anchorVector: JSON.parse(vectorContent),
-                  extraVectors: []
-                };
-              }
-            } catch (copyErr) {
-              req.log.error(copyErr, 'Failed to copy guest selfie from other event in family SSO');
-            }
-          }
-        }
-      }
+      const hasSelfie = checkUserSelfie(user.id);
 
       // Generate secure guest JWT session
       const sessionToken = fastify.jwt.sign({
         guestId: guest.id,
+        userId: user.id,
         eventId: event.id,
         email: guest.email,
         role: 'guest',
@@ -1896,16 +1831,16 @@ module.exports = async function galleryRoutes(fastify, opts) {
         token: sessionToken,
         guest: {
           id: guest.id,
-          name: guest.name,
+          name: user.name || guest.name,
           email: guest.email,
-          phoneNumber: guest.phoneNumber,
+          phoneNumber: user.phoneNumber,
           hasFullAccess: guest.hasFullAccess,
           hasSelfie
         }
       };
     } catch (err) {
       req.log.error(err);
-      return reply.code(500).send({ error: 'SSO Authentication failed' });
+      return reply.code(500).send({ error: 'SSO transition failed' });
     }
   });
 
@@ -1992,6 +1927,10 @@ module.exports = async function galleryRoutes(fastify, opts) {
     if (!phoneNumber) return reply.code(400).send({ error: 'Phone number is required' });
 
     try {
+      await prisma.circleUser.update({
+        where: { email: req.guest.email },
+        data: { phoneNumber }
+      });
       await prisma.guest.update({
         where: { id: req.guest.guestId },
         data: { phoneNumber }
@@ -2007,7 +1946,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
   fastify.post('/api/gallery/public/events/:slug/selfie', { preHandler: verifyGuestAuth }, async (req, reply) => {
     const eventId = req.guest.eventId;
     const guestKey = `${req.guest.email}_${eventId}`;
-    const guestId = req.guest.guestId;
+    const userId = req.guest.userId;
 
     const data = await req.file();
     if (!data) return reply.code(400).send({ error: 'No image uploaded' });
@@ -2018,8 +1957,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
       const selfiesDir = path.join(__dirname, '..', 'uploads', 'photos', 'selfies');
       fs.mkdirSync(selfiesDir, { recursive: true });
 
-      const selfiePath = path.join(selfiesDir, `guest_${guestId}.jpg`);
-      const vectorPath = path.join(selfiesDir, `guest_${guestId}.json`);
+      const selfiePath = path.join(selfiesDir, `user_${userId}.jpg`);
+      const vectorPath = path.join(selfiesDir, `user_${userId}.json`);
 
       fs.writeFileSync(selfiePath, buffer);
 
@@ -2057,14 +1996,14 @@ module.exports = async function galleryRoutes(fastify, opts) {
   fastify.get('/api/gallery/public/events/:slug/matched-photos', { preHandler: verifyGuestAuth }, async (req, reply) => {
     const eventId = req.guest.eventId;
     const guestKey = `${req.guest.email}_${eventId}`;
-    const guestId = req.guest.guestId;
+    const userId = req.guest.userId;
 
     try {
       const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
       if (!event) return reply.code(404).send({ error: 'Event not found' });
 
-      const selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${guestId}.jpg`);
-      const vectorPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${guestId}.json`);
+      const selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.jpg`);
+      const vectorPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.json`);
 
       if (!fs.existsSync(selfiePath)) {
         return { photos: [] }; // No selfie captured yet
@@ -2450,29 +2389,9 @@ module.exports = async function galleryRoutes(fastify, opts) {
     }
   }
 
-  async function getOrCreateSystemEvent() {
-    let systemEvent = await prisma.galleryEvent.findUnique({
-      where: { slug: 'system-directory' }
-    });
-    
-    if (!systemEvent) {
-      const qrToken = 'system-directory-qr-' + Math.random().toString(36).substring(2, 10);
-      systemEvent = await prisma.galleryEvent.create({
-        data: {
-          slug: 'system-directory',
-          title: 'MyCircle Global Directory',
-          date: new Date(),
-          qrToken: qrToken,
-          active: false
-        }
-      });
-    }
-    return systemEvent;
-  }
-
   // Verify OAuth Google token globally for Family Dashboard
   fastify.post('/api/gallery/family/auth', async (req, reply) => {
-    const { token, name, email } = req.body;
+    const { token } = req.body;
     if (!token) return reply.code(400).send({ error: 'Google Token is required' });
 
     try {
@@ -2484,57 +2403,38 @@ module.exports = async function galleryRoutes(fastify, opts) {
       const verifiedEmail = ticket.email;
       const verifiedName = ticket.name || ticket.given_name;
 
-      // Find all Guest rows under this email
-      let guestProfiles = await prisma.guest.findMany({
+      // Find or create global user profile
+      let user = await prisma.circleUser.findUnique({
         where: { email: verifiedEmail }
       });
 
-      // If no guest profiles exist (completely new user registering on MyCircle),
-      // create a system guest record to represent their global profile.
-      if (guestProfiles.length === 0) {
-        const systemEvent = await getOrCreateSystemEvent();
-        const newGuest = await prisma.guest.create({
+      if (!user) {
+        user = await prisma.circleUser.create({
           data: {
-            eventId: systemEvent.id,
             email: verifiedEmail,
             name: verifiedName,
             provider: 'google',
-            providerId: ticket.sub || 'global',
-            hasFullAccess: false
+            providerId: ticket.sub || 'global'
           }
         });
-        guestProfiles = [newGuest];
       }
 
-      // Find a guest profile that has the phone number and selfie to represent their family profile info
-      let phone = null;
-      let hasSelfie = false;
-      let representativeGuest = null;
-
-      for (const g of guestProfiles) {
-        if (g.phoneNumber && checkGuestSelfie(g.id)) {
-          phone = g.phoneNumber;
-          hasSelfie = true;
-          representativeGuest = g;
-          break;
-        }
-      }
-
-      // Generate a global family token
+      // Generate a global family token containing global userId
       const familyToken = fastify.jwt.sign({
         email: verifiedEmail,
         role: 'family',
-        name: verifiedName
+        name: user.name || verifiedName,
+        userId: user.id
       }, { expiresIn: '7d' });
 
       return {
         token: familyToken,
         profile: {
-          name: verifiedName,
+          name: user.name || verifiedName,
           email: verifiedEmail,
-          phoneNumber: phone,
-          hasSelfie,
-          selfieGuestId: representativeGuest ? representativeGuest.id : null
+          phoneNumber: user.phoneNumber,
+          hasSelfie: checkUserSelfie(user.id),
+          selfieGuestId: user.id
         }
       };
     } catch (err) {
@@ -2607,26 +2507,24 @@ module.exports = async function galleryRoutes(fastify, opts) {
     const email = req.family.email;
 
     try {
+      // Find global user profile
+      const user = await prisma.circleUser.findUnique({
+        where: { email }
+      });
+      if (!user) return { events: [], profile: null };
+
       const guestProfiles = await prisma.guest.findMany({
         where: { email },
         include: { galleryEvent: true }
       });
 
-      let sourceGuestId = null;
-      for (const g of guestProfiles) {
-        if (checkGuestSelfie(g.id)) {
-          sourceGuestId = g.id;
-          break;
-        }
-      }
-
       const eventsList = [];
       const selfiesDir = path.join(__dirname, '..', 'uploads', 'photos', 'selfies');
-      const selfiePath = sourceGuestId ? path.join(selfiesDir, `guest_${sourceGuestId}.jpg`) : null;
-      const vectorPath = sourceGuestId ? path.join(selfiesDir, `guest_${sourceGuestId}.json`) : null;
+      const selfiePath = path.join(selfiesDir, `user_${user.id}.jpg`);
+      const vectorPath = path.join(selfiesDir, `user_${user.id}.json`);
       let anchorVector = null;
 
-      if (sourceGuestId && fs.existsSync(selfiePath) && fs.existsSync(vectorPath)) {
+      if (fs.existsSync(selfiePath) && fs.existsSync(vectorPath)) {
         try {
           anchorVector = JSON.parse(fs.readFileSync(vectorPath, 'utf8'));
         } catch (e) {
@@ -2672,6 +2570,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
         const eventToken = fastify.jwt.sign({
           guestId: g.id,
+          userId: user.id,
           eventId: event.id,
           email: g.email,
           role: 'guest',
@@ -2689,44 +2588,25 @@ module.exports = async function galleryRoutes(fastify, opts) {
           eventToken,
           guestInfo: {
             id: g.id,
-            name: g.name,
+            name: user.name || g.name,
             email: g.email,
-            phoneNumber: g.phoneNumber,
+            phoneNumber: user.phoneNumber,
             hasFullAccess: g.hasFullAccess,
-            hasSelfie: checkGuestSelfie(g.id)
+            hasSelfie: !!anchorVector
           }
         });
       }
 
-      // Resolve representative profile details for client synchronization
-      let profilePhone = null;
-      let profileHasSelfie = false;
-      let representativeGuest = null;
-
-      for (const g of guestProfiles) {
-        if (g.phoneNumber && checkGuestSelfie(g.id)) {
-          profilePhone = g.phoneNumber;
-          profileHasSelfie = true;
-          representativeGuest = g;
-          break;
-        }
-      }
-      if (!representativeGuest && guestProfiles.length > 0) {
-        representativeGuest = guestProfiles[0];
-        profilePhone = representativeGuest.phoneNumber;
-        profileHasSelfie = checkGuestSelfie(representativeGuest.id);
-      }
-
       return {
         events: eventsList,
-        selfieUrl: sourceGuestId ? `/api/gallery/family/selfie/${sourceGuestId}` : null,
-        profile: representativeGuest ? {
-          name: representativeGuest.name,
+        selfieUrl: checkUserSelfie(user.id) ? `/api/gallery/family/selfie/${user.id}` : null,
+        profile: {
+          name: user.name,
           email,
-          phoneNumber: profilePhone,
-          hasSelfie: profileHasSelfie,
-          selfieGuestId: representativeGuest.id
-        } : null
+          phoneNumber: user.phoneNumber,
+          hasSelfie: checkUserSelfie(user.id),
+          selfieGuestId: user.id
+        }
       };
     } catch (err) {
       req.log.error(err);
@@ -2736,21 +2616,37 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
   // Helper function to update guest details (name, phone) and optionally verify & replicate a new selfie globally
   async function updateGuestProfileGlobal(email, name, phoneNumber, selfieBuffer, log) {
-    // Find all Guest rows under this email
-    const guestProfiles = await prisma.guest.findMany({
+    // Find or create global user profile
+    let user = await prisma.circleUser.findUnique({
       where: { email }
     });
 
-    if (guestProfiles.length === 0) {
-      throw new Error('No guest profile found with this email');
+    if (!user) {
+      user = await prisma.circleUser.create({
+        data: {
+          email,
+          name: name || undefined,
+          phoneNumber: phoneNumber || undefined
+        }
+      });
+    } else {
+      const updateData = {};
+      if (name !== undefined) updateData.name = name;
+      if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
+
+      if (Object.keys(updateData).length > 0) {
+        user = await prisma.circleUser.update({
+          where: { email },
+          data: updateData
+        });
+      }
     }
 
-    // Prepare update parameters
+    // Legacy fallback: Sync details into pre-existing event Guest records
     const updateData = {};
     if (name !== undefined) updateData.name = name;
     if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
 
-    // Update DB for all instances of this guest email across events
     if (Object.keys(updateData).length > 0) {
       await prisma.guest.updateMany({
         where: { email },
@@ -2758,15 +2654,13 @@ module.exports = async function galleryRoutes(fastify, opts) {
       });
     }
 
-    let hasSelfie = false;
-    let representativeGuestId = null;
+    let hasSelfie = checkUserSelfie(user.id);
 
-    // Handle selfie verification and replication if file buffer is provided
+    // Handle selfie verification if buffer is provided
     if (selfieBuffer) {
       const selfiesDir = path.join(__dirname, '..', 'uploads', 'photos', 'selfies');
       fs.mkdirSync(selfiesDir, { recursive: true });
 
-      // Save to a temporary file first for validation
       const tempPath = path.join(selfiesDir, `temp_profile_verify_${Date.now()}.jpg`);
       fs.writeFileSync(tempPath, selfieBuffer);
 
@@ -2774,22 +2668,25 @@ module.exports = async function galleryRoutes(fastify, opts) {
         const res = await faceRecManager.validateSelfie(tempPath);
 
         if (res.success && res.vector) {
-          // Replicate verified selfie and vector files to all matching guest records
+          const selfiePath = path.join(selfiesDir, `user_${user.id}.jpg`);
+          const vectorPath = path.join(selfiesDir, `user_${user.id}.json`);
+
+          fs.writeFileSync(selfiePath, selfieBuffer);
+          fs.writeFileSync(vectorPath, JSON.stringify(res.vector), 'utf8');
+
+          // Cache vectors in memory for matching
+          const guestProfiles = await prisma.guest.findMany({
+            where: { email }
+          });
+
           for (const g of guestProfiles) {
-            const selfiePath = path.join(selfiesDir, `guest_${g.id}.jpg`);
-            const vectorPath = path.join(selfiesDir, `guest_${g.id}.json`);
-
-            fs.writeFileSync(selfiePath, selfieBuffer);
-            fs.writeFileSync(vectorPath, JSON.stringify(res.vector), 'utf8');
-
-            // Cache key
             const guestKey = `${email}_${g.eventId}`;
             guestAnchors[guestKey] = {
               anchorVector: res.vector,
               extraVectors: []
             };
 
-            // Force event dirty state to trigger re-clustering if active
+            // Force event dirty state to trigger re-clustering
             await prisma.galleryEvent.update({
               where: { id: g.eventId },
               data: { clustersDirty: true }
@@ -2797,7 +2694,6 @@ module.exports = async function galleryRoutes(fastify, opts) {
           }
 
           hasSelfie = true;
-          representativeGuestId = guestProfiles[0].id;
         } else {
           throw new Error(res.error || 'Failed to validate face on selfie');
         }
@@ -2807,28 +2703,14 @@ module.exports = async function galleryRoutes(fastify, opts) {
       } finally {
         if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
       }
-    } else {
-      // Re-evaluate representative guest
-      for (const g of guestProfiles) {
-        if (checkGuestSelfie(g.id)) {
-          hasSelfie = true;
-          representativeGuestId = g.id;
-          break;
-        }
-      }
     }
 
-    // Fetch representative updated guest
-    const updatedGuest = await prisma.guest.findFirst({
-      where: { email }
-    });
-
     return {
-      name: updatedGuest.name,
+      name: user.name,
       email,
-      phoneNumber: updatedGuest.phoneNumber,
+      phoneNumber: user.phoneNumber,
       hasSelfie,
-      selfieGuestId: representativeGuestId
+      selfieGuestId: user.id
     };
   }
 
@@ -2888,31 +2770,32 @@ module.exports = async function galleryRoutes(fastify, opts) {
       });
       if (!guest) return reply.code(404).send({ error: 'Guest not found' });
 
-      // Find a representative guest with a selfie to get their image ID
-      const guestProfiles = await prisma.guest.findMany({
+      // Find or create global user profile
+      let user = await prisma.circleUser.findUnique({
         where: { email: guest.email }
       });
 
-      let hasSelfie = false;
-      let selfieGuestId = null;
-
-      for (const g of guestProfiles) {
-        if (checkGuestSelfie(g.id)) {
-          hasSelfie = true;
-          selfieGuestId = g.id;
-          break;
-        }
+      if (!user) {
+        user = await prisma.circleUser.create({
+          data: {
+            email: guest.email,
+            name: guest.name,
+            phoneNumber: guest.phoneNumber,
+            provider: guest.provider,
+            providerId: guest.providerId
+          }
+        });
       }
 
       return {
         profile: {
           id: guest.id,
-          name: guest.name,
+          name: user.name || guest.name,
           email: guest.email,
-          phoneNumber: guest.phoneNumber,
+          phoneNumber: user.phoneNumber,
           hasFullAccess: guest.hasFullAccess,
-          hasSelfie,
-          selfieGuestId
+          hasSelfie: checkUserSelfie(user.id),
+          selfieGuestId: user.id
         }
       };
     } catch (err) {
@@ -2924,7 +2807,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
   // Get guest selfie file
   fastify.get('/api/gallery/family/selfie/:guestId', async (req, reply) => {
     const guestId = parseInt(req.params.guestId);
-    if (isNaN(guestId)) return reply.code(400).send({ error: 'Invalid guest ID' });
+    if (isNaN(guestId)) return reply.code(400).send({ error: 'Invalid user ID' });
 
     // Require auth: guest JWT, family/circle JWT, or admin cookie
     let authedEmail = null;
@@ -2953,13 +2836,13 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
     // Non-admin users can only access their own selfie
     if (!isAdmin) {
-      const targetGuest = await prisma.guest.findUnique({ where: { id: guestId } });
-      if (!targetGuest || targetGuest.email !== authedEmail) {
+      const user = await prisma.circleUser.findUnique({ where: { id: guestId } });
+      if (!user || user.email !== authedEmail) {
         return reply.code(403).send({ error: 'You can only view your own selfie' });
       }
     }
 
-    const selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${guestId}.jpg`);
+    const selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${guestId}.jpg`);
     if (!fs.existsSync(selfiePath)) {
       return reply.code(404).send({ error: 'Selfie not found' });
     }
