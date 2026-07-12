@@ -55,7 +55,27 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                   hasFullAccess: profileData.profile.hasFullAccess
                 }
                 
-                // Only bypass if both are complete
+                // If they are logged in as partial, but landed with a code, auto-upgrade them in background
+                if (!localGuest.hasFullAccess && code) {
+                  try {
+                    const upgradeRes = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/upgrade`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                      },
+                      body: JSON.stringify({ code })
+                    })
+                    if (upgradeRes.ok) {
+                      const upgradeData = await upgradeRes.json()
+                      localStorage.setItem(`mv_gallery_token_${slug}`, upgradeData.token)
+                      localGuest.hasFullAccess = true
+                    }
+                  } catch (upgradeErr) {
+                    console.error('Failed to auto-upgrade session:', upgradeErr)
+                  }
+                }
+                
                 // Only bypass if both are complete
                 if (localGuest.phoneNumber && localGuest.hasSelfie) {
                   localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(localGuest))

@@ -317,7 +317,41 @@ export default function GuestGalleryPhotos({ params }: Props) {
     if (parsedGuest.hasSelfie) {
       fetchAuthenticatedSelfie(parsedGuest.id)
     }
-    if (parsedGuest.hasFullAccess) {
+
+    // Auto-upgrade if they landed directly with a code query parameter
+    const searchParams = new URLSearchParams(window.location.search)
+    const code = searchParams.get('code')
+
+    if (code && !parsedGuest.hasFullAccess) {
+      fetch(`${apiUrl}/api/gallery/public/events/${slug}/upgrade`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ code })
+      })
+        .then(res => {
+          if (!res.ok) throw new Error('Passcode verification failed')
+          return res.json()
+        })
+        .then(data => {
+          localStorage.setItem(`mv_gallery_token_${slug}`, data.token)
+          const updatedGuest = {
+            ...parsedGuest,
+            hasFullAccess: true
+          }
+          localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(updatedGuest))
+          setGuest(updatedGuest)
+          setViewMode('all')
+          loadAllPhotos('')
+        })
+        .catch(err => {
+          console.warn('Auto-upgrade from URL parameter failed:', err.message)
+        })
+    }
+
+    if (parsedGuest.hasFullAccess || (code && !parsedGuest.hasFullAccess)) {
       setViewMode('all')
     } else {
       setViewMode('matched')
