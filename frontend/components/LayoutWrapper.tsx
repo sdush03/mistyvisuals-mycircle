@@ -1,7 +1,6 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import ToastNotifications from '@/components/ToastNotification'
 import Footer from '@/components/Footer'
 
 export default function LayoutWrapper({ children }: { children: React.ReactNode }) {
@@ -14,7 +13,6 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
     return (
       <main className="w-full h-[100svh] bg-[#111111] overflow-hidden">
         {children}
-        <ToastNotifications />
       </main>
     )
   }
@@ -23,7 +21,6 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
     <main className="w-full min-h-screen bg-white overflow-y-auto flex flex-col justify-between">
       <div className="flex-1 w-full">{children}</div>
       <Footer />
-      <ToastNotifications />
     </main>
   )
 }
