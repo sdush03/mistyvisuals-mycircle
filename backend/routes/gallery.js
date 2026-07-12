@@ -2877,30 +2877,36 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
     // Non-admin users can only access their own selfie
     if (!isAdmin) {
-      // 1. Try to find user by circleUser id
-      let user = await prisma.circleUser.findUnique({ where: { id: guestId } });
+      // Look up both potential matches to avoid ID collisions between guests and circleUsers
+      const userById = await prisma.circleUser.findUnique({ where: { id: guestId } });
       
-      // 2. If not found, try to find by Guest id and map to CircleUser
-      if (!user) {
-        const dbGuest = await prisma.guest.findUnique({ where: { id: guestId } });
-        if (dbGuest) {
-          user = await prisma.circleUser.findUnique({ where: { email: dbGuest.email } });
-        }
+      const dbGuest = await prisma.guest.findUnique({ where: { id: guestId } });
+      const userByGuest = dbGuest 
+        ? await prisma.circleUser.findUnique({ where: { email: dbGuest.email } })
+        : null;
+
+      let matchedUser = null;
+      if (userById && userById.email === authedEmail) {
+        matchedUser = userById;
+      } else if (userByGuest && userByGuest.email === authedEmail) {
+        matchedUser = userByGuest;
       }
 
-      if (!user || user.email !== authedEmail) {
+      if (!matchedUser) {
         return reply.code(403).send({ error: 'You can only view your own selfie' });
       }
-      resolvedUserId = user.id;
+      resolvedUserId = matchedUser.id;
     } else {
-      // For admin fallback checks if guestId is a Guest.id
-      const user = await prisma.circleUser.findUnique({ where: { id: guestId } });
-      if (!user) {
-        const dbGuest = await prisma.guest.findUnique({ where: { id: guestId } });
-        if (dbGuest) {
-          const linkedUser = await prisma.circleUser.findUnique({ where: { email: dbGuest.email } });
-          if (linkedUser) resolvedUserId = linkedUser.id;
+      // For admin, check Guest table first since the admin panel uses guest IDs.
+      const dbGuest = await prisma.guest.findUnique({ where: { id: guestId } });
+      if (dbGuest) {
+        const linkedUser = await prisma.circleUser.findUnique({ where: { email: dbGuest.email } });
+        if (linkedUser) {
+          resolvedUserId = linkedUser.id;
         }
+      } else {
+        const user = await prisma.circleUser.findUnique({ where: { id: guestId } });
+        if (user) resolvedUserId = user.id;
       }
     }
 
