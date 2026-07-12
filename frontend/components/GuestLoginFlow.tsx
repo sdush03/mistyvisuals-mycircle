@@ -1,19 +1,8 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Script from 'next/script'
 import { CameraCaptureModal } from './CameraCaptureModal'
-
-// A memoized container that never re-renders, preventing React's virtual DOM
-// reconciliation from wiping out Google's generated sign-in iframe.
-const GoogleSignInButton = React.memo(() => {
-  return (
-    <div 
-      id="google-signin-btn" 
-      style={{ width: '280px', display: 'flex', justifyContent: 'center', minHeight: '44px' }} 
-    />
-  )
-}, () => true)
 
 interface GuestProfile {
   id: number
@@ -107,25 +96,40 @@ export function GuestLoginFlow({
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3004'
 
-  // Load Google SDK script once
-  const initializeGoogle = () => {
-    const google = (window as any).google
-    const btnContainer = document.getElementById('google-signin-btn')
-    if (!google || !btnContainer) return
+  const latestCallbackRef = useRef<((res: any) => void) | null>(null)
+  useEffect(() => {
+    latestCallbackRef.current = handleGoogleCredentialResponse
+  })
 
-    if (!(window as any).__google_initialized) {
+  // Load Google SDK script once
+  const initializeGoogleOnce = () => {
+    const google = (window as any).google
+    if (google && !(window as any).__google_initialized) {
       google.accounts.id.initialize({
         client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '813548862884-nisdjmc8avi1p5c5joj7pp6o6lg7j6as.apps.googleusercontent.com',
-        callback: handleGoogleCredentialResponse
+        callback: (response: any) => {
+          if (latestCallbackRef.current) {
+            latestCallbackRef.current(response)
+          }
+        }
       })
       ;(window as any).__google_initialized = true
     }
-
-    google.accounts.id.renderButton(
-      btnContainer,
-      { theme: 'filled_black', size: 'large', width: '280', shape: 'rectangular' }
-    )
   }
+
+  // A stable callback ref to render the Google Sign-in button in the container whenever it mounts
+  const googleButtonRef = useCallback((element: HTMLDivElement | null) => {
+    if (element) {
+      const google = (window as any).google
+      if (google) {
+        initializeGoogleOnce()
+        google.accounts.id.renderButton(
+          element,
+          { theme: 'filled_black', size: 'large', width: '280', shape: 'rectangular' }
+        )
+      }
+    }
+  }, [])
 
   // Lock body scroll when login overlay is active
   useEffect(() => {
@@ -136,13 +140,6 @@ export function GuestLoginFlow({
     }
     return () => {
       document.body.style.overflow = ''
-    }
-  }, [isOpen])
-
-  // Effect to make sure Google is drawn on load
-  useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).google) {
-      initializeGoogle()
     }
   }, [isOpen])
 
@@ -375,7 +372,7 @@ export function GuestLoginFlow({
     <>
       <Script 
         src="https://accounts.google.com/gsi/client" 
-        onLoad={initializeGoogle}
+        onLoad={initializeGoogleOnce}
         strategy="afterInteractive"
       />
 
@@ -507,7 +504,10 @@ export function GuestLoginFlow({
             <>
               {/* OAuth Buttons Container */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', alignItems: 'center' }}>
-                <GoogleSignInButton />
+                <div 
+                  ref={googleButtonRef}
+                  style={{ width: '280px', display: 'flex', justifyContent: 'center', minHeight: '44px' }} 
+                />
 
                 <button 
                   onClick={() => alert('Apple Sign-In is coming soon. Please use Google Sign-In to log in.')}
