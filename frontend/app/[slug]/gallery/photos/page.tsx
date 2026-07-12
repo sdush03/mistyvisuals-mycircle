@@ -348,7 +348,10 @@ export default function GuestGalleryPhotos({ params }: Props) {
       }
     })
       .then(res => {
-        if (res.ok) return res.json()
+        if (!res.ok) {
+          throw new Error('Session invalid on server')
+        }
+        return res.json()
       })
       .then(data => {
         if (data && data.profile) {
@@ -373,8 +376,10 @@ export default function GuestGalleryPhotos({ params }: Props) {
         setIsProfileSynced(true)
       })
       .catch(err => {
-        console.error('Failed to sync guest profile:', err)
-        setIsProfileSynced(true)
+        console.error('Failed to sync guest profile, logging out:', err)
+        localStorage.removeItem(`mv_gallery_token_${slug}`)
+        localStorage.removeItem(`mv_gallery_guest_${slug}`)
+        router.push(`/${slug}/gallery`)
       })
   }, [slug, router, apiUrl])
 
