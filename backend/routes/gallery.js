@@ -156,6 +156,9 @@ module.exports = async function galleryRoutes(fastify, opts) {
         if (!event || event.id !== decoded.eventId) {
           return reply.code(403).send({ error: 'Token does not match this event' });
         }
+        if (!event.active) {
+          return reply.code(403).send({ error: 'Gallery is inactive' });
+        }
         req.event = event; // Cache the event for downstream handlers
       }
       // Fetch guest status from database to get the real-time access level
@@ -1302,13 +1305,44 @@ module.exports = async function galleryRoutes(fastify, opts) {
           active: true,
           tabs: true,
           allowDownloads: true,
-          allowBulkDownloads: true
+          allowBulkDownloads: true,
+          projectId: true,
+          leadId: true
         }
       });
 
       if (!event || !event.active) {
         return reply.code(404).send({ error: 'Gallery not found or inactive' });
       }
+
+      // Check if event has a passcode configured in projects table
+      let hasPasscode = false;
+      let resolvedProjectId = event.projectId;
+      if (!resolvedProjectId && event.leadId) {
+        const projRes = await pool.query(
+          `SELECT id FROM projects WHERE lead_id = $1 LIMIT 1`,
+          [event.leadId]
+        );
+        if (projRes.rows.length > 0) {
+          resolvedProjectId = projRes.rows[0].id;
+        }
+      }
+
+      if (resolvedProjectId) {
+        const passRes = await pool.query(
+          `SELECT passcode, partial_passcode FROM projects WHERE id::text = $1 LIMIT 1`,
+          [resolvedProjectId]
+        );
+        if (passRes.rows.length > 0) {
+          const dbPasscode = passRes.rows[0].passcode;
+          const dbPartialPasscode = passRes.rows[0].partial_passcode;
+          if (dbPasscode || dbPartialPasscode) {
+            hasPasscode = true;
+          }
+        }
+      }
+
+      event.hasPasscode = hasPasscode;
 
       // Filter tabs to only return those containing at least 1 photo
       const activePhotoTabs = await prisma.photo.groupBy({
@@ -1637,7 +1671,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
     try {
       const event = await prisma.galleryEvent.findUnique({ where: { slug } });
-      if (!event) return reply.code(404).send({ error: 'Event not found' });
+      if (!event || !event.active) return reply.code(404).send({ error: 'Event not found or inactive' });
 
       let verifiedEmail = null;
       let verifiedName = null;
@@ -1809,7 +1843,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
       }
 
       const event = await prisma.galleryEvent.findUnique({ where: { slug } });
-      if (!event) return reply.code(404).send({ error: 'Event not found' });
+      if (!event || !event.active) return reply.code(404).send({ error: 'Event not found or inactive' });
 
       // Retrieve passcode and partial_passcode from projects table
       let dbPasscode = null;
@@ -3181,12 +3215,13 @@ module.exports = async function galleryRoutes(fastify, opts) {
       const event = await prisma.galleryEvent.findUnique({
         where: { slug },
         select: {
+          active: true,
           allowBulkDownloads: true,
           bulkDownloadPin: true
         }
       });
 
-      if (!event) {
+      if (!event || !event.active) {
         return reply.code(404).send({ error: 'Gallery not found' });
       }
 
@@ -3216,12 +3251,13 @@ module.exports = async function galleryRoutes(fastify, opts) {
         select: {
           id: true,
           title: true,
+          active: true,
           allowBulkDownloads: true,
           bulkDownloadPin: true
         }
       });
 
-      if (!event) {
+      if (!event || !event.active) {
         return reply.code(404).send({ error: 'Gallery not found' });
       }
 

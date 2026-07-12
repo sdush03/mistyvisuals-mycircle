@@ -21,6 +21,7 @@ interface GuestProfile {
   email: string
   phoneNumber?: string | null
   hasSelfie?: boolean
+  hasFullAccess?: boolean
 }
 
 interface GuestLoginFlowProps {
@@ -29,6 +30,9 @@ interface GuestLoginFlowProps {
   onSuccess: (profile: GuestProfile, token: string) => void
   eventSlug?: string
   inviteCode?: string
+  initialToken?: string
+  initialProfile?: GuestProfile | null
+  eventHasPasscode?: boolean
 }
 
 export function GuestLoginFlow({
@@ -36,7 +40,10 @@ export function GuestLoginFlow({
   onClose,
   onSuccess,
   eventSlug,
-  inviteCode
+  inviteCode,
+  initialToken,
+  initialProfile,
+  eventHasPasscode
 }: GuestLoginFlowProps) {
   const [showPhoneModal, setShowPhoneModal] = useState(false)
   const [showSelfieCapture, setShowSelfieCapture] = useState(false)
@@ -49,20 +56,54 @@ export function GuestLoginFlow({
   const [selfieError, setSelfieError] = useState('')
   const [selfiePreview, setSelfiePreview] = useState<string | null>(null)
   
-  const [tempToken, setTempToken] = useState<string | null>(null)
-  const [tempProfile, setTempProfile] = useState<GuestProfile | null>(null)
+  const [tempToken, setTempToken] = useState<string | null>(initialToken || null)
+  const [tempProfile, setTempProfile] = useState<GuestProfile | null>(initialProfile || null)
+
+  const [pendingOauthToken, setPendingOauthToken] = useState<string | null>(null)
+  const [pendingOauthProvider, setPendingOauthProvider] = useState<string | null>(null)
+  const [showPasscodeScreenAfterAuth, setShowPasscodeScreenAfterAuth] = useState(false)
+  const [submittingPasscode, setSubmittingPasscode] = useState(false)
 
   const [activeCode, setActiveCode] = useState(inviteCode || '')
-  const [hasPasscode, setHasPasscode] = useState(!!inviteCode)
   const [passcodeInput, setPasscodeInput] = useState('')
   const [passcodeError, setPasscodeError] = useState('')
 
   useEffect(() => {
     if (inviteCode) {
       setActiveCode(inviteCode)
-      setHasPasscode(true)
     }
   }, [inviteCode])
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialToken && initialProfile) {
+        setTempToken(initialToken)
+        setTempProfile(initialProfile)
+        
+        if (!initialProfile.phoneNumber) {
+          setShowPhoneModal(true)
+          setShowSelfieCapture(false)
+        } else if (!initialProfile.hasSelfie) {
+          setShowSelfieCapture(true)
+          setShowPhoneModal(false)
+        } else {
+          onSuccess(initialProfile, initialToken)
+        }
+      } else {
+        setTempToken(null)
+        setTempProfile(null)
+        setShowPhoneModal(false)
+        setShowSelfieCapture(false)
+        
+        // Reset OAuth states
+        setPendingOauthToken(null)
+        setPendingOauthProvider(null)
+        setShowPasscodeScreenAfterAuth(false)
+        setPasscodeInput('')
+        setPasscodeError('')
+      }
+    }
+  }, [isOpen, initialToken, initialProfile])
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3004'
 
@@ -105,48 +146,87 @@ export function GuestLoginFlow({
     }
   }, [isOpen])
 
+  const authenticateAndContinue = async (oauthToken: string, provider: string, code?: string) => {
+    const authUrl = eventSlug 
+      ? `${apiUrl}/api/gallery/public/events/${eventSlug}/auth`
+      : `${apiUrl}/api/gallery/family/auth`
+
+    const res = await fetch(authUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        token: oauthToken, 
+        provider,
+        code
+      })
+    })
+
+    const data = await res.json()
+    if (!res.ok) {
+      throw new Error(data.error || 'Authentication failed')
+    }
+    
+    const sessionToken = data.token
+    const profile: GuestProfile = data.guest || data.profile
+
+    setTempToken(sessionToken)
+    setTempProfile(profile)
+
+    // Reset pending OAuth states
+    setPendingOauthToken(null)
+    setPendingOauthProvider(null)
+    setShowPasscodeScreenAfterAuth(false)
+
+    // Determine next steps in the flow
+    if (!profile.phoneNumber) {
+      setShowPhoneModal(true)
+      setShowSelfieCapture(false)
+    } else if (!profile.hasSelfie) {
+      setShowSelfieCapture(true)
+      setShowPhoneModal(false)
+    } else {
+      onSuccess(profile, sessionToken)
+    }
+  }
+
   const handleGoogleCredentialResponse = async (response: any) => {
     try {
-      // 1. Google OAuth Authentication
-      const authUrl = eventSlug 
-        ? `${apiUrl}/api/gallery/public/events/${eventSlug}/auth`
-        : `${apiUrl}/api/gallery/family/auth`
-
-      const res = await fetch(authUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          token: response.credential, 
-          provider: 'google',
-          code: activeCode
-        })
-      })
-
-      const data = await res.json()
-      if (!res.ok) {
-        if (data.error && (data.error.includes('passcode') || data.error.includes('Passcode'))) {
-          setHasPasscode(false)
-          setPasscodeError(data.error)
-        }
-        throw new Error(data.error || 'Authentication failed')
-      }
+      const code = activeCode || inviteCode
       
-      const sessionToken = data.token
-      const profile: GuestProfile = data.guest || data.profile
-
-      setTempToken(sessionToken)
-      setTempProfile(profile)
-
-      // 2. Determine next steps in the flow
-      if (!profile.phoneNumber) {
-        setShowPhoneModal(true)
-      } else if (!profile.hasSelfie) {
-        setShowSelfieCapture(true)
-      } else {
-        onSuccess(profile, sessionToken)
+      // If the event has a passcode, but we don't have a code, we show the passcode screen after auth!
+      if (eventSlug && eventHasPasscode && !code) {
+        setPendingOauthToken(response.credential)
+        setPendingOauthProvider('google')
+        setShowPasscodeScreenAfterAuth(true)
+        return
       }
+
+      await authenticateAndContinue(response.credential, 'google', code)
     } catch (err: any) {
       alert(err.message || 'Login failed')
+    }
+  }
+
+  const handlePasscodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!passcodeInput.trim()) {
+      setPasscodeError('Passcode cannot be empty')
+      return
+    }
+    setPasscodeError('')
+
+    if (!pendingOauthToken || !pendingOauthProvider) {
+      setPasscodeError('Authentication session expired. Please sign in again.')
+      return
+    }
+
+    try {
+      setSubmittingPasscode(true)
+      await authenticateAndContinue(pendingOauthToken, pendingOauthProvider, passcodeInput.trim())
+    } catch (err: any) {
+      setPasscodeError(err.message || 'Invalid passcode')
+    } finally {
+      setSubmittingPasscode(false)
     }
   }
 
@@ -355,7 +435,7 @@ export function GuestLoginFlow({
             marginBottom: '0.75rem',
             color: '#ffffff'
           }}>
-            Welcome Guests
+            {showPasscodeScreenAfterAuth ? 'Enter Passcode' : 'Welcome Guests'}
           </h2>
           <p style={{
             fontFamily: '"Montserrat", system-ui, sans-serif',
@@ -367,23 +447,14 @@ export function GuestLoginFlow({
             lineHeight: 1.6,
             marginBottom: '2.5rem'
           }}>
-            {hasPasscode 
-              ? 'Log in with your social account to instantly find your photos using AI face recognition.'
-              : 'Enter the passcode shared by the couple to access their gallery.'}
+            {showPasscodeScreenAfterAuth 
+              ? 'Enter the passcode shared by the couple to access their gallery.'
+              : 'Log in with your social account to instantly find your photos using AI face recognition.'}
           </p>
 
-          {!hasPasscode ? (
+          {showPasscodeScreenAfterAuth ? (
             <form 
-              onSubmit={(e) => {
-                e.preventDefault()
-                if (!passcodeInput.trim()) {
-                  setPasscodeError('Passcode cannot be empty')
-                  return
-                }
-                setPasscodeError('')
-                setActiveCode(passcodeInput.trim())
-                setHasPasscode(true)
-              }} 
+              onSubmit={handlePasscodeSubmit}
               style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', width: '280px' }}>
@@ -414,6 +485,7 @@ export function GuestLoginFlow({
 
               <button
                 type="submit"
+                disabled={submittingPasscode}
                 style={{
                   width: '280px',
                   padding: '1rem',
@@ -426,10 +498,11 @@ export function GuestLoginFlow({
                   letterSpacing: '0.15em',
                   textTransform: 'uppercase',
                   cursor: 'pointer',
+                  opacity: submittingPasscode ? 0.6 : 1,
                   transition: 'opacity 0.2s'
                 }}
               >
-                Submit
+                {submittingPasscode ? 'Verifying...' : 'Submit'}
               </button>
             </form>
           ) : (
@@ -476,35 +549,22 @@ export function GuestLoginFlow({
                   <span>SIGN IN WITH APPLE</span>
                 </button>
               </div>
-
-              {!inviteCode && (
-                <button 
-                  onClick={() => {
-                    setHasPasscode(false)
-                    setPasscodeError('')
-                  }}
-                  style={{
-                    marginTop: '1rem',
-                    background: 'none',
-                    border: 'none',
-                    color: 'rgba(255, 255, 255, 0.4)',
-                    fontSize: '0.65rem',
-                    letterSpacing: '0.05em',
-                    textDecoration: 'underline',
-                    cursor: 'pointer',
-                    fontFamily: '"Montserrat", sans-serif'
-                  }}
-                  onMouseOver={(e) => e.currentTarget.style.color = '#ffffff'}
-                  onMouseOut={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.4)'}
-                >
-                  Use a different passcode
-                </button>
-              )}
             </>
           )}
 
           <button 
-            onClick={(e) => { e.stopPropagation(); handleBackOut(); }}
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              if (showPasscodeScreenAfterAuth) {
+                setShowPasscodeScreenAfterAuth(false)
+                setPendingOauthToken(null)
+                setPendingOauthProvider(null)
+                setPasscodeInput('')
+                setPasscodeError('')
+              } else {
+                handleBackOut(); 
+              }
+            }}
             style={{
               marginTop: '2rem',
               fontSize: '0.65rem',
@@ -520,7 +580,7 @@ export function GuestLoginFlow({
             onMouseOver={(e) => e.currentTarget.style.color = '#ffffff'}
             onMouseOut={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.4)'}
           >
-            Go Back
+            {showPasscodeScreenAfterAuth ? 'Cancel' : 'Go Back'}
           </button>
         </div>
       </div>
