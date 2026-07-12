@@ -2445,6 +2445,26 @@ module.exports = async function galleryRoutes(fastify, opts) {
     }
   }
 
+  async function getOrCreateSystemEvent() {
+    let systemEvent = await prisma.galleryEvent.findUnique({
+      where: { slug: 'system-directory' }
+    });
+    
+    if (!systemEvent) {
+      const qrToken = 'system-directory-qr-' + Math.random().toString(36).substring(2, 10);
+      systemEvent = await prisma.galleryEvent.create({
+        data: {
+          slug: 'system-directory',
+          title: 'MyCircle Global Directory',
+          date: new Date(),
+          qrToken: qrToken,
+          active: false
+        }
+      });
+    }
+    return systemEvent;
+  }
+
   // Verify OAuth Google token globally for Family Dashboard
   fastify.post('/api/gallery/family/auth', async (req, reply) => {
     const { token, name, email } = req.body;
@@ -2460,9 +2480,26 @@ module.exports = async function galleryRoutes(fastify, opts) {
       const verifiedName = ticket.name || ticket.given_name;
 
       // Find all Guest rows under this email
-      const guestProfiles = await prisma.guest.findMany({
+      let guestProfiles = await prisma.guest.findMany({
         where: { email: verifiedEmail }
       });
+
+      // If no guest profiles exist (completely new user registering on MyCircle),
+      // create a system guest record to represent their global profile.
+      if (guestProfiles.length === 0) {
+        const systemEvent = await getOrCreateSystemEvent();
+        const newGuest = await prisma.guest.create({
+          data: {
+            eventId: systemEvent.id,
+            email: verifiedEmail,
+            name: verifiedName,
+            provider: 'google',
+            providerId: ticket.sub || 'global',
+            hasFullAccess: false
+          }
+        });
+        guestProfiles = [newGuest];
+      }
 
       // Find a guest profile that has the phone number and selfie to represent their family profile info
       let phone = null;
@@ -2594,7 +2631,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
       for (const g of guestProfiles) {
         const event = g.galleryEvent;
-        if (!event) continue;
+        if (!event || event.slug === 'system-directory') continue;
 
         let matchedCount = 0;
 
