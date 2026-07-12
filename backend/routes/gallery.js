@@ -1294,7 +1294,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
           coverPhotoSquareUrl: true,
           active: true,
           tabs: true,
-          allowDownloads: true
+          allowDownloads: true,
+          allowBulkDownloads: true
         }
       });
 
@@ -3014,8 +3015,113 @@ module.exports = async function galleryRoutes(fastify, opts) {
       return reply.code(500).send({ error: 'Failed to download file' });
     }
   });
-};
+  // Verify bulk download PIN route
+  fastify.post('/api/gallery/public/events/:slug/verify-bulk-pin', async (req, reply) => {
+    const slug = req.params.slug.toLowerCase().trim();
+    const { pin } = req.body || {};
 
+    try {
+      const event = await prisma.galleryEvent.findUnique({
+        where: { slug },
+        select: {
+          allowBulkDownloads: true,
+          bulkDownloadPin: true
+        }
+      });
+
+      if (!event) {
+        return reply.code(404).send({ error: 'Gallery not found' });
+      }
+
+      if (!event.allowBulkDownloads) {
+        return reply.code(403).send({ error: 'Bulk downloads are disabled for this gallery' });
+      }
+
+      if (event.bulkDownloadPin && event.bulkDownloadPin !== pin) {
+        return reply.code(401).send({ error: 'Invalid bulk download PIN' });
+      }
+
+      return { success: true };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Server error verifying PIN' });
+    }
+  });
+
+  // Bulk download streaming ZIP endpoint
+  fastify.get('/api/gallery/public/events/:slug/bulk-download', async (req, reply) => {
+    const slug = req.params.slug.toLowerCase().trim();
+    const { pin } = req.query;
+
+    try {
+      const event = await prisma.galleryEvent.findUnique({
+        where: { slug },
+        select: {
+          id: true,
+          title: true,
+          allowBulkDownloads: true,
+          bulkDownloadPin: true
+        }
+      });
+
+      if (!event) {
+        return reply.code(404).send({ error: 'Gallery not found' });
+      }
+
+      if (!event.allowBulkDownloads) {
+        return reply.code(403).send({ error: 'Bulk downloads are disabled for this gallery' });
+      }
+
+      if (event.bulkDownloadPin && event.bulkDownloadPin !== pin) {
+        return reply.code(401).send({ error: 'Invalid bulk download PIN' });
+      }
+
+      const photos = await prisma.photo.findMany({
+        where: { eventId: event.id }
+      });
+
+      if (photos.length === 0) {
+        return reply.code(400).send({ error: 'No photos found in this gallery' });
+      }
+
+      const archiver = require('archiver');
+      const { getObjectStream } = require('../utils/r2');
+
+      reply.header('Content-Type', 'application/zip');
+      reply.header('Content-Disposition', `attachment; filename="${event.title.replace(/\s+/g, '_')}_photos.zip"`);
+
+      const archive = archiver('zip', {
+        zlib: { level: 9 }
+      });
+
+      reply.send(archive);
+
+      for (const photo of photos) {
+        let key = '';
+        try {
+          const parsed = new URL(photo.r2Url);
+          key = decodeURIComponent(parsed.pathname.substring(1));
+        } catch (e) {
+          key = decodeURIComponent(photo.r2Url.replace(/^\/?api\/photos\/file\//, ''));
+        }
+
+        if (key) {
+          try {
+            const fileStream = await getObjectStream(key);
+            archive.append(fileStream, { name: photo.filename || path.basename(key) });
+          } catch (err) {
+            req.log.error(`Failed to append file ${key} to zip:`, err);
+          }
+        }
+      }
+
+      archive.finalize();
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to generate bulk download archive' });
+    }
+  });
+};
 function purgeOrphanedFacesBackground(log) {
   setTimeout(() => {
     try {

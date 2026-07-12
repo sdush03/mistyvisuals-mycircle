@@ -1,10 +1,9 @@
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const fs = require('fs');
 const path = require('path');
 const { PHOTO_UPLOAD_DIR } = require('../config/constants');
 
-// Load environment variables for local testing
 const isR2Enabled = !!(
   process.env.R2_ACCOUNT_ID &&
   process.env.R2_ACCESS_KEY_ID &&
@@ -12,7 +11,6 @@ const isR2Enabled = !!(
   process.env.R2_BUCKET_NAME &&
   process.env.R2_PUBLIC_DOMAIN_URL
 );
-
 let r2Client = null;
 if (isR2Enabled) {
   r2Client = new S3Client({
@@ -129,10 +127,30 @@ async function getPresignedUploadUrl(key, contentType = 'image/jpeg') {
     return `/api/photos/file/${key}`;
   }
 }
+async function getObjectStream(key) {
+  if (isR2Enabled) {
+    const response = await r2Client.send(new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key
+    }));
+    return response.Body;
+  } else {
+    // Only allow local disk fallback in development mode
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('R2 storage is not configured. Local fallback is disabled in production.');
+    }
+    const filePath = path.normalize(path.join(PHOTO_UPLOAD_DIR, key));
+    if (filePath.startsWith(PHOTO_UPLOAD_DIR) && fs.existsSync(filePath)) {
+      return fs.createReadStream(filePath);
+    }
+    throw new Error('File not found');
+  }
+}
 
 module.exports = {
   isR2Enabled,
   uploadAsset,
   deleteAsset,
-  getPresignedUploadUrl
+  getPresignedUploadUrl,
+  getObjectStream
 };

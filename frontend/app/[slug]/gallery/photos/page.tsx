@@ -76,8 +76,14 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const [updateError, setUpdateError] = useState<string | null>(null)
   const [phoneValidationError, setPhoneValidationError] = useState<string | null>(null)
   const [shakePhone, setShakePhone] = useState(false)
-
   const [showCameraCaptureModal, setShowCameraCaptureModal] = useState<boolean>(false)
+  
+  // Bulk download states
+  const [showBulkDownloadModal, setShowBulkDownloadModal] = useState(false)
+  const [bulkDownloadPinInput, setBulkDownloadPinInput] = useState('')
+  const [bulkDownloadError, setBulkDownloadError] = useState('')
+  const [downloadingZip, setDownloadingZip] = useState(false)
+
   const [validationStatus, setValidationStatus] = useState<'idle' | 'verifying' | 'accepted' | 'rejected'>('idle')
   const [selfieError, setSelfieError] = useState('')
 
@@ -584,7 +590,39 @@ export default function GuestGalleryPhotos({ params }: Props) {
     return () => observer.disconnect()
   }, [loadAllPhotos, loadingMore, hasMore, activeAllTab])
 
+  const handleBulkDownloadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setDownloadingZip(true)
+    setBulkDownloadError('')
 
+    try {
+      // First verify the PIN on the backend
+      const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/verify-bulk-pin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ pin: bulkDownloadPinInput })
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to verify PIN')
+      }
+
+      // PIN is correct! Trigger the ZIP stream download in browser
+      window.location.href = `${apiUrl}/api/gallery/public/events/${slug}/bulk-download?pin=${encodeURIComponent(bulkDownloadPinInput)}`
+      
+      // Close the modal
+      setShowBulkDownloadModal(false)
+      setBulkDownloadPinInput('')
+    } catch (err: any) {
+      setBulkDownloadError(err.message || 'Verification failed')
+    } finally {
+      setDownloadingZip(false)
+    }
+  }
 
   const handleSelfieUploadClick = () => {
     fileInputRef.current?.click()
@@ -1070,7 +1108,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
       {/* Navigation Tabs */}
       <div id="gallery-tabs" className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-t border-neutral-100 w-full" style={{ padding: '1.5rem 0 0.5rem' }}>
-        <div id="gallery-tabs-row" className="flex gap-6 md:gap-12 w-full px-[clamp(0.75rem,3vw,2.5rem)] justify-start overflow-x-auto whitespace-nowrap" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="flex items-center justify-between w-full px-[clamp(0.75rem,3vw,2.5rem)] gap-4">
+          <div id="gallery-tabs-row" className="flex gap-6 md:gap-12 justify-start overflow-x-auto whitespace-nowrap" style={{ WebkitOverflowScrolling: 'touch' }}>
           {/* ALL Tab */}
           {guest?.hasFullAccess && (
             <button 
@@ -1161,6 +1200,48 @@ export default function GuestGalleryPhotos({ params }: Props) {
               {tab}
             </button>
           ))}
+          </div>
+
+          {event?.allowBulkDownloads && (
+            <button
+              onClick={() => setShowBulkDownloadModal(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                background: 'none',
+                border: '1px solid #ddd8d0',
+                borderRadius: '2px',
+                color: '#1c1a18',
+                padding: '0.5rem 1rem',
+                fontSize: '0.5625rem',
+                fontWeight: 600,
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                fontFamily: "'Montserrat', system-ui, sans-serif",
+                transition: 'all 0.2s',
+                flexShrink: 0
+              }}
+              onMouseOver={e => {
+                e.currentTarget.style.backgroundColor = '#1c1a18'
+                e.currentTarget.style.color = '#ffffff'
+                e.currentTarget.style.borderColor = '#1c1a18'
+              }}
+              onMouseOut={e => {
+                e.currentTarget.style.backgroundColor = 'transparent'
+                e.currentTarget.style.color = '#1c1a18'
+                e.currentTarget.style.borderColor = '#ddd8d0'
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Bulk Download
+            </button>
+          )}
         </div>
       </div>
 
@@ -2081,6 +2162,179 @@ export default function GuestGalleryPhotos({ params }: Props) {
                   }}
                 >
                   {updatingProfile ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bulk Download PIN Modal (Linen Aesthetic) ── */}
+      {showBulkDownloadModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(28, 26, 24, 0.4)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 350,
+          padding: '1rem'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            border: '1px solid #ddd8d0',
+            borderRadius: '2px',
+            width: '100%',
+            maxWidth: '440px',
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.08)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '1.25rem 1.5rem',
+              borderBottom: '1px solid #f5f2eb',
+              background: '#faf9f6'
+            }}>
+              <h3 style={{
+                fontFamily: 'Montserrat, sans-serif',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                color: '#1c1a18',
+                margin: 0
+              }}>
+                Bulk Download Photos
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowBulkDownloadModal(false)
+                  setBulkDownloadPinInput('')
+                  setBulkDownloadError('')
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  color: '#8c867e',
+                  lineHeight: 1
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleBulkDownloadSubmit} style={{ padding: '1.5rem' }}>
+              <p style={{
+                fontFamily: 'Montserrat, sans-serif',
+                fontSize: '0.75rem',
+                color: '#8c867e',
+                lineHeight: 1.5,
+                marginBottom: '1.5rem'
+              }}>
+                Enter the bulk download PIN shared by the event admin to download all high-resolution photos of this event as a ZIP file.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '1.5rem' }}>
+                <label style={{
+                  fontSize: '0.625rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  color: '#8c867e',
+                  marginBottom: '0.5rem',
+                  fontFamily: 'Montserrat, sans-serif'
+                }}>
+                  Enter Bulk Download PIN
+                </label>
+                <input 
+                  type="password"
+                  value={bulkDownloadPinInput}
+                  onChange={(e) => {
+                    setBulkDownloadPinInput(e.target.value)
+                    if (bulkDownloadError) setBulkDownloadError('')
+                  }}
+                  placeholder="Enter PIN"
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    border: bulkDownloadError ? '1px solid #ff4d4d' : '1px solid #ddd8d0',
+                    borderRadius: '2px',
+                    fontSize: '0.8125rem',
+                    fontFamily: 'Montserrat, sans-serif',
+                    color: '#1c1a18',
+                    background: '#ffffff',
+                    outline: 'none'
+                  }}
+                />
+                {bulkDownloadError && (
+                  <div style={{
+                    fontFamily: 'Montserrat, sans-serif',
+                    fontSize: '0.7rem',
+                    color: '#ff4d4d',
+                    marginTop: '0.5rem',
+                    textAlign: 'left'
+                  }}>
+                    {bulkDownloadError}
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBulkDownloadModal(false)
+                    setBulkDownloadPinInput('')
+                    setBulkDownloadError('')
+                  }}
+                  style={{
+                    flex: 1,
+                    background: 'none',
+                    border: '1px solid #ddd8d0',
+                    color: '#8c867e',
+                    padding: '0.85rem 1.5rem',
+                    fontSize: '0.6875rem',
+                    fontWeight: 500,
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    borderRadius: '2px',
+                    fontFamily: 'Montserrat, sans-serif'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={downloadingZip}
+                  style={{
+                    flex: 1,
+                    background: '#1c1a18',
+                    border: '1px solid #1c1a18',
+                    color: '#ffffff',
+                    padding: '0.85rem 1.5rem',
+                    fontSize: '0.6875rem',
+                    fontWeight: 500,
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    borderRadius: '2px',
+                    fontFamily: 'Montserrat, sans-serif'
+                  }}
+                >
+                  {downloadingZip ? 'Verifying...' : 'Download ZIP'}
                 </button>
               </div>
             </form>
