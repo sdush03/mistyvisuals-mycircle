@@ -12,12 +12,16 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
   const [error, setError] = useState('')
   const [guest, setGuest] = useState<any>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const [inviteCode, setInviteCode] = useState<string | undefined>(undefined)
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search)
     const code = searchParams.get('code')
+    if (code) {
+      setInviteCode(code)
+    }
 
     // 1. Fetch public event details
     fetch(`${apiUrl}/api/gallery/public/events/${slug}`)
@@ -232,6 +236,7 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
         onClose={() => setShowLoginModal(false)}
         onSuccess={handleLoginSuccess}
         eventSlug={slug}
+        inviteCode={inviteCode}
       />
 
       <style>{`

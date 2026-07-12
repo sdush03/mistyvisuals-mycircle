@@ -28,13 +28,15 @@ interface GuestLoginFlowProps {
   onClose: () => void
   onSuccess: (profile: GuestProfile, token: string) => void
   eventSlug?: string
+  inviteCode?: string
 }
 
 export function GuestLoginFlow({
   isOpen,
   onClose,
   onSuccess,
-  eventSlug
+  eventSlug,
+  inviteCode
 }: GuestLoginFlowProps) {
   const [showPhoneModal, setShowPhoneModal] = useState(false)
   const [showSelfieCapture, setShowSelfieCapture] = useState(false)
@@ -101,7 +103,11 @@ export function GuestLoginFlow({
       const res = await fetch(authUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: response.credential, provider: 'google' })
+        body: JSON.stringify({ 
+          token: response.credential, 
+          provider: 'google',
+          code: inviteCode
+        })
       })
 
       if (!res.ok) throw new Error('Google authentication failed')
