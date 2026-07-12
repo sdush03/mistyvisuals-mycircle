@@ -1293,7 +1293,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
           coverPhotoMobileUrl: true,
           coverPhotoSquareUrl: true,
           active: true,
-          tabs: true
+          tabs: true,
+          allowDownloads: true
         }
       });
 
@@ -2960,8 +2961,17 @@ module.exports = async function galleryRoutes(fastify, opts) {
   fastify.get('/api/gallery/public/download-proxy', async (req, reply) => {
     const { url, filename } = req.query;
     if (!url) return reply.code(400).send({ error: 'URL is required' });
-
     try {
+      // Look up photo record to find which gallery event it belongs to
+      const photo = await prisma.photo.findFirst({
+        where: { r2Url: url },
+        include: { galleryEvent: true }
+      });
+
+      if (photo && !photo.galleryEvent.allowDownloads) {
+        return reply.code(403).send({ error: 'Downloads are disabled for this gallery' });
+      }
+
       // Parse URL to prevent Server-Side Request Forgery (SSRF)
       const parsedUrl = new URL(url);
       const hostname = parsedUrl.hostname.toLowerCase();

@@ -591,6 +591,10 @@ export default function GuestGalleryPhotos({ params }: Props) {
   }
 
   const handleDownload = async (url: string, filename: string) => {
+    if (event && event.allowDownloads === false) {
+      alert('Downloads are disabled for this gallery.');
+      return;
+    }
     try {
       // Force native download via backend download-proxy (setting Content-Disposition header)
       const downloadUrl = `${apiUrl}/api/gallery/public/download-proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`
@@ -1195,29 +1199,31 @@ export default function GuestGalleryPhotos({ params }: Props) {
                             style={{ transition: 'all 0.2s' }}
                           >
                             {/* Download Button */}
-                            <div 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDownload(p.r2Url, p.filename);
-                              }}
-                              className="cursor-pointer select-none opacity-0 group-hover:opacity-100 transition-opacity"
-                              style={{ transition: 'all 0.2s' }}
-                            >
-                              <svg 
-                                className="w-5 h-5" 
-                                viewBox="0 0 24 24" 
-                                fill="none" 
-                                stroke="white" 
-                                strokeWidth="2.2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                style={{ filter: 'drop-shadow(0px 1px 3px rgba(0,0,0,0.85))' }}
+                            {event?.allowDownloads !== false && (
+                              <div 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDownload(p.r2Url, p.filename);
+                                }}
+                                className="cursor-pointer select-none opacity-0 group-hover:opacity-100 transition-opacity"
+                                style={{ transition: 'all 0.2s' }}
                               >
-                                <line x1="12" y1="3" x2="12" y2="16" />
-                                <polyline points="6 10 12 16 18 10" />
-                                <line x1="4" y1="21" x2="20" y2="21" />
-                              </svg>
-                            </div>
+                                <svg 
+                                  className="w-5 h-5" 
+                                  viewBox="0 0 24 24" 
+                                  fill="none" 
+                                  stroke="white" 
+                                  strokeWidth="2.2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  style={{ filter: 'drop-shadow(0px 1px 3px rgba(0,0,0,0.85))' }}
+                                >
+                                  <line x1="12" y1="3" x2="12" y2="16" />
+                                  <polyline points="6 10 12 16 18 10" />
+                                  <line x1="4" y1="21" x2="20" y2="21" />
+                                </svg>
+                              </div>
+                            )}
 
                             {/* Heart/Like Badge */}
                             <div 
@@ -1305,29 +1311,31 @@ export default function GuestGalleryPhotos({ params }: Props) {
                             style={{ transition: 'all 0.2s' }}
                           >
                             {/* Download Button */}
-                            <div 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDownload(p.r2Url, p.filename);
-                              }}
-                              className="cursor-pointer select-none opacity-0 group-hover:opacity-100 transition-opacity"
-                              style={{ transition: 'all 0.2s' }}
-                            >
-                              <svg 
-                                className="w-5 h-5" 
-                                viewBox="0 0 24 24" 
-                                fill="none" 
-                                stroke="white" 
-                                strokeWidth="2.2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                style={{ filter: 'drop-shadow(0px 1px 3px rgba(0,0,0,0.85))' }}
+                            {event?.allowDownloads !== false && (
+                              <div 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDownload(p.r2Url, p.filename);
+                                }}
+                                className="cursor-pointer select-none opacity-0 group-hover:opacity-100 transition-opacity"
+                                style={{ transition: 'all 0.2s' }}
                               >
-                                <line x1="12" y1="3" x2="12" y2="16" />
-                                <polyline points="6 10 12 16 18 10" />
-                                <line x1="4" y1="21" x2="20" y2="21" />
-                              </svg>
-                            </div>
+                                <svg 
+                                  className="w-5 h-5" 
+                                  viewBox="0 0 24 24" 
+                                  fill="none" 
+                                  stroke="white" 
+                                  strokeWidth="2.2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  style={{ filter: 'drop-shadow(0px 1px 3px rgba(0,0,0,0.85))' }}
+                                >
+                                  <line x1="12" y1="3" x2="12" y2="16" />
+                                  <polyline points="6 10 12 16 18 10" />
+                                  <line x1="4" y1="21" x2="20" y2="21" />
+                                </svg>
+                              </div>
+                            )}
 
                             {/* Heart/Like Badge */}
                             <div 
@@ -1420,29 +1428,31 @@ export default function GuestGalleryPhotos({ params }: Props) {
                               style={{ transition: 'all 0.2s' }}
                             >
                               {/* Download Button */}
-                              <div 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDownload(p.r2Url, p.filename);
-                                }}
-                                className="cursor-pointer select-none opacity-0 group-hover:opacity-100 transition-opacity"
-                                style={{ transition: 'all 0.2s' }}
-                              >
-                                <svg 
-                                  className="w-5 h-5" 
-                                  viewBox="0 0 24 24" 
-                                  fill="none" 
-                                  stroke="white" 
-                                  strokeWidth="2.2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  style={{ filter: 'drop-shadow(0px 1px 3px rgba(0,0,0,0.85))' }}
+                              {event?.allowDownloads !== false && (
+                                <div 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownload(p.r2Url, p.filename);
+                                  }}
+                                  className="cursor-pointer select-none opacity-0 group-hover:opacity-100 transition-opacity"
+                                  style={{ transition: 'all 0.2s' }}
                                 >
-                                  <line x1="12" y1="3" x2="12" y2="16" />
-                                  <polyline points="6 10 12 16 18 10" />
-                                  <line x1="4" y1="21" x2="20" y2="21" />
-                                </svg>
-                              </div>
+                                  <svg 
+                                    className="w-5 h-5" 
+                                    viewBox="0 0 24 24" 
+                                    fill="none" 
+                                    stroke="white" 
+                                    strokeWidth="2.2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    style={{ filter: 'drop-shadow(0px 1px 3px rgba(0,0,0,0.85))' }}
+                                  >
+                                    <line x1="12" y1="3" x2="12" y2="16" />
+                                    <polyline points="6 10 12 16 18 10" />
+                                    <line x1="4" y1="21" x2="20" y2="21" />
+                                  </svg>
+                                </div>
+                              )}
 
                               {/* Heart/Like Badge */}
                               <div 
@@ -1708,25 +1718,27 @@ export default function GuestGalleryPhotos({ params }: Props) {
             onClick={e => e.stopPropagation()}
           >
             {/* Download */}
-            <button
-              onClick={() => handleDownload(activePhotosList[activePhotoIndex].r2Url, activePhotosList[activePhotoIndex].filename)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.55rem',
-                padding: '0 2.25rem', height: '100%',
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: 'rgba(255,255,255,0.45)',
-                fontFamily: "'Montserrat', system-ui, sans-serif",
-                fontSize: '0.5rem', letterSpacing: '0.22em', textTransform: 'uppercase', fontWeight: 600,
-                transition: 'color 0.2s',
-              }}
-              onMouseOver={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.9)')}
-              onMouseOut={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
-              </svg>
-              Download
-            </button>
+            {event?.allowDownloads !== false && (
+              <button
+                onClick={() => handleDownload(activePhotosList[activePhotoIndex].r2Url, activePhotosList[activePhotoIndex].filename)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '0.55rem',
+                  padding: '0 2.25rem', height: '100%',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'rgba(255,255,255,0.45)',
+                  fontFamily: "'Montserrat', system-ui, sans-serif",
+                  fontSize: '0.5rem', letterSpacing: '0.22em', textTransform: 'uppercase', fontWeight: 600,
+                  transition: 'color 0.2s',
+                }}
+                onMouseOver={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.9)')}
+                onMouseOut={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+                </svg>
+                Download
+              </button>
+            )}
 
             {/* Divider */}
             <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.1)', flexShrink: 0 }} />
