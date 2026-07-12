@@ -409,7 +409,14 @@ fastify.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
   fastify.server.requestTimeout = 600000;
 
   console.log(`Backend running on ${address}`)
-  
+
+  // Pre-warm the Python face recognition daemon so the cold start
+  // (Python boot + ONNX model loading) happens at startup, not on the first guest's selfie.
+  const faceRecManager = require('./utils/faceRecManager')
+  faceRecManager.ensureDaemon()
+    .then(() => console.log('[FaceRec] Daemon pre-warmed and ready.'))
+    .catch(err => console.warn('[FaceRec] Daemon pre-warm failed (will retry on first request):', err?.message || err))
+
   // Admin-only background jobs (metrics, smart notifications, Facebook leads polling)
   // are disabled on the MyCircle guest portal backend. They are handled by the main OS server.
   /*
