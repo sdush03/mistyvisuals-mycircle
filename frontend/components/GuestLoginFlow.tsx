@@ -98,7 +98,7 @@ export function GuestLoginFlow({
       const res = await fetch(authUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: response.credential })
+        body: JSON.stringify({ token: response.credential, provider: 'google' })
       })
 
       if (!res.ok) throw new Error('Google authentication failed')
