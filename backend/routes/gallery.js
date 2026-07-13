@@ -59,6 +59,20 @@ function getArchiver() {
 module.exports = async function galleryRoutes(fastify, opts) {
   const { pool, requireAdmin, requireAuth } = opts;
 
+  function checkPreviewToken(req) {
+    try {
+      const token = req.query.previewToken || req.headers['x-preview-token'] || (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') && req.headers.authorization.split(' ')[1]);
+      if (!token) return null;
+      const decoded = fastify.jwt.verify(token);
+      if (decoded.isAdminPreview && req.params.slug && decoded.slug.toLowerCase().trim() === req.params.slug.toLowerCase().trim()) {
+        return decoded;
+      }
+    } catch (e) {
+      // invalid/expired token
+    }
+    return null;
+  }
+
   // File serving endpoint for gallery cover photos and matched event images
   fastify.get('/api/photos/file/*', async (req, reply) => {
     const relativePath = req.params['*']
@@ -1330,7 +1344,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       });
 
-      if (!event || !event.active) {
+      const isPreview = checkPreviewToken(req);
+      if (!event || (!event.active && !isPreview)) {
         return reply.code(404).send({ error: 'Gallery not found or inactive' });
       }
 
@@ -1362,6 +1377,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
       }
 
       event.hasPasscode = hasPasscode;
+      event.isPreviewMode = !!isPreview;
 
       // Filter tabs to only return those containing at least 1 photo
       const activePhotoTabs = await prisma.photo.groupBy({
@@ -1386,14 +1402,15 @@ module.exports = async function galleryRoutes(fastify, opts) {
   fastify.get('/api/gallery/public/events/:slug/photos', async (req, reply) => {
     const slug = req.params.slug.toLowerCase().trim();
     try {
+      const isPreview = checkPreviewToken(req);
       const event = await prisma.galleryEvent.findUnique({ where: { slug } });
-      if (!event || !event.active) {
+      if (!event || (!event.active && !isPreview)) {
         return reply.code(404).send({ error: 'Gallery not found' });
       }
 
       // Try auth (Bearer token from Guest or Admin, or Cookie from Admin)
       let guestId = null;
-      let hasFullAccess = false;
+      let hasFullAccess = !!isPreview;
       const authHeader = req.headers.authorization;
       let isTokenValid = false;
 
