@@ -22,6 +22,7 @@ interface GuestLoginFlowProps {
   initialToken?: string
   initialProfile?: GuestProfile | null
   eventHasPasscode?: boolean
+  circleToken?: string
 }
 
 export function GuestLoginFlow({
@@ -32,7 +33,8 @@ export function GuestLoginFlow({
   inviteCode,
   initialToken,
   initialProfile,
-  eventHasPasscode
+  eventHasPasscode,
+  circleToken
 }: GuestLoginFlowProps) {
   const [showPhoneModal, setShowPhoneModal] = useState(false)
   const [showSelfieCapture, setShowSelfieCapture] = useState(false)
@@ -84,15 +86,23 @@ export function GuestLoginFlow({
         setShowPhoneModal(false)
         setShowSelfieCapture(false)
         
-        // Reset OAuth states
-        setPendingOauthToken(null)
-        setPendingOauthProvider(null)
-        setShowPasscodeScreenAfterAuth(false)
-        setPasscodeInput('')
-        setPasscodeError('')
+        if (circleToken) {
+          setPendingOauthToken(circleToken)
+          setPendingOauthProvider('circle')
+          setShowPasscodeScreenAfterAuth(true)
+          setPasscodeInput('')
+          setPasscodeError('')
+        } else {
+          // Reset OAuth states
+          setPendingOauthToken(null)
+          setPendingOauthProvider(null)
+          setShowPasscodeScreenAfterAuth(false)
+          setPasscodeInput('')
+          setPasscodeError('')
+        }
       }
     }
-  }, [isOpen, initialToken, initialProfile])
+  }, [isOpen, initialToken, initialProfile, circleToken])
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3004'
 
@@ -144,16 +154,24 @@ export function GuestLoginFlow({
   }, [isOpen])
 
   const authenticateAndContinue = async (oauthToken: string, provider: string, code?: string) => {
+    const isCircle = provider === 'circle'
     const authUrl = eventSlug 
-      ? `${apiUrl}/api/gallery/public/events/${eventSlug}/auth`
+      ? (isCircle
+          ? `${apiUrl}/api/gallery/public/events/${eventSlug}/auth-from-family`
+          : `${apiUrl}/api/gallery/public/events/${eventSlug}/auth`)
       : `${apiUrl}/api/gallery/family/auth`
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (isCircle) {
+      headers['Authorization'] = `Bearer ${oauthToken}`
+    }
 
     const res = await fetch(authUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ 
-        token: oauthToken, 
-        provider,
+        token: isCircle ? undefined : oauthToken, 
+        provider: isCircle ? undefined : provider,
         code
       })
     })

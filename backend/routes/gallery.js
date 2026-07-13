@@ -1907,28 +1907,6 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       }
 
-      // Enforce passcode check
-      let isCodeValid = false; // full access flag
-      
-      // If at least one passcode is configured on the event
-      if (dbPasscode || dbPartialPasscode) {
-        if (!code) {
-          return reply.code(400).send({ error: 'Passcode is required to access this gallery' });
-        }
-        
-        const cleanCode = code.trim().toLowerCase();
-        const cleanFull = dbPasscode ? dbPasscode.trim().toLowerCase() : null;
-        const cleanPartial = dbPartialPasscode ? dbPartialPasscode.trim().toLowerCase() : null;
-
-        if (cleanFull && cleanCode === cleanFull) {
-          isCodeValid = true; // Full access granted
-        } else if (cleanPartial && cleanCode === cleanPartial) {
-          isCodeValid = false; // Partial access granted
-        } else {
-          return reply.code(400).send({ error: 'Invalid passcode' });
-        }
-      }
-
       // Find global user profile
       const user = await prisma.circleUser.findUnique({
         where: { email: decoded.email }
@@ -1939,6 +1917,32 @@ module.exports = async function galleryRoutes(fastify, opts) {
       let guest = await prisma.guest.findFirst({
         where: { eventId: event.id, email: decoded.email }
       });
+
+      // Enforce passcode check
+      let isCodeValid = false; // full access flag
+      
+      // If at least one passcode is configured on the event
+      if (dbPasscode || dbPartialPasscode) {
+        if (!code) {
+          if (!guest) {
+            return reply.code(400).send({ error: 'Passcode is required to access this gallery' });
+          }
+        } else {
+          const cleanCode = code.trim().toLowerCase();
+          const cleanFull = dbPasscode ? dbPasscode.trim().toLowerCase() : null;
+          const cleanPartial = dbPartialPasscode ? dbPartialPasscode.trim().toLowerCase() : null;
+
+          if (cleanFull && cleanCode === cleanFull) {
+            isCodeValid = true; // Full access granted
+          } else if (cleanPartial && cleanCode === cleanPartial) {
+            isCodeValid = false; // Partial access granted
+          } else {
+            if (!guest) {
+              return reply.code(400).send({ error: 'Invalid passcode' });
+            }
+          }
+        }
+      }
 
       if (!guest) {
         guest = await prisma.guest.create({

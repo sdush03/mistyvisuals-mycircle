@@ -15,6 +15,7 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
   const [inviteCode, setInviteCode] = useState<string | undefined>(undefined)
   const [existingToken, setExistingToken] = useState<string | undefined>(undefined)
   const [existingProfile, setExistingProfile] = useState<any>(null)
+  const [circleToken, setCircleToken] = useState<string | undefined>(undefined)
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
 
@@ -28,6 +29,11 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
     const pToken = searchParams.get('previewToken')
     if (pToken) {
       localStorage.setItem(`mv_gallery_preview_token_${slug}`, pToken)
+    }
+
+    const cToken = localStorage.getItem('mv_circle_token')
+    if (cToken) {
+      setCircleToken(cToken)
     }
 
     const activePreviewToken = pToken || localStorage.getItem(`mv_gallery_preview_token_${slug}`)
@@ -122,6 +128,47 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
             }
           } catch (syncErr) {
             console.error('Failed to sync guest session:', syncErr)
+          }
+        } else {
+          // If no gallery token, check if they are logged in globally on My Circle
+          const globalCircleToken = cToken || localStorage.getItem('mv_circle_token')
+          if (globalCircleToken) {
+            try {
+              const exchangeRes = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/auth-from-family`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${globalCircleToken}`
+                }
+              })
+              
+              if (exchangeRes.ok) {
+                const exchangeData = await exchangeRes.json()
+                if (exchangeData && exchangeData.token) {
+                  const localGuest = {
+                    id: exchangeData.guest.id,
+                    name: exchangeData.guest.name,
+                    email: exchangeData.guest.email,
+                    phoneNumber: exchangeData.guest.phoneNumber,
+                    hasSelfie: exchangeData.guest.hasSelfie,
+                    hasFullAccess: exchangeData.guest.hasFullAccess
+                  }
+                  
+                  localStorage.setItem(`mv_gallery_token_${slug}`, exchangeData.token)
+                  setExistingToken(exchangeData.token)
+                  setExistingProfile(localGuest)
+                  
+                  if (localGuest.phoneNumber && localGuest.hasSelfie) {
+                    localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(localGuest))
+                    setGuest(localGuest)
+                    router.push(`/${slug}/gallery/photos`)
+                    return
+                  }
+                }
+              }
+            } catch (exchangeErr) {
+              console.error('Failed to auto-authenticate using Circle token:', exchangeErr)
+            }
           }
         }
         setLoading(false)
@@ -385,6 +432,7 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
         initialToken={existingToken}
         initialProfile={existingProfile}
         eventHasPasscode={event?.hasPasscode}
+        circleToken={circleToken}
       />
 
       <style>{`
