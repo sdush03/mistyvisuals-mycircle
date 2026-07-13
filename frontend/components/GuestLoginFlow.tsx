@@ -59,6 +59,15 @@ export function GuestLoginFlow({
   const [passcodeInput, setPasscodeInput] = useState('')
   const [passcodeError, setPasscodeError] = useState('')
 
+  const [googleLoaded, setGoogleLoaded] = useState(false)
+  const googleButtonContainerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).google) {
+      setGoogleLoaded(true)
+    }
+  }, [])
+
   useEffect(() => {
     if (inviteCode) {
       setActiveCode(inviteCode)
@@ -114,32 +123,34 @@ export function GuestLoginFlow({
   // Load Google SDK script once
   const initializeGoogleOnce = () => {
     const google = (window as any).google
-    if (google && !(window as any).__google_initialized) {
-      google.accounts.id.initialize({
-        client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '813548862884-nisdjmc8avi1p5c5joj7pp6o6lg7j6as.apps.googleusercontent.com',
-        callback: (response: any) => {
-          if (latestCallbackRef.current) {
-            latestCallbackRef.current(response)
+    if (google) {
+      setGoogleLoaded(true)
+      if (!(window as any).__google_initialized) {
+        google.accounts.id.initialize({
+          client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '813548862884-nisdjmc8avi1p5c5joj7pp6o6lg7j6as.apps.googleusercontent.com',
+          callback: (response: any) => {
+            if (latestCallbackRef.current) {
+              latestCallbackRef.current(response)
+            }
           }
-        }
-      })
-      ;(window as any).__google_initialized = true
+        })
+        ;(window as any).__google_initialized = true
+      }
     }
   }
 
-  // A stable callback ref to render the Google Sign-in button in the container whenever it mounts
-  const googleButtonRef = useCallback((element: HTMLDivElement | null) => {
-    if (element) {
-      const google = (window as any).google
-      if (google) {
-        initializeGoogleOnce()
-        google.accounts.id.renderButton(
-          element,
-          { theme: 'filled_black', size: 'large', width: '280', shape: 'rectangular' }
-        )
-      }
+  // Render Google Sign-in button automatically when container mounts and SDK is ready
+  useEffect(() => {
+    const google = (window as any).google
+    if (google && googleButtonContainerRef.current && !showPasscodeScreenAfterAuth && isOpen) {
+      initializeGoogleOnce()
+      googleButtonContainerRef.current.innerHTML = ''
+      google.accounts.id.renderButton(
+        googleButtonContainerRef.current,
+        { theme: 'filled_black', size: 'large', width: '280', shape: 'rectangular' }
+      )
     }
-  }, [])
+  }, [isOpen, showPasscodeScreenAfterAuth, googleLoaded])
 
   // Lock body scroll when login overlay is active
   useEffect(() => {
@@ -523,7 +534,7 @@ export function GuestLoginFlow({
               {/* OAuth Buttons Container */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', alignItems: 'center' }}>
                 <div 
-                  ref={googleButtonRef}
+                  ref={googleButtonContainerRef}
                   style={{ width: '280px', display: 'flex', justifyContent: 'center', minHeight: '44px' }} 
                 />
 
