@@ -1517,6 +1517,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
         originalSize: p.originalFileSize,
         tabName: p.tabName,
         capturedAt: p.capturedAt,
+        width: p.width,
+        height: p.height,
         likeCount: p._count?.likes || 0,
         isLiked: guestId ? (p.likes && p.likes.length > 0) : false
       }));

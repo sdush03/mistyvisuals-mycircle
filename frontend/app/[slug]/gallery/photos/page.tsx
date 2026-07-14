@@ -253,21 +253,26 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
     photosList.forEach((photo, index) => {
       const id = photo.id || photo.r2Url
-      const isLandscape = (photo.width && photo.height)
-        ? (photo.width / photo.height > 1.1)
-        : (aspects[id] ? aspects[id] > 1.1 : false)
+      const exactAspect = (photo.width && photo.height)
+        ? (photo.width / photo.height)
+        : aspects[id]
 
       let gridAspect = '2/3'
-      if (isLandscape) {
-        gridAspect = '3/2'
+      if (exactAspect) {
+        gridAspect = `${photo.width || 1000}/${photo.height || 1500}`
       } else {
-        const cycle = index % 3
-        if (cycle === 0) gridAspect = '2/3'
-        else if (cycle === 1) gridAspect = '3/4'
-        else gridAspect = '4/5'
+        const isLandscape = exactAspect ? (exactAspect > 1.1) : false
+        if (isLandscape) {
+          gridAspect = '3/2'
+        } else {
+          const cycle = index % 3
+          if (cycle === 0) gridAspect = '2/3'
+          else if (cycle === 1) gridAspect = '3/4'
+          else gridAspect = '4/5'
+        }
       }
 
-      const numAspect = isLandscape ? 1.5 : (gridAspect === '2/3' ? 2/3 : (gridAspect === '3/4' ? 3/4 : 4/5))
+      const numAspect = exactAspect || (gridAspect === '2/3' ? 2/3 : (gridAspect === '3/4' ? 3/4 : 4/5))
       const heightContribution = 1 / numAspect
 
       let shortestIdx = 0
@@ -551,7 +556,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
     try {
       const headers: Record<string, string> = {}
       if (token) headers['Authorization'] = `Bearer ${token}`
-      const params = new URLSearchParams({ offset: String(offset), limit: '50000', tab })
+      const params = new URLSearchParams({ offset: String(offset), limit: '60', tab })
       const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/photos?${params}`, { headers })
       if (!res.ok) throw new Error('Failed to load photos')
       const data = await res.json()
