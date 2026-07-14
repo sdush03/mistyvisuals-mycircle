@@ -98,9 +98,18 @@ export function GuestLoginFlow({
         if (circleToken) {
           setPendingOauthToken(circleToken)
           setPendingOauthProvider('circle')
-          setShowPasscodeScreenAfterAuth(true)
-          setPasscodeInput('')
-          setPasscodeError('')
+          const codeToUse = inviteCode || activeCode
+          if (codeToUse) {
+            authenticateAndContinue(circleToken, 'circle', codeToUse).catch(() => {
+              setShowPasscodeScreenAfterAuth(true)
+              setPasscodeInput('')
+              setPasscodeError('')
+            })
+          } else {
+            setShowPasscodeScreenAfterAuth(true)
+            setPasscodeInput('')
+            setPasscodeError('')
+          }
         } else {
           // Reset OAuth states
           setPendingOauthToken(null)
@@ -111,7 +120,7 @@ export function GuestLoginFlow({
         }
       }
     }
-  }, [isOpen, initialToken, initialProfile, circleToken])
+  }, [isOpen, initialToken, initialProfile, circleToken, inviteCode, activeCode])
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3004'
 

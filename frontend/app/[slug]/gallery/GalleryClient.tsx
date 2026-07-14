@@ -139,7 +139,8 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${globalCircleToken}`
-                }
+                },
+                body: JSON.stringify({ code })
               })
               
               if (exchangeRes.ok) {
