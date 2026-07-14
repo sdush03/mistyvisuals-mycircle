@@ -302,9 +302,9 @@ export default function CirclePage() {
     }
   }
 
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!token) return
+  const handleSaveProfile = async (e?: React.FormEvent, overrideSelfieFile?: File | null): Promise<boolean> => {
+    if (e) e.preventDefault()
+    if (!token) return false
 
     setUpdatingProfile(true)
     setUpdateError(null)
@@ -331,7 +331,7 @@ export default function CirclePage() {
         setShakePhone(true)
         setTimeout(() => setShakePhone(false), 400)
         setUpdatingProfile(false)
-        return
+        return false
       }
     }
 
@@ -339,8 +339,10 @@ export default function CirclePage() {
       const formData = new FormData()
       formData.append('name', editName)
       formData.append('phoneNumber', editPhone)
-      if (newSelfieFile) {
-        formData.append('selfie', newSelfieFile)
+      
+      const fileToUpload = overrideSelfieFile !== undefined ? overrideSelfieFile : newSelfieFile
+      if (fileToUpload) {
+        formData.append('selfie', fileToUpload)
       }
 
       const res = await fetch(`${apiUrl}/api/gallery/family/profile/update`, {
@@ -360,6 +362,7 @@ export default function CirclePage() {
       // Save updated profile to localStorage
       localStorage.setItem('mv_circle_profile', JSON.stringify(data.profile))
       setProfile(data.profile)
+      setNewSelfieFile(null)
       
       // Update local states
       if (data.profile.selfieGuestId) {
@@ -369,8 +372,10 @@ export default function CirclePage() {
       setShowProfileModal(false)
       // Refresh events to show any newly matched weddings due to selfie change!
       fetchEvents(token)
+      return true
     } catch (err: any) {
       setUpdateError(err.message)
+      return false
     } finally {
       setUpdatingProfile(false)
     }
@@ -962,6 +967,22 @@ export default function CirclePage() {
                 )}
               </div>
 
+              {updateError && (
+                <div style={{
+                  fontFamily: 'Montserrat, sans-serif',
+                  fontSize: '0.75rem',
+                  color: '#dc2626',
+                  marginBottom: '1rem',
+                  textAlign: 'center',
+                  background: '#fef2f2',
+                  padding: '0.65rem 0.85rem',
+                  borderRadius: '2px',
+                  border: '1px solid #fecaca'
+                }}>
+                  {updateError}
+                </div>
+              )}
+
               {/* Actions */}
               <div style={{ display: 'flex', gap: '1rem' }}>
                 <button
@@ -1024,11 +1045,24 @@ export default function CirclePage() {
         onCapture={handleCameraCapture}
         status={validationStatus}
         feedbackMessage={selfieError}
-        onContinue={() => {
-          setShowCameraCaptureModal(false)
-          setValidationStatus('idle')
-          setSelfieError('')
-          setShowProfileModal(false)
+        onContinue={async () => {
+          if (newSelfieFile) {
+            const success = await handleSaveProfile(undefined, newSelfieFile)
+            if (success) {
+              setShowCameraCaptureModal(false)
+              setValidationStatus('idle')
+              setSelfieError('')
+              setShowProfileModal(false)
+            } else {
+              setValidationStatus('rejected')
+              setSelfieError(updateError || 'Failed to save selfie. Please try again.')
+            }
+          } else {
+            setShowCameraCaptureModal(false)
+            setValidationStatus('idle')
+            setSelfieError('')
+            setShowProfileModal(false)
+          }
         }}
         onRetake={() => {
           setValidationStatus('idle')
