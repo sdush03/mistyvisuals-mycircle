@@ -1611,9 +1611,9 @@ export default function GuestGalleryPhotos({ params }: Props) {
               </>
             ) : (
               <div className="text-center py-16">
-                <p className="font-lora text-lg text-neutral-600 mb-2">No photos in this gallery</p>
+                <p className="font-lora text-lg text-neutral-600 mb-2">No photos in this gallery yet</p>
                 <p className="font-sans text-xs text-neutral-400">
-                  Please upload photos using the desktop uploader script.
+                  Photos from this event will appear here once published.
                 </p>
               </div>
             )}
