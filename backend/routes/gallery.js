@@ -1523,6 +1523,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
         isLiked: guestId ? (p.likes && p.likes.length > 0) : false
       }));
 
+      reply.header('Cache-Control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=300');
       return {
         photos: mappedPhotos,
         total,

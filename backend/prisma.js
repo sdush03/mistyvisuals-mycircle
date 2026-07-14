@@ -32,4 +32,10 @@ if (process.env.DATABASE_URL) {
 
 const prisma = new PrismaClient()
 
+// Enable SQLite Write-Ahead Logging (WAL) for concurrent non-blocking reads
+if (!process.env.DATABASE_URL || process.env.DATABASE_URL.startsWith('file:')) {
+  prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL;').catch(() => {})
+  prisma.$queryRawUnsafe('PRAGMA synchronous = NORMAL;').catch(() => {})
+}
+
 module.exports = { prisma }

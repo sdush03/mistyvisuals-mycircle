@@ -541,6 +541,38 @@ export default function GuestGalleryPhotos({ params }: Props) {
     }
   }
 
+  const prefetchNextBatch = useCallback(async (tab: string, nextOffset: number) => {
+    const token = localStorage.getItem(`mv_gallery_token_${slug}`)
+    try {
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const params = new URLSearchParams({ offset: String(nextOffset), limit: '60', tab })
+      const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/photos?${params}`, { headers })
+      if (!res.ok) return
+      const data = await res.json()
+      const newPhotos: any[] = data.photos || []
+      const hasMoreFromServer: boolean = data.hasMore ?? false
+      if (newPhotos.length > 0) {
+        setTabCache(prev => {
+          const currentPhotos = prev[tab]?.photos || []
+          const existingIds = new Set(currentPhotos.map((p: any) => p.id || p.r2Url))
+          const filteredNew = newPhotos.filter((p: any) => !existingIds.has(p.id || p.r2Url))
+          if (filteredNew.length === 0) return prev
+          return {
+            ...prev,
+            [tab]: {
+              photos: [...currentPhotos, ...filteredNew],
+              offset: nextOffset + filteredNew.length,
+              hasMore: hasMoreFromServer
+            }
+          }
+        })
+      }
+    } catch (e) {
+      // Silent background prefetch fallback
+    }
+  }, [slug, apiUrl])
+
   // Cache-aware paginated photo loader
   // tab: which tab to load. If already fully loaded (hasMore=false), skips.
   const loadAllPhotos = useCallback(async (tab: string) => {
@@ -564,20 +596,33 @@ export default function GuestGalleryPhotos({ params }: Props) {
       const hasMoreFromServer: boolean = data.hasMore ?? false
       // Update total count from first load of any tab
       if (data.total && data.total > 0) setTotalPhotos((prev) => Math.max(prev, data.total))
-      setTabCache(prev => ({
-        ...prev,
-        [tab]: {
-          photos: [...(prev[tab]?.photos || []), ...newPhotos],
-          offset: offset + newPhotos.length,
-          hasMore: hasMoreFromServer
+      
+      setTabCache(prev => {
+        const currentPhotos = prev[tab]?.photos || []
+        const existingIds = new Set(currentPhotos.map((p: any) => p.id || p.r2Url))
+        const filteredNew = newPhotos.filter((p: any) => !existingIds.has(p.id || p.r2Url))
+        return {
+          ...prev,
+          [tab]: {
+            photos: [...currentPhotos, ...filteredNew],
+            offset: offset + filteredNew.length,
+            hasMore: hasMoreFromServer
+          }
         }
-      }))
+      })
+
+      if (hasMoreFromServer && newPhotos.length > 0) {
+        const nextOffset = offset + newPhotos.length
+        setTimeout(() => {
+          prefetchNextBatch(tab, nextOffset)
+        }, 300)
+      }
     } catch (err) {
       console.error(err)
     } finally {
       setLoadingMore(false)
     }
-  }, [loadingMore, tabCache, slug, apiUrl])
+  }, [loadingMore, tabCache, slug, apiUrl, prefetchNextBatch])
 
   // IntersectionObserver — fires when sentinel enters the viewport
   useEffect(() => {
