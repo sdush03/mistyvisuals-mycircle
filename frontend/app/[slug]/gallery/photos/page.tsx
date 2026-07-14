@@ -1369,9 +1369,9 @@ export default function GuestGalleryPhotos({ params }: Props) {
               </div>
             ) : (
               <div className="text-center py-20">
-                <p className="font-lora text-lg text-neutral-600 mb-2">No matching photos found</p>
+                <p className="font-lora text-lg text-neutral-600 mb-2">We couldn't find your photos from this event</p>
                 <p className="font-sans text-xs text-neutral-400 max-w-xs mx-auto">
-                  We couldn't find any photos matching your selfie. If more photos are uploaded later, we'll scan them automatically!
+                  If more photos are uploaded later, we'll scan them automatically!
                 </p>
               </div>
             )}
