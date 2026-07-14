@@ -157,11 +157,13 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const dragStartRef = useRef({ x: 0, y: 0 })
   const swipeStartXRef = useRef<number | null>(null)
   const swipeStartYRef = useRef<number | null>(null)
+  const preventDoubleTapRef = useRef(false)
 
   useEffect(() => {
     setHighResLoaded(false)
     setZoomScale(1)
     setZoomPosition({ x: 0, y: 0 })
+    preventDoubleTapRef.current = false
   }, [activePhotoIndex])
 
   useEffect(() => {
@@ -273,6 +275,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
       swipeStartYRef.current = e.clientY
     } else if (pointersRef.current.size === 2) {
       isDraggingRef.current = false
+      preventDoubleTapRef.current = true
       const pts = Array.from(pointersRef.current.values())
       const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
       initialDistanceRef.current = dist
@@ -297,6 +300,12 @@ export default function GuestGalleryPhotos({ params }: Props) {
         setZoomPosition({ x: 0, y: 0 })
       }
     } else if (pointersRef.current.size === 1 && isDraggingRef.current) {
+      const diffX = Math.abs(e.clientX - (dragStartRef.current.x + zoomPosition.x))
+      const diffY = Math.abs(e.clientY - (dragStartRef.current.y + zoomPosition.y))
+      if (diffX > 10 || diffY > 10) {
+        preventDoubleTapRef.current = true
+      }
+      
       if (zoomScale > 1) {
         const newX = e.clientX - dragStartRef.current.x
         const newY = e.clientY - dragStartRef.current.y
@@ -349,6 +358,12 @@ export default function GuestGalleryPhotos({ params }: Props) {
       } else {
         setZoomPosition({ x: 0, y: 0 })
       }
+
+      if (preventDoubleTapRef.current) {
+        setTimeout(() => {
+          preventDoubleTapRef.current = false
+        }, 300)
+      }
     } else if (pointersRef.current.size === 1) {
       // Transition back to dragging with 1 finger
       const remainingPointer = Array.from(pointersRef.current.values())[0]
@@ -369,6 +384,9 @@ export default function GuestGalleryPhotos({ params }: Props) {
         setZoomScale(1)
         setZoomPosition({ x: 0, y: 0 })
       }
+      setTimeout(() => {
+        preventDoubleTapRef.current = false
+      }, 300)
     }
   }
 
@@ -1808,27 +1826,39 @@ export default function GuestGalleryPhotos({ params }: Props) {
           style={{
             position: 'fixed', inset: 0, zIndex: 300,
             background: 'rgba(8,6,4,0.97)',
-            display: 'flex', flexDirection: 'column',
+            overflow: 'hidden',
           }}
-          onClick={() => setActivePhotoIndex(null)}
         >
           {/* Top bar — close */}
           <div
-            style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '1.25rem 1.5rem', flexShrink: 0 }}
+            style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0,
+              display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
+              padding: '1.25rem 1.5rem',
+              zIndex: 50,
+              background: 'linear-gradient(to bottom, rgba(8,6,4,0.5) 0%, rgba(8,6,4,0) 100%)',
+              pointerEvents: 'none',
+            }}
             onClick={e => e.stopPropagation()}
           >
             <button
               onClick={() => setActivePhotoIndex(null)}
+              onPointerDown={e => e.stopPropagation()}
+              onPointerUp={e => e.stopPropagation()}
               aria-label="Close"
               style={{
                 width: '38px', height: '38px', borderRadius: '50%',
-                background: 'rgba(255,255,255,0.07)',
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: 'rgba(15,15,15,0.4)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255,255,255,0.15)',
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'rgba(255,255,255,0.6)', transition: 'background 0.2s',
+                color: '#ffffff', transition: 'background 0.2s',
+                pointerEvents: 'auto',
               }}
-              onMouseOver={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.14)')}
-              onMouseOut={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
+              onMouseOver={e => (e.currentTarget.style.background = 'rgba(15,15,15,0.6)')}
+              onMouseOut={e => (e.currentTarget.style.background = 'rgba(15,15,15,0.4)')}
             >
               <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
                 <line x1="1" y1="1" x2="10" y2="10"/><line x1="10" y1="1" x2="1" y2="10"/>
@@ -1838,9 +1868,61 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
           {/* Image area */}
           <div
-            style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', minHeight: 0 }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+              zIndex: 10,
+            }}
+            onClick={() => setActivePhotoIndex(null)}
           >
-            {/* Image + heart pop + navigation wrapper */}
+            {/* Prev arrow (Only visible if zoomScale is 1 and not first photo) */}
+            {zoomScale === 1 && activePhotoIndex > 0 && (
+              <button
+                onClick={e => { e.stopPropagation(); handlePrevPhoto() }}
+                onPointerDown={e => e.stopPropagation()}
+                onPointerUp={e => e.stopPropagation()}
+                aria-label="Previous"
+                style={{
+                  position: 'absolute',
+                  left: '1.25rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  zIndex: 30,
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '50%',
+                  background: 'rgba(15, 15, 15, 0.45)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff',
+                  transition: 'background 0.2s, transform 0.2s',
+                  flexShrink: 0,
+                }}
+                onMouseOver={e => {
+                  e.currentTarget.style.background = 'rgba(15, 15, 15, 0.65)';
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1.05)';
+                }}
+                onMouseOut={e => {
+                  e.currentTarget.style.background = 'rgba(15, 15, 15, 0.45)';
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
+                }}
+              >
+                <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="8,1 1,7.5 8,14"/>
+                </svg>
+              </button>
+            )}
+
+            {/* Image + heart pop wrapper */}
             <div
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
@@ -1860,49 +1942,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
               }}
               onClick={e => e.stopPropagation()}
             >
-              {/* Prev arrow (Only visible if zoomScale is 1 and not first photo) */}
-              {zoomScale === 1 && activePhotoIndex > 0 && (
-                <button
-                  onClick={e => { e.stopPropagation(); handlePrevPhoto() }}
-                  onPointerDown={e => e.stopPropagation()}
-                  onPointerUp={e => e.stopPropagation()}
-                  aria-label="Previous"
-                  style={{
-                    position: 'absolute',
-                    left: '1rem',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    zIndex: 20,
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '50%',
-                    background: 'rgba(15, 15, 15, 0.45)',
-                    backdropFilter: 'blur(8px)',
-                    WebkitBackdropFilter: 'blur(8px)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#ffffff',
-                    transition: 'background 0.2s, transform 0.2s',
-                    flexShrink: 0,
-                  }}
-                  onMouseOver={e => {
-                    e.currentTarget.style.background = 'rgba(15, 15, 15, 0.65)';
-                    e.currentTarget.style.transform = 'translateY(-50%) scale(1.05)';
-                  }}
-                  onMouseOut={e => {
-                    e.currentTarget.style.background = 'rgba(15, 15, 15, 0.45)';
-                    e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
-                  }}
-                >
-                  <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="8,1 1,7.5 8,14"/>
-                  </svg>
-                </button>
-              )}
-
               {/* Blurred thumbnail placeholder visible while high-res loads */}
               {!highResLoaded && (
                 <img
@@ -1927,8 +1966,15 @@ export default function GuestGalleryPhotos({ params }: Props) {
               <div style={{ position: 'relative', display: 'block', userSelect: 'none', WebkitTouchCallout: 'none' }}>
                 {/* Transparent overlay capturing all pointer events to prevent right click & touch hold menus */}
                 <div
-                  onDoubleClick={() => handleLightboxDoubleTap(activePhotosList[activePhotoIndex].id, activePhotosList[activePhotoIndex].isLiked)}
+                  onDoubleClick={() => {
+                    if (!preventDoubleTapRef.current) {
+                      handleLightboxDoubleTap(activePhotosList[activePhotoIndex].id, activePhotosList[activePhotoIndex].isLiked)
+                    }
+                  }}
                   onTouchEnd={e => {
+                    if (preventDoubleTapRef.current) {
+                      return;
+                    }
                     const now = Date.now();
                     if (now - lastTapRef.current < 300) {
                       handleLightboxDoubleTap(activePhotosList[activePhotoIndex].id, activePhotosList[activePhotoIndex].isLiked);
@@ -1954,7 +2000,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                   className="pointer-events-none select-none"
                   style={{
                     maxWidth: '100vw',
-                    maxHeight: 'calc(100vh - 146px)', // leaving room for top and bottom bars
+                    maxHeight: '100vh',
                     objectFit: 'contain',
                     userSelect: 'none',
                     borderRadius: '3px',
@@ -1985,60 +2031,61 @@ export default function GuestGalleryPhotos({ params }: Props) {
                   </svg>
                 </div>
               )}
-
-              {/* Next arrow (Only visible if zoomScale is 1 and not last photo) */}
-              {zoomScale === 1 && activePhotoIndex < activePhotosList.length - 1 && (
-                <button
-                  onClick={e => { e.stopPropagation(); handleNextPhoto() }}
-                  onPointerDown={e => e.stopPropagation()}
-                  onPointerUp={e => e.stopPropagation()}
-                  aria-label="Next"
-                  style={{
-                    position: 'absolute',
-                    right: '1rem',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    zIndex: 20,
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '50%',
-                    background: 'rgba(15, 15, 15, 0.45)',
-                    backdropFilter: 'blur(8px)',
-                    WebkitBackdropFilter: 'blur(8px)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#ffffff',
-                    transition: 'background 0.2s, transform 0.2s',
-                    flexShrink: 0,
-                  }}
-                  onMouseOver={e => {
-                    e.currentTarget.style.background = 'rgba(15, 15, 15, 0.65)';
-                    e.currentTarget.style.transform = 'translateY(-50%) scale(1.05)';
-                  }}
-                  onMouseOut={e => {
-                    e.currentTarget.style.background = 'rgba(15, 15, 15, 0.45)';
-                    e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
-                  }}
-                >
-                  <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="1,1 8,7.5 1,14"/>
-                  </svg>
-                </button>
-              )}
             </div>
+
+            {/* Next arrow (Only visible if zoomScale is 1 and not last photo) */}
+            {zoomScale === 1 && activePhotoIndex < activePhotosList.length - 1 && (
+              <button
+                onClick={e => { e.stopPropagation(); handleNextPhoto() }}
+                onPointerDown={e => e.stopPropagation()}
+                onPointerUp={e => e.stopPropagation()}
+                aria-label="Next"
+                style={{
+                  position: 'absolute',
+                  right: '1.25rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  zIndex: 30,
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '50%',
+                  background: 'rgba(15, 15, 15, 0.45)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff',
+                  transition: 'background 0.2s, transform 0.2s',
+                  flexShrink: 0,
+                }}
+                onMouseOver={e => {
+                  e.currentTarget.style.background = 'rgba(15, 15, 15, 0.65)';
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1.05)';
+                }}
+                onMouseOut={e => {
+                  e.currentTarget.style.background = 'rgba(15, 15, 15, 0.45)';
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
+                }}
+              >
+                <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="1,1 8,7.5 1,14"/>
+                </svg>
+              </button>
+            )}
           </div>
 
           {/* Bottom action bar */}
           <div
             style={{
-              flexShrink: 0,
+              position: 'absolute',
+              bottom: 0, left: 0, right: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               height: '68px',
-              background: 'rgba(255,255,255,0.03)',
-              borderTop: '1px solid rgba(255,255,255,0.07)',
+              background: 'linear-gradient(to top, rgba(8,6,4,0.6) 0%, rgba(8,6,4,0) 100%)',
+              zIndex: 50,
             }}
             onClick={e => e.stopPropagation()}
           >
