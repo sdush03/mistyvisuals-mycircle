@@ -59,6 +59,8 @@ export function GuestLoginFlow({
   const [passcodeInput, setPasscodeInput] = useState('')
   const [passcodeError, setPasscodeError] = useState('')
 
+  const [verifyingCircle, setVerifyingCircle] = useState(false)
+
   const [googleLoaded, setGoogleLoaded] = useState(false)
   const googleButtonContainerRef = useRef<HTMLDivElement | null>(null)
 
@@ -100,11 +102,16 @@ export function GuestLoginFlow({
           setPendingOauthProvider('circle')
           const codeToUse = inviteCode || activeCode
           if (codeToUse) {
-            authenticateAndContinue(circleToken, 'circle', codeToUse).catch(() => {
-              setShowPasscodeScreenAfterAuth(true)
-              setPasscodeInput('')
-              setPasscodeError('')
-            })
+            setVerifyingCircle(true)
+            authenticateAndContinue(circleToken, 'circle', codeToUse)
+              .catch(() => {
+                setShowPasscodeScreenAfterAuth(true)
+                setPasscodeInput('')
+                setPasscodeError('')
+              })
+              .finally(() => {
+                setVerifyingCircle(false)
+              })
           } else {
             setShowPasscodeScreenAfterAuth(true)
             setPasscodeInput('')
@@ -117,6 +124,7 @@ export function GuestLoginFlow({
           setShowPasscodeScreenAfterAuth(false)
           setPasscodeInput('')
           setPasscodeError('')
+          setVerifyingCircle(false)
         }
       }
     }
@@ -468,7 +476,9 @@ export function GuestLoginFlow({
             marginBottom: '0.75rem',
             color: '#ffffff'
           }}>
-            {showPasscodeScreenAfterAuth ? 'Enter Passcode' : 'Welcome Guests'}
+            {verifyingCircle 
+              ? 'Verifying Session' 
+              : (showPasscodeScreenAfterAuth || circleToken ? 'Enter Passcode' : 'Welcome Guests')}
           </h2>
           <p style={{
             fontFamily: '"Montserrat", system-ui, sans-serif',
@@ -480,12 +490,21 @@ export function GuestLoginFlow({
             lineHeight: 1.6,
             marginBottom: '2.5rem'
           }}>
-            {showPasscodeScreenAfterAuth 
-              ? 'Enter the passcode shared by the couple to access their gallery.'
-              : 'Log in with your social account to instantly find your photos using AI face recognition.'}
+            {verifyingCircle 
+              ? 'Please wait while we verify your invite using My Circle.'
+              : (showPasscodeScreenAfterAuth || circleToken
+                  ? 'Enter the passcode shared by the couple to access their gallery.'
+                  : 'Log in with your social account to instantly find your photos using AI face recognition.')}
           </p>
 
-          {showPasscodeScreenAfterAuth ? (
+          {verifyingCircle ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '2rem 0' }}>
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#ffffff] border-t-transparent mb-2"></div>
+              <p style={{ fontFamily: '"Montserrat", sans-serif', fontSize: '0.75rem', color: '#a3a3a3' }}>
+                Signing you in...
+              </p>
+            </div>
+          ) : (circleToken || showPasscodeScreenAfterAuth) ? (
             <form 
               onSubmit={handlePasscodeSubmit}
               style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}
@@ -588,36 +607,40 @@ export function GuestLoginFlow({
             </>
           )}
 
-          <button 
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              if (showPasscodeScreenAfterAuth) {
-                setShowPasscodeScreenAfterAuth(false)
-                setPendingOauthToken(null)
-                setPendingOauthProvider(null)
-                setPasscodeInput('')
-                setPasscodeError('')
-              } else {
-                handleBackOut(); 
-              }
-            }}
-            style={{
-              marginTop: '2rem',
-              fontSize: '0.65rem',
-              letterSpacing: '0.15em',
-              textTransform: 'uppercase',
-              color: 'rgba(255, 255, 255, 0.4)',
-              backgroundColor: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'color 0.2s ease',
-              fontFamily: '"Montserrat", system-ui, sans-serif',
-            }}
-            onMouseOver={(e) => e.currentTarget.style.color = '#ffffff'}
-            onMouseOut={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.4)'}
-          >
-            {showPasscodeScreenAfterAuth ? 'Cancel' : 'Go Back'}
-          </button>
+          {!verifyingCircle && (
+            <button 
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                if (circleToken) {
+                  onClose();
+                } else if (showPasscodeScreenAfterAuth) {
+                  setShowPasscodeScreenAfterAuth(false)
+                  setPendingOauthToken(null)
+                  setPendingOauthProvider(null)
+                  setPasscodeInput('')
+                  setPasscodeError('')
+                } else {
+                  handleBackOut(); 
+                }
+              }}
+              style={{
+                marginTop: '2rem',
+                fontSize: '0.65rem',
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                color: 'rgba(255, 255, 255, 0.4)',
+                backgroundColor: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'color 0.2s ease',
+                fontFamily: '"Montserrat", system-ui, sans-serif',
+              }}
+              onMouseOver={(e) => e.currentTarget.style.color = '#ffffff'}
+              onMouseOut={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.4)'}
+            >
+              {(circleToken || showPasscodeScreenAfterAuth) ? 'Cancel' : 'Go Back'}
+            </button>
+          )}
         </div>
       </div>
 
