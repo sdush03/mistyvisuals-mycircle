@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, use, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useRef, use, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { CameraCaptureModal } from '@/components/CameraCaptureModal'
@@ -146,9 +146,22 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const [aspects, setAspects] = useState<Record<string, number>>({})
   const [activePhotoIndex, setActivePhotoIndex] = useState<number | null>(null)
   const [highResLoaded, setHighResLoaded] = useState(false)
+  const [zoomScale, setZoomScale] = useState(1)
+  const [zoomPosition, setZoomPosition] = useState({ x: 0, y: 0 })
+
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map())
+  const initialDistanceRef = useRef<number | null>(null)
+  const initialScaleRef = useRef<number>(1)
+  const initialPositionRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const isDraggingRef = useRef(false)
+  const dragStartRef = useRef({ x: 0, y: 0 })
+  const swipeStartXRef = useRef<number | null>(null)
+  const swipeStartYRef = useRef<number | null>(null)
 
   useEffect(() => {
     setHighResLoaded(false)
+    setZoomScale(1)
+    setZoomPosition({ x: 0, y: 0 })
   }, [activePhotoIndex])
 
   useEffect(() => {
@@ -246,6 +259,118 @@ export default function GuestGalleryPhotos({ params }: Props) {
       }
     }
   }, [activePhotoIndex])
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const target = e.currentTarget
+    target.setPointerCapture(e.pointerId)
+    
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    
+    if (pointersRef.current.size === 1) {
+      isDraggingRef.current = true
+      dragStartRef.current = { x: e.clientX - zoomPosition.x, y: e.clientY - zoomPosition.y }
+      swipeStartXRef.current = e.clientX
+      swipeStartYRef.current = e.clientY
+    } else if (pointersRef.current.size === 2) {
+      isDraggingRef.current = false
+      const pts = Array.from(pointersRef.current.values())
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
+      initialDistanceRef.current = dist
+      initialScaleRef.current = zoomScale
+      initialPositionRef.current = { ...zoomPosition }
+    }
+  }
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointersRef.current.has(e.pointerId)) return
+    
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    
+    if (pointersRef.current.size === 2 && initialDistanceRef.current !== null) {
+      const pts = Array.from(pointersRef.current.values())
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
+      
+      const newScale = Math.max(1, Math.min(initialScaleRef.current * (dist / initialDistanceRef.current), 4.5))
+      setZoomScale(newScale)
+      
+      if (newScale === 1) {
+        setZoomPosition({ x: 0, y: 0 })
+      }
+    } else if (pointersRef.current.size === 1 && isDraggingRef.current) {
+      if (zoomScale > 1) {
+        const newX = e.clientX - dragStartRef.current.x
+        const newY = e.clientY - dragStartRef.current.y
+        setZoomPosition({ x: newX, y: newY })
+      }
+    }
+  }
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch (err) {}
+    
+    pointersRef.current.delete(e.pointerId)
+    
+    if (pointersRef.current.size === 0) {
+      isDraggingRef.current = false
+      initialDistanceRef.current = null
+      
+      // Swipe detection (only if zoomScale is 1)
+      if (zoomScale === 1 && swipeStartXRef.current !== null && swipeStartYRef.current !== null) {
+        const diffX = e.clientX - swipeStartXRef.current
+        const diffY = e.clientY - swipeStartYRef.current
+        
+        if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY)) {
+          if (diffX > 0) {
+            handlePrevPhoto()
+          } else {
+            handleNextPhoto()
+          }
+        }
+      }
+      
+      swipeStartXRef.current = null
+      swipeStartYRef.current = null
+      
+      // Constrain position boundaries when zoom is active
+      if (zoomScale > 1) {
+        const container = e.currentTarget
+        if (container) {
+          const rect = container.getBoundingClientRect()
+          const maxPanX = (rect.width * (zoomScale - 1)) / 2
+          const maxPanY = (rect.height * (zoomScale - 1)) / 2
+          
+          setZoomPosition(prev => ({
+            x: Math.max(-maxPanX, Math.min(maxPanX, prev.x)),
+            y: Math.max(-maxPanY, Math.min(maxPanY, prev.y)),
+          }))
+        }
+      } else {
+        setZoomPosition({ x: 0, y: 0 })
+      }
+    } else if (pointersRef.current.size === 1) {
+      // Transition back to dragging with 1 finger
+      const remainingPointer = Array.from(pointersRef.current.values())[0]
+      isDraggingRef.current = true
+      dragStartRef.current = { x: remainingPointer.x - zoomPosition.x, y: remainingPointer.y - zoomPosition.y }
+      initialDistanceRef.current = null
+    }
+  }
+
+  const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    pointersRef.current.delete(e.pointerId)
+    if (pointersRef.current.size === 0) {
+      isDraggingRef.current = false
+      initialDistanceRef.current = null
+      swipeStartXRef.current = null
+      swipeStartYRef.current = null
+      if (zoomScale <= 1) {
+        setZoomScale(1)
+        setZoomPosition({ x: 0, y: 0 })
+      }
+    }
+  }
 
   const getBalancedColumns = (photosList: any[]) => {
     const columns: any[][] = Array.from({ length: cols }, () => [])
@@ -1715,33 +1840,69 @@ export default function GuestGalleryPhotos({ params }: Props) {
           <div
             style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', minHeight: 0 }}
           >
-            {/* Prev arrow */}
-            {activePhotoIndex > 0 && (
-              <button
-                onClick={e => { e.stopPropagation(); handlePrevPhoto() }}
-                aria-label="Previous"
-                style={{
-                  position: 'absolute', left: '1.25rem', zIndex: 10,
-                  width: '48px', height: '48px', borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.07)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'rgba(255,255,255,0.6)', transition: 'background 0.2s', flexShrink: 0,
-                }}
-                onMouseOver={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.14)')}
-                onMouseOut={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
-              >
-                <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="8,1 1,7.5 8,14"/>
-                </svg>
-              </button>
-            )}
-
-            {/* Image + heart pop */}
+            {/* Image + heart pop + navigation wrapper */}
             <div
-              style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
+              style={{
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transform: `translate(${zoomPosition.x}px, ${zoomPosition.y}px) scale(${zoomScale})`,
+                transformOrigin: 'center center',
+                transition: zoomScale === 1 ? 'transform 0.15s ease-out' : 'none',
+                touchAction: 'none',
+                userSelect: 'none',
+                WebkitTouchCallout: 'none',
+              }}
               onClick={e => e.stopPropagation()}
             >
+              {/* Prev arrow (Only visible if zoomScale is 1 and not first photo) */}
+              {zoomScale === 1 && activePhotoIndex > 0 && (
+                <button
+                  onClick={e => { e.stopPropagation(); handlePrevPhoto() }}
+                  onPointerDown={e => e.stopPropagation()}
+                  onPointerUp={e => e.stopPropagation()}
+                  aria-label="Previous"
+                  style={{
+                    position: 'absolute',
+                    left: '1rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    zIndex: 20,
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '50%',
+                    background: 'rgba(15, 15, 15, 0.45)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    transition: 'background 0.2s, transform 0.2s',
+                    flexShrink: 0,
+                  }}
+                  onMouseOver={e => {
+                    e.currentTarget.style.background = 'rgba(15, 15, 15, 0.65)';
+                    e.currentTarget.style.transform = 'translateY(-50%) scale(1.05)';
+                  }}
+                  onMouseOut={e => {
+                    e.currentTarget.style.background = 'rgba(15, 15, 15, 0.45)';
+                    e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
+                  }}
+                >
+                  <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="8,1 1,7.5 8,14"/>
+                  </svg>
+                </button>
+              )}
+
               {/* Blurred thumbnail placeholder visible while high-res loads */}
               {!highResLoaded && (
                 <img
@@ -1762,6 +1923,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                   }}
                 />
               )}
+
               <div style={{ position: 'relative', display: 'block', userSelect: 'none', WebkitTouchCallout: 'none' }}>
                 {/* Transparent overlay capturing all pointer events to prevent right click & touch hold menus */}
                 <div
@@ -1791,8 +1953,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
                   onContextMenu={(e) => e.preventDefault()}
                   className="pointer-events-none select-none"
                   style={{
-                    maxWidth: 'min(88vw, calc(100vw - 160px))',
-                    maxHeight: 'calc(100vh - 160px)',
+                    maxWidth: '100vw',
+                    maxHeight: 'calc(100vh - 146px)', // leaving room for top and bottom bars
                     objectFit: 'contain',
                     userSelect: 'none',
                     borderRadius: '3px',
@@ -1806,6 +1968,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                   }}
                 />
               </div>
+
               {showHeartPop && (
                 <div
                   className="animate-heart-pop"
@@ -1822,29 +1985,50 @@ export default function GuestGalleryPhotos({ params }: Props) {
                   </svg>
                 </div>
               )}
-            </div>
 
-            {/* Next arrow */}
-            {activePhotoIndex < activePhotosList.length - 1 && (
-              <button
-                onClick={e => { e.stopPropagation(); handleNextPhoto() }}
-                aria-label="Next"
-                style={{
-                  position: 'absolute', right: '1.25rem', zIndex: 10,
-                  width: '48px', height: '48px', borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.07)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'rgba(255,255,255,0.6)', transition: 'background 0.2s', flexShrink: 0,
-                }}
-                onMouseOver={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.14)')}
-                onMouseOut={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
-              >
-                <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="1,1 8,7.5 1,14"/>
-                </svg>
-              </button>
-            )}
+              {/* Next arrow (Only visible if zoomScale is 1 and not last photo) */}
+              {zoomScale === 1 && activePhotoIndex < activePhotosList.length - 1 && (
+                <button
+                  onClick={e => { e.stopPropagation(); handleNextPhoto() }}
+                  onPointerDown={e => e.stopPropagation()}
+                  onPointerUp={e => e.stopPropagation()}
+                  aria-label="Next"
+                  style={{
+                    position: 'absolute',
+                    right: '1rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    zIndex: 20,
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '50%',
+                    background: 'rgba(15, 15, 15, 0.45)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    transition: 'background 0.2s, transform 0.2s',
+                    flexShrink: 0,
+                  }}
+                  onMouseOver={e => {
+                    e.currentTarget.style.background = 'rgba(15, 15, 15, 0.65)';
+                    e.currentTarget.style.transform = 'translateY(-50%) scale(1.05)';
+                  }}
+                  onMouseOut={e => {
+                    e.currentTarget.style.background = 'rgba(15, 15, 15, 0.45)';
+                    e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
+                  }}
+                >
+                  <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="1,1 8,7.5 1,14"/>
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Bottom action bar */}
