@@ -7,37 +7,64 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://os.mistyvisuals.com'
+  
+  const apiUrls = [
+    process.env.NEXT_PUBLIC_API_URL,
+    'https://mycircle.mistyvisuals.com',
+    'https://os.mistyvisuals.com',
+    'http://localhost:3004'
+  ].filter(Boolean) as string[]
 
-  try {
-    const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}`, {
-      next: { revalidate: 60 } // Cache for 60 seconds
-    })
-    if (!res.ok) return {}
-    const event = await res.json()
+  let event: any = null
 
-    const title = event.title || 'Misty Visuals Gallery'
-    const desc = `View the wedding gallery for ${event.title || 'Misty Visuals'}.`
-    const images = event.coverPhotoUrl ? [event.coverPhotoUrl] : []
+  for (const baseUrl of apiUrls) {
+    try {
+      const res = await fetch(`${baseUrl}/api/gallery/public/events/${slug}`, {
+        next: { revalidate: 60 } // Cache for 60 seconds
+      })
+      if (res.ok) {
+        event = await res.json()
+        break
+      }
+    } catch (e) {
+      // Try next fallback
+    }
+  }
 
-    return {
+  const title = event?.title || 'Misty Visuals Gallery'
+  const desc = event?.title 
+    ? `View the wedding gallery for ${event.title}.` 
+    : 'View the wedding gallery on Misty Visuals My Circle.'
+
+  let imageUrl = event?.coverPhotoUrl || ''
+  if (imageUrl && imageUrl.startsWith('/')) {
+    imageUrl = `https://mycircle.mistyvisuals.com${imageUrl}`
+  } else if (!imageUrl) {
+    imageUrl = 'https://mycircle.mistyvisuals.com/logo-white.png'
+  }
+
+  return {
+    title,
+    description: desc,
+    openGraph: {
       title,
       description: desc,
-      openGraph: {
-        title,
-        description: desc,
-        images,
-        type: 'website',
-      },
-      twitter: {
-        card: 'summary_large_image',
-        title,
-        description: desc,
-        images,
-      }
+      images: [
+        {
+          url: imageUrl,
+          width: 1200,
+          height: 630,
+          alt: title,
+        }
+      ],
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description: desc,
+      images: [imageUrl],
     }
-  } catch (e) {
-    return {}
   }
 }
 
