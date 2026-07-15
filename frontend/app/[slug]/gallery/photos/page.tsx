@@ -161,6 +161,30 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const swipeStartYRef = useRef<number | null>(null)
   const gesturePreventLikeRef = useRef(false)
 
+  const loadFavoritesList = useCallback(async () => {
+    setLoadingFavorites(true)
+    const token = localStorage.getItem(`mv_gallery_token_${slug}`)
+    if (!token) {
+      setLoadingFavorites(false)
+      return
+    }
+
+    try {
+      const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/favorites`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (!res.ok) throw new Error('Failed to load favorites')
+      const data = await res.json()
+      setFavoritesList(data.photos || [])
+    } catch (err) {
+      console.error('Error loading favorites:', err)
+    } finally {
+      setLoadingFavorites(false)
+    }
+  }, [slug, apiUrl])
+
   useEffect(() => {
     setHighResLoaded(false)
     setZoomScale(1)
@@ -715,29 +739,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
     }
   }
 
-  const loadFavoritesList = useCallback(async () => {
-    setLoadingFavorites(true)
-    const token = localStorage.getItem(`mv_gallery_token_${slug}`)
-    if (!token) {
-      setLoadingFavorites(false)
-      return
-    }
-
-    try {
-      const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/favorites`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      if (!res.ok) throw new Error('Failed to load favorites')
-      const data = await res.json()
-      setFavoritesList(data.photos || [])
-    } catch (err) {
-      console.error('Error loading favorites:', err)
-    } finally {
-      setLoadingFavorites(false)
-    }
-  }, [slug, apiUrl])
 
   const prefetchNextBatch = useCallback(async (tab: string, nextOffset: number) => {
     const token = localStorage.getItem(`mv_gallery_token_${slug}`)
