@@ -1,4 +1,3 @@
-const crypto = require('crypto');
 const { prisma } = require('../prisma');
 
 // Middleware helper to verify guest JWT token
@@ -17,14 +16,7 @@ async function verifyGuestAuth(req, reply) {
     }
 
     // Access fastify instance via req.server
-    let decoded = null;
-    try {
-      const sharedSecret = 'mistyvisuals-shared-preview-secret-key-2026';
-      decoded = req.server.jwt.verify(token, { secret: sharedSecret });
-    } catch (err) {
-      // Fallback to default verify
-      decoded = req.server.jwt.verify(token);
-    }
+    const decoded = req.server.jwt.verify(token);
     let isAdminPreview = false;
     if (decoded.role !== 'guest') {
       if (decoded.isAdminPreview && req.params.slug && decoded.slug.toLowerCase().trim() === req.params.slug.toLowerCase().trim()) {

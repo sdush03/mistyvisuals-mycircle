@@ -614,9 +614,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
     }
 
     // Fetch public event details
-    const eventHeaders: Record<string, string> = {}
-    if (token) eventHeaders['Authorization'] = `Bearer ${token}`
-    fetch(`${apiUrl}/api/gallery/public/events/${slug}`, { headers: eventHeaders })
+    fetch(`${apiUrl}/api/gallery/public/events/${slug}`)
       .then(res => {
         if (!res.ok) throw new Error('Gallery not found')
         return res.json()

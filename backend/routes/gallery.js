@@ -64,17 +64,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
     try {
       const token = req.query.previewToken || req.headers['x-preview-token'] || (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') && req.headers.authorization.split(' ')[1]);
       if (!token) return null;
-      
-      let decoded = null;
-      try {
-        const sharedSecret = 'mistyvisuals-shared-preview-secret-key-2026';
-        decoded = fastify.jwt.verify(token, { secret: sharedSecret });
-      } catch (err) {
-        // Fallback to default verify
-        decoded = fastify.jwt.verify(token);
-      }
-
-      if (decoded && decoded.isAdminPreview && req.params.slug && decoded.slug.toLowerCase().trim() === req.params.slug.toLowerCase().trim()) {
+      const decoded = fastify.jwt.verify(token);
+      if (decoded.isAdminPreview && req.params.slug && decoded.slug.toLowerCase().trim() === req.params.slug.toLowerCase().trim()) {
         return decoded;
       }
     } catch (e) {

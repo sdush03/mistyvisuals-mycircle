@@ -62,8 +62,10 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
             hasFullAccess: true,
             isPreviewMode: true
           }
+          localStorage.setItem(`mv_gallery_token_${slug}`, previewToken)
+          localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(localGuest))
           setGuest(localGuest)
-          setLoading(false)
+          router.push(`/${slug}/gallery/photos`)
           return
         }
 
@@ -315,10 +317,7 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
         cursor: showLoginModal ? 'default' : 'pointer'
       }}
       onClick={() => {
-        if (guest?.isPreviewMode) {
-          const token = localStorage.getItem(`mv_gallery_preview_token_${slug}`) || ''
-          handleLoginSuccess(guest, token)
-        } else if (!showLoginModal) {
+        if (!showLoginModal) {
           setShowLoginModal(true)
         }
       }}
@@ -388,15 +387,7 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
         )}
 
         <button 
-          onClick={(e) => { 
-            e.stopPropagation(); 
-            if (guest?.isPreviewMode) {
-              const token = localStorage.getItem(`mv_gallery_preview_token_${slug}`) || ''
-              handleLoginSuccess(guest, token)
-            } else {
-              setShowLoginModal(true); 
-            }
-          }}
+          onClick={(e) => { e.stopPropagation(); setShowLoginModal(true); }}
           className="cover-cta"
         >
           Enter Gallery
