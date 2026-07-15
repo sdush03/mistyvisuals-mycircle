@@ -14,6 +14,8 @@ type Props = {
 export default function GuestGalleryPhotos({ params }: Props) {
   const { slug } = use(params)
   const router = useRouter()
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
+  const fileInputRef = useRef<HTMLInputElement>(null)
   
   const [event, setEvent] = useState<any>(null)
   const [guest, setGuest] = useState<any>(null)
@@ -454,9 +456,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
     return columns
   }
-
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
 
   // Derive available tabs directly from event.tabs (no need to scan loaded photos).
   // Hide tabs that have no photos yet only if they've been attempted (hasMore=false, photos=[]).
