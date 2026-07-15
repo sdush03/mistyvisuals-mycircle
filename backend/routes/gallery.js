@@ -2266,6 +2266,101 @@ module.exports = async function galleryRoutes(fastify, opts) {
     }
   });
 
+  // Track impressions and mark photos as discovered
+  fastify.post('/api/gallery/public/events/:slug/analytics/viewed', { preHandler: verifyGuestAuth }, async (req, reply) => {
+    const eventId = req.guest.eventId;
+    const guestId = req.guest.guestId;
+    const { photoIds } = req.body;
+
+    if (!photoIds || !Array.isArray(photoIds) || photoIds.length === 0) {
+      return reply.code(400).send({ error: 'Invalid or missing photoIds' });
+    }
+
+    try {
+      const validPhotoIds = photoIds.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+      if (validPhotoIds.length === 0) return { success: true };
+
+      await prisma.$transaction([
+        // Increment guest impressions by the unique batch size
+        prisma.guest.update({
+          where: { id: guestId },
+          data: { impressions: { increment: validPhotoIds.length } }
+        }),
+        // Mark all these photos as discovered
+        prisma.photo.updateMany({
+          where: {
+            id: { in: validPhotoIds },
+            eventId: eventId,
+            discovered: false
+          },
+          data: { discovered: true }
+        })
+      ]);
+
+      return { success: true };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to record viewed analytics' });
+    }
+  });
+
+  // Get overall and participant analytics (Admin or Admin Preview only)
+  fastify.get('/api/gallery/public/events/:slug/analytics', { preHandler: verifyGuestAuth }, async (req, reply) => {
+    let isAdmin = req.guest.isPreviewMode;
+    if (!isAdmin) {
+      const adminAuth = requireAdmin(req, reply);
+      if (!adminAuth) return;
+    }
+
+    const eventId = req.guest.eventId;
+    try {
+      const totalPhotos = await prisma.photo.count({ where: { eventId } });
+      const discoveredCount = await prisma.photo.count({ where: { eventId, discovered: true } });
+
+      const aggregates = await prisma.guest.aggregate({
+        where: { eventId },
+        _sum: {
+          impressions: true,
+          downloadCount: true
+        },
+        _count: {
+          id: true
+        }
+      });
+
+      const totalImpressions = aggregates._sum.impressions || 0;
+      const totalDownloads = aggregates._sum.downloadCount || 0;
+      const registeredUsers = aggregates._count.id || 0;
+
+      const guests = await prisma.guest.findMany({
+        where: { eventId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phoneNumber: true,
+          impressions: true,
+          matchCount: true,
+          downloadCount: true
+        },
+        orderBy: { impressions: 'desc' }
+      });
+
+      return {
+        summary: {
+          totalImpressions,
+          photosDiscovered: `${discoveredCount}/${totalPhotos}`,
+          photosDownloaded: totalDownloads,
+          registeredUsers
+        },
+        guests
+      };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to retrieve analytics' });
+    }
+  });
+
   // Get matched photos of the guest using their saved selfie vector
   fastify.get('/api/gallery/public/events/:slug/matched-photos', { preHandler: verifyGuestAuth }, async (req, reply) => {
     const eventId = req.guest.eventId;
@@ -2406,6 +2501,16 @@ module.exports = async function galleryRoutes(fastify, opts) {
         isLiked: p.likes && p.likes.length > 0
       }));
 
+      // Save matches count to Guest table for analytics
+      try {
+        await prisma.guest.update({
+          where: { id: guestId },
+          data: { matchCount: mappedPhotos.length }
+        });
+      } catch (dbErr) {
+        req.log.error('Failed to update guest matchCount:', dbErr.message);
+      }
+
       return { photos: mappedPhotos };
     } catch (err) {
       req.log.error(err);
@@ -2520,6 +2625,16 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
       if (photos.length === 0) {
         return reply.code(400).send({ error: 'No matched photos found' });
+      }
+
+      // Increment downloadCount of the guest
+      try {
+        await prisma.guest.update({
+          where: { id: guestId },
+          data: { downloadCount: { increment: photos.length } }
+        });
+      } catch (dbErr) {
+        req.log.error('Failed to update guest downloadCount in download-my-photos:', dbErr.message);
       }
 
       const archiver = getArchiver();
@@ -3371,6 +3486,25 @@ module.exports = async function galleryRoutes(fastify, opts) {
       reply.header('Content-Type', contentType);
       reply.header('Content-Disposition', `attachment; filename="${filename || 'download.jpg'}"`);
       reply.header('Access-Control-Allow-Origin', '*');
+
+      // Track download for analytics if guest token is present
+      try {
+        let guestToken = req.query.token;
+        if (!guestToken && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+          guestToken = req.headers.authorization.split(' ')[1];
+        }
+        if (guestToken) {
+          const decoded = fastify.jwt.verify(guestToken);
+          if (decoded && decoded.guestId) {
+            await prisma.guest.update({
+              where: { id: decoded.guestId },
+              data: { downloadCount: { increment: 1 } }
+            });
+          }
+        }
+      } catch (tokenErr) {
+        // Silent error if token is invalid or expired
+      }
 
       return reply.send(buffer);
     } catch (err) {

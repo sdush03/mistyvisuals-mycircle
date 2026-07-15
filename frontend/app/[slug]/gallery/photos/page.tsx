@@ -16,6 +16,89 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const router = useRouter()
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Scroll impressions analytics queue and sync flush
+  const viewedQueueRef = useRef<Set<number>>(new Set());
+  const flushTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const flushViewedQueue = useCallback(() => {
+    if (flushTimeoutRef.current) clearTimeout(flushTimeoutRef.current);
+
+    flushTimeoutRef.current = setTimeout(async () => {
+      const queue = Array.from(viewedQueueRef.current);
+      if (queue.length === 0) return;
+
+      const unflushed = queue.filter(id => {
+        const key = `flushed_photo_${slug}_${id}`;
+        return !localStorage.getItem(key);
+      });
+
+      if (unflushed.length === 0) return;
+
+      const token = localStorage.getItem(`mv_gallery_token_${slug}`);
+      if (!token) return;
+
+      try {
+        const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/analytics/viewed`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ photoIds: unflushed })
+        });
+        if (res.ok) {
+          unflushed.forEach(id => {
+            localStorage.setItem(`flushed_photo_${slug}_${id}`, '1');
+          });
+        }
+      } catch (err) {
+        console.error('Failed to sync viewed impressions:', err);
+      }
+    }, 3000);
+  }, [slug, apiUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (flushTimeoutRef.current) clearTimeout(flushTimeoutRef.current);
+    };
+  }, []);
+
+  // Set up intersection observer for scroll impressions
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const observer = new IntersectionObserver((entries) => {
+      const newlyViewed: number[] = [];
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const photoIdStr = entry.target.getAttribute('data-photo-id');
+          if (photoIdStr) {
+            const photoId = parseInt(photoIdStr, 10);
+            if (!isNaN(photoId) && !viewedQueueRef.current.has(photoId)) {
+              viewedQueueRef.current.add(photoId);
+              newlyViewed.push(photoId);
+            }
+          }
+        }
+      });
+
+      if (newlyViewed.length > 0) {
+        flushViewedQueue();
+      }
+    }, {
+      root: null,
+      rootMargin: '0px',
+      threshold: 0.1
+    });
+
+    const elements = document.querySelectorAll('.observed-photo');
+    elements.forEach((el) => observer.observe(el));
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [viewMode, photos, allPhotos, favoritesList, flushViewedQueue]);
   
   const [event, setEvent] = useState<any>(null)
   const [guest, setGuest] = useState<any>(null)
@@ -24,6 +107,38 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const [hasSearched, setHasSearched] = useState(false)
   const [searching, setSearching] = useState(false)
   const [selfiePreview, setSelfiePreview] = useState<string | null>(null)
+
+  // Analytics states and fetch logic
+  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false)
+  const [analyticsData, setAnalyticsData] = useState<any>(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+  const [analyticsSearch, setAnalyticsSearch] = useState('')
+
+  const fetchAnalytics = async () => {
+    setAnalyticsLoading(true)
+    const token = localStorage.getItem(`mv_gallery_token_${slug}`)
+    try {
+      const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/analytics`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setAnalyticsData(data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch analytics:', err)
+    } finally {
+      setAnalyticsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (showAnalyticsModal) {
+      fetchAnalytics()
+    }
+  }, [showAnalyticsModal])
 
   // Helper to fetch selfie image with auth and return a blob URL
   const fetchAuthenticatedSelfie = async (selfieGuestId: number) => {
@@ -891,8 +1006,9 @@ export default function GuestGalleryPhotos({ params }: Props) {
       return;
     }
     try {
+      const token = localStorage.getItem(`mv_gallery_token_${slug}`) || '';
       // Force native download via backend download-proxy (setting Content-Disposition header)
-      const downloadUrl = `${apiUrl}/api/gallery/public/download-proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`
+      const downloadUrl = `${apiUrl}/api/gallery/public/download-proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}&token=${encodeURIComponent(token)}`
       const a = document.createElement('a')
       a.href = downloadUrl
       a.download = filename
@@ -910,6 +1026,38 @@ export default function GuestGalleryPhotos({ params }: Props) {
       document.body.removeChild(a)
     }
   }
+
+  const handleExportCSV = () => {
+    if (!analyticsData || !analyticsData.guests) return;
+    
+    // Prepare CSV headers and rows
+    const headers = ['Name', 'Email', 'Phone Number', 'Impressions', 'Results (Matches)', 'Photos Downloaded'];
+    const rows = analyticsData.guests.map((g: any) => [
+      g.name || 'Anonymous',
+      g.email,
+      g.phoneNumber || '',
+      g.impressions || 0,
+      g.matchCount || 0,
+      g.downloadCount || 0
+    ]);
+
+    // Construct CSV file data string
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((r: any[]) => r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    // Create and click virtual download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const filename = `${(event?.title || 'gallery').replace(/\s+/g, '_')}_analytics.csv`;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -1215,6 +1363,33 @@ export default function GuestGalleryPhotos({ params }: Props) {
           display: 'flex', alignItems: 'center', gap: 'clamp(0.5rem, 2vw, 1rem)',
           zIndex: 40,
         }}>
+          {guest?.isPreviewMode && (
+            <button
+              onClick={() => setShowAnalyticsModal(true)}
+              aria-label="Gallery Settings"
+              style={{
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                borderRadius: '50%',
+                width: '38px',
+                height: '38px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ffffff',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                outline: 'none',
+              }}
+              onMouseOver={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.18)'}
+              onMouseOut={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </button>
+          )}
           <UserAvatarDropdown
             selfieUrl={selfiePreview}
             onProfileClick={openProfile}
@@ -1529,7 +1704,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
                           onClick={() => setActivePhotoIndex(globalIdx)}
                           onContextMenu={(e) => e.preventDefault()}
                           style={{ cursor: 'pointer', overflow: 'hidden', lineHeight: 0, aspectRatio: p._gridAspect || '2/3', position: 'relative', userSelect: 'none', WebkitTouchCallout: 'none' }}
-                          className="gallery-item group"
+                          className="gallery-item group observed-photo"
+                          data-photo-id={p.id}
                         >
                           <img src={p.thumbnailUrl || p.r2Url} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
                           {/* Bottom-Right Controls (Download & Heart/Like) */}
@@ -1641,7 +1817,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
                           onClick={() => setActivePhotoIndex(globalIdx)}
                           onContextMenu={(e) => e.preventDefault()}
                           style={{ cursor: 'pointer', overflow: 'hidden', lineHeight: 0, aspectRatio: p._gridAspect || '2/3', position: 'relative', userSelect: 'none', WebkitTouchCallout: 'none' }}
-                          className="gallery-item group"
+                          className="gallery-item group observed-photo"
+                          data-photo-id={p.id}
                         >
                           <img src={p.thumbnailUrl || p.r2Url} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
                           {/* Bottom-Right Controls (Download & Heart/Like) */}
@@ -1758,7 +1935,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
                             onClick={() => setActivePhotoIndex(globalIdx)}
                             onContextMenu={(e) => e.preventDefault()}
                             style={{ cursor: 'pointer', overflow: 'hidden', lineHeight: 0, aspectRatio: p._gridAspect || '2/3', position: 'relative', userSelect: 'none', WebkitTouchCallout: 'none' }}
-                            className="gallery-item group"
+                            className="gallery-item group observed-photo"
+                            data-photo-id={p.id}
                           >
                             <img src={p.thumbnailUrl || p.r2Url} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
                             {/* Bottom-Right Controls (Download & Heart/Like) */}
@@ -2691,6 +2869,243 @@ export default function GuestGalleryPhotos({ params }: Props) {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Analytics Modal overlay */}
+      {showAnalyticsModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 400,
+          background: 'rgba(255, 255, 255, 0.98)',
+          overflowY: 'auto',
+          padding: '2.5rem clamp(1rem, 5vw, 4rem)',
+          fontFamily: 'Montserrat, system-ui, sans-serif',
+          color: '#1c1a18',
+        }}>
+          {/* Header */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            borderBottom: '1px solid #e2e8f0', paddingBottom: '1.5rem', marginBottom: '2rem'
+          }}>
+            <div>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 600, letterSpacing: '-0.02em', margin: '0 0 0.25rem 0' }}>
+                {event?.title || 'Gallery Analytics'}
+              </h2>
+              {event?.date && (
+                <p style={{ fontSize: '0.875rem', color: '#64748b', margin: 0 }}>
+                  {new Date(event.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                onClick={handleExportCSV}
+                style={{
+                  background: '#0284c7', color: '#ffffff', border: 'none',
+                  borderRadius: '6px', padding: '0.6rem 1.5rem', fontSize: '0.875rem',
+                  fontWeight: 500, cursor: 'pointer', transition: 'background 0.2s',
+                }}
+                onMouseOver={e => e.currentTarget.style.background = '#0369a1'}
+                onMouseOut={e => e.currentTarget.style.background = '#0284c7'}
+              >
+                Export
+              </button>
+              <button
+                onClick={() => setShowAnalyticsModal(false)}
+                style={{
+                  background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0',
+                  borderRadius: '6px', padding: '0.6rem 1.25rem', fontSize: '0.875rem',
+                  fontWeight: 500, cursor: 'pointer', transition: 'all 0.2s',
+                }}
+                onMouseOver={e => {
+                  e.currentTarget.style.background = '#e2e8f0';
+                  e.currentTarget.style.color = '#1e293b';
+                }}
+                onMouseOut={e => {
+                  e.currentTarget.style.background = '#f1f5f9';
+                  e.currentTarget.style.color = '#475569';
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+
+          {analyticsLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '6rem 0' }}>
+              <div className="spinner" style={{
+                width: '36px', height: '36px', border: '3px solid #e2e8f0',
+                borderTop: '3px solid #0284c7', borderRadius: '50%',
+                animation: 'spin 1s linear infinite', marginBottom: '1.25rem'
+              }}></div>
+              <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Loading analytics dashboard...</p>
+            </div>
+          ) : (
+            <>
+              {/* Summary Cards Grid */}
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: '1.5rem', marginBottom: '2.5rem'
+              }}>
+                {/* Impressions Card */}
+                <div style={{
+                  background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0',
+                  padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                }}>
+                  <div style={{ fontSize: '2.25rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.5rem' }}>
+                    {analyticsData?.summary?.totalImpressions || 0}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#64748b', fontSize: '0.8125rem', fontWeight: 500 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    Total Impressions
+                  </div>
+                </div>
+
+                {/* Photos Discovered Card */}
+                <div style={{
+                  background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0',
+                  padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                }}>
+                  <div style={{ fontSize: '2.25rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.5rem' }}>
+                    {analyticsData?.summary?.photosDiscovered || '0/0'}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#64748b', fontSize: '0.8125rem', fontWeight: 500 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                      <circle cx="9" cy="9" r="2" />
+                      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                    </svg>
+                    Photos Discovered
+                  </div>
+                </div>
+
+                {/* Photos Downloaded Card */}
+                <div style={{
+                  background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0',
+                  padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                }}>
+                  <div style={{ fontSize: '2.25rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.5rem' }}>
+                    {analyticsData?.summary?.photosDownloaded || 0}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#64748b', fontSize: '0.8125rem', fontWeight: 500 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Photos Downloaded
+                  </div>
+                </div>
+
+                {/* Registered Users Card */}
+                <div style={{
+                  background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0',
+                  padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                }}>
+                  <div style={{ fontSize: '2.25rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.5rem' }}>
+                    {analyticsData?.summary?.registeredUsers || 0}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#64748b', fontSize: '0.8125rem', fontWeight: 500 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    Registered Users
+                  </div>
+                </div>
+              </div>
+
+              {/* Participant List Section */}
+              <div style={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: 600, margin: 0 }}>Participants</h3>
+                  <div style={{ position: 'relative', width: '100%', maxWidth: '300px' }}>
+                    <input
+                      type="text"
+                      placeholder="Search participants..."
+                      value={analyticsSearch}
+                      onChange={e => setAnalyticsSearch(e.target.value)}
+                      style={{
+                        width: '100%', padding: '0.5rem 1rem 0.5rem 2.25rem', fontSize: '0.875rem',
+                        border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none',
+                        fontFamily: 'inherit'
+                      }}
+                    />
+                    <svg
+                      width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                      style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)' }}
+                    >
+                      <circle cx="11" cy="11" r="8" />
+                      <path d="m21 21-4.3-4.3" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Table Container */}
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1.5px solid #e2e8f0' }}>
+                        <th style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Participant</th>
+                        <th style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Impressions</th>
+                        <th style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Results</th>
+                        <th style={{ padding: '0.75rem 1rem', fontSize: '0.8125rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Photos downloaded</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analyticsData?.guests && analyticsData.guests
+                        .filter((g: any) => {
+                          const query = analyticsSearch.toLowerCase();
+                          return (g.name || '').toLowerCase().includes(query) ||
+                            (g.email || '').toLowerCase().includes(query) ||
+                            (g.phoneNumber || '').toLowerCase().includes(query);
+                        })
+                        .map((g: any, index: number) => (
+                          <tr key={g.id || index} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s' }}>
+                            <td style={{ padding: '1rem' }}>
+                              <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.9375rem', marginBottom: '0.2rem' }}>
+                                {g.name || 'Anonymous Guest'}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                <span>{g.email}</span>
+                                {g.phoneNumber && (
+                                  <>
+                                    <span style={{ color: '#cbd5e1' }}>|</span>
+                                    <span>{g.phoneNumber}</span>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                            <td style={{ padding: '1rem', color: '#334155', fontSize: '0.9375rem' }}>
+                              {g.impressions || 0}
+                            </td>
+                            <td style={{ padding: '1rem', color: '#334155', fontSize: '0.9375rem' }}>
+                              {g.matchCount > 0 ? g.matchCount : '-'}
+                            </td>
+                            <td style={{ padding: '1rem', color: '#334155', fontSize: '0.9375rem' }}>
+                              {g.downloadCount > 0 ? g.downloadCount : '-'}
+                            </td>
+                          </tr>
+                        ))
+                      }
+                      {(!analyticsData?.guests || analyticsData.guests.length === 0) && (
+                        <tr>
+                          <td colSpan={4} style={{ padding: '3rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '0.875rem' }}>
+                            No registered participants found.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
