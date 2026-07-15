@@ -178,29 +178,64 @@ module.exports = async function galleryRoutes(fastify, opts) {
       }
 
       const decoded = fastify.jwt.verify(token);
+      let isAdminPreview = false;
       if (decoded.role !== 'guest') {
-        return reply.code(403).send({ error: 'Access denied' });
+        if (decoded.isAdminPreview && req.params.slug && decoded.slug.toLowerCase().trim() === req.params.slug.toLowerCase().trim()) {
+          isAdminPreview = true;
+        } else {
+          return reply.code(403).send({ error: 'Access denied' });
+        }
       }
+
+      let event = null;
       // Validate JWT eventId matches the URL slug to prevent cross-event access
       if (req.params.slug) {
-        const event = await prisma.galleryEvent.findUnique({
+        event = await prisma.galleryEvent.findUnique({
           where: { slug: req.params.slug.toLowerCase().trim() }
         });
-        if (!event || event.id !== decoded.eventId) {
+        if (!event) {
+          return reply.code(404).send({ error: 'Event not found' });
+        }
+        if (!isAdminPreview && event.id !== decoded.eventId) {
           return reply.code(403).send({ error: 'Token does not match this event' });
         }
-        if (!event.active) {
+        if (!event.active && !isAdminPreview) {
           return reply.code(403).send({ error: 'Gallery is inactive' });
         }
         req.event = event; // Cache the event for downstream handlers
       }
+
+      let guestId = decoded.guestId;
+      if (isAdminPreview && event) {
+        // Find or create the Admin Preview guest
+        let adminGuest = await prisma.guest.findFirst({
+          where: { eventId: event.id, email: 'admin@mistyvisuals.com' }
+        });
+        if (!adminGuest) {
+          adminGuest = await prisma.guest.create({
+            data: {
+              eventId: event.id,
+              email: 'admin@mistyvisuals.com',
+              name: 'Admin Preview',
+              provider: 'system',
+              providerId: 'admin-preview',
+              hasFullAccess: true
+            }
+          });
+        }
+        guestId = adminGuest.id;
+      }
+
       // Fetch guest status from database to get the real-time access level
       const dbGuest = await prisma.guest.findUnique({
-        where: { id: decoded.guestId }
+        where: { id: guestId }
       });
       req.guest = {
         ...decoded,
-        hasFullAccess: dbGuest ? dbGuest.hasFullAccess : decoded.hasFullAccess
+        guestId,
+        role: 'guest',
+        hasFullAccess: dbGuest ? dbGuest.hasFullAccess : decoded.hasFullAccess,
+        isPreviewMode: isAdminPreview
       };
     } catch (err) {
       return reply.code(401).send({ error: 'Unauthorized session' });
@@ -1233,8 +1268,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
         email: guest.email,
         phoneNumber: guest.phoneNumber,
         hasFullAccess: guest.hasFullAccess,
-        likesCount: guest.likes.length,
-        likedPhotos: guest.likes.map(like => ({
+        likesCount: guest.likes.filter(like => like.photo).length,
+        likedPhotos: guest.likes.filter(like => like.photo).map(like => ({
           id: like.photo.id,
           r2Url: like.photo.r2Url,
           filename: like.photo.filename,
@@ -1422,6 +1457,25 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
           if (decoded.role === 'admin' || (decoded.roles && decoded.roles.includes('admin'))) {
             hasFullAccess = true;
+          } else if (decoded.isAdminPreview && decoded.slug.toLowerCase().trim() === slug) {
+            hasFullAccess = true;
+            // Fetch or create the Admin Preview guest
+            let adminGuest = await prisma.guest.findFirst({
+              where: { eventId: event.id, email: 'admin@mistyvisuals.com' }
+            });
+            if (!adminGuest) {
+              adminGuest = await prisma.guest.create({
+                data: {
+                  eventId: event.id,
+                  email: 'admin@mistyvisuals.com',
+                  name: 'Admin Preview',
+                  provider: 'system',
+                  providerId: 'admin-preview',
+                  hasFullAccess: true
+                }
+              });
+            }
+            guestId = adminGuest.id;
           } else if (decoded.role === 'guest' && decoded.eventId === event.id) {
             guestId = decoded.guestId;
             const dbGuest = await prisma.guest.findUnique({
