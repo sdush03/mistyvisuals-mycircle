@@ -3284,9 +3284,21 @@ module.exports = async function galleryRoutes(fastify, opts) {
       }
     }
 
-    const selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${resolvedUserId}.jpg`);
+    let selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${resolvedUserId}.jpg`);
     if (!fs.existsSync(selfiePath)) {
-      return reply.code(404).send({ error: 'Selfie not found' });
+      // Fallback: check guest_${guestId}.jpg if user_${resolvedUserId}.jpg doesn't exist
+      const fallbackPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${guestId}.jpg`);
+      if (fs.existsSync(fallbackPath)) {
+        selfiePath = fallbackPath;
+      } else {
+        // Double-check: check guest_${resolvedUserId}.jpg just in case
+        const fallbackResolvedPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${resolvedUserId}.jpg`);
+        if (fs.existsSync(fallbackResolvedPath)) {
+          selfiePath = fallbackResolvedPath;
+        } else {
+          return reply.code(404).send({ error: 'Selfie not found' });
+        }
+      }
     }
     reply.type('image/jpeg');
     return reply.send(fs.createReadStream(selfiePath));
