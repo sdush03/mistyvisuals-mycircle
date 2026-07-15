@@ -17,88 +17,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Scroll impressions analytics queue and sync flush
-  const viewedQueueRef = useRef<Set<number>>(new Set());
-  const flushTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const flushViewedQueue = useCallback(() => {
-    if (flushTimeoutRef.current) clearTimeout(flushTimeoutRef.current);
-
-    flushTimeoutRef.current = setTimeout(async () => {
-      const queue = Array.from(viewedQueueRef.current);
-      if (queue.length === 0) return;
-
-      const unflushed = queue.filter(id => {
-        const key = `flushed_photo_${slug}_${id}`;
-        return !localStorage.getItem(key);
-      });
-
-      if (unflushed.length === 0) return;
-
-      const token = localStorage.getItem(`mv_gallery_token_${slug}`);
-      if (!token) return;
-
-      try {
-        const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/analytics/viewed`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ photoIds: unflushed })
-        });
-        if (res.ok) {
-          unflushed.forEach(id => {
-            localStorage.setItem(`flushed_photo_${slug}_${id}`, '1');
-          });
-        }
-      } catch (err) {
-        console.error('Failed to sync viewed impressions:', err);
-      }
-    }, 3000);
-  }, [slug, apiUrl]);
-
-  useEffect(() => {
-    return () => {
-      if (flushTimeoutRef.current) clearTimeout(flushTimeoutRef.current);
-    };
-  }, []);
-
-  // Set up intersection observer for scroll impressions
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const observer = new IntersectionObserver((entries) => {
-      const newlyViewed: number[] = [];
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          const photoIdStr = entry.target.getAttribute('data-photo-id');
-          if (photoIdStr) {
-            const photoId = parseInt(photoIdStr, 10);
-            if (!isNaN(photoId) && !viewedQueueRef.current.has(photoId)) {
-              viewedQueueRef.current.add(photoId);
-              newlyViewed.push(photoId);
-            }
-          }
-        }
-      });
-
-      if (newlyViewed.length > 0) {
-        flushViewedQueue();
-      }
-    }, {
-      root: null,
-      rootMargin: '0px',
-      threshold: 0.1
-    });
-
-    const elements = document.querySelectorAll('.observed-photo');
-    elements.forEach((el) => observer.observe(el));
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [viewMode, photos, allPhotos, favoritesList, flushViewedQueue]);
   
   const [event, setEvent] = useState<any>(null)
   const [guest, setGuest] = useState<any>(null)
@@ -225,6 +144,89 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
   // Sentinel ref for IntersectionObserver (infinite scroll trigger)
   const sentinelRef = useRef<HTMLDivElement>(null)
+
+  // Scroll impressions analytics queue and sync flush
+  const viewedQueueRef = useRef<Set<number>>(new Set())
+  const flushTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const flushViewedQueue = useCallback(() => {
+    if (flushTimeoutRef.current) clearTimeout(flushTimeoutRef.current)
+
+    flushTimeoutRef.current = setTimeout(async () => {
+      const queue = Array.from(viewedQueueRef.current)
+      if (queue.length === 0) return
+
+      const unflushed = queue.filter(id => {
+        const key = `flushed_photo_${slug}_${id}`
+        return !localStorage.getItem(key)
+      })
+
+      if (unflushed.length === 0) return
+
+      const token = localStorage.getItem(`mv_gallery_token_${slug}`)
+      if (!token) return
+
+      try {
+        const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/analytics/viewed`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ photoIds: unflushed })
+        })
+        if (res.ok) {
+          unflushed.forEach(id => {
+            localStorage.setItem(`flushed_photo_${slug}_${id}`, '1')
+          })
+        }
+      } catch (err) {
+        console.error('Failed to sync viewed impressions:', err)
+      }
+    }, 3000)
+  }, [slug, apiUrl])
+
+  useEffect(() => {
+    return () => {
+      if (flushTimeoutRef.current) clearTimeout(flushTimeoutRef.current)
+    }
+  }, [])
+
+  // Set up intersection observer for scroll impressions
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const observer = new IntersectionObserver((entries) => {
+      const newlyViewed: number[] = [];
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const photoIdStr = entry.target.getAttribute('data-photo-id')
+          if (photoIdStr) {
+            const photoId = parseInt(photoIdStr, 10)
+            if (!isNaN(photoId) && !viewedQueueRef.current.has(photoId)) {
+              viewedQueueRef.current.add(photoId)
+              newlyViewed.push(photoId)
+            }
+          }
+        }
+      })
+
+      if (newlyViewed.length > 0) {
+        flushViewedQueue()
+      }
+    }, {
+      root: null,
+      rootMargin: '0px',
+      threshold: 0.1
+    })
+
+    const elements = document.querySelectorAll('.observed-photo')
+    elements.forEach((el) => observer.observe(el))
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [viewMode, photos, allPhotos, favoritesList, flushViewedQueue])
 
 
   
