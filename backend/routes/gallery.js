@@ -1589,6 +1589,70 @@ module.exports = async function galleryRoutes(fastify, opts) {
     }
   });
 
+  // Get guest's favorite/liked photos (public guest endpoint)
+  fastify.get('/api/gallery/public/events/:slug/favorites', { preHandler: verifyGuestAuth }, async (req, reply) => {
+    const slug = req.params.slug.toLowerCase().trim();
+    const guestId = req.guest.guestId;
+
+    try {
+      const event = await prisma.galleryEvent.findUnique({ where: { slug } });
+      if (!event) {
+        return reply.code(404).send({ error: 'Gallery not found' });
+      }
+
+      // Fetch the guest's likes with photos
+      const likes = await prisma.photoLike.findMany({
+        where: { guestId },
+        include: {
+          photo: {
+            select: {
+              id: true,
+              r2Url: true,
+              thumbnailUrl: true,
+              filename: true,
+              originalFileSize: true,
+              tabName: true,
+              capturedAt: true,
+              width: true,
+              height: true,
+              _count: {
+                select: {
+                  likes: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      // Filter out likes on deleted photos and map to client-friendly photo format
+      const validLikes = likes.filter(like => like.photo);
+      const mappedPhotos = validLikes.map(like => {
+        const p = like.photo;
+        return {
+          id: p.id,
+          r2Url: p.r2Url,
+          thumbnailUrl: getDerivedThumbnail(p.thumbnailUrl, p.r2Url),
+          filename: p.filename,
+          originalSize: p.originalFileSize,
+          tabName: p.tabName,
+          capturedAt: p.capturedAt,
+          width: p.width,
+          height: p.height,
+          likeCount: p._count?.likes || 0,
+          isLiked: true
+        };
+      });
+
+      // Do NOT cache favorites aggressively so it updates in real time
+      reply.header('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+      return { photos: mappedPhotos };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to retrieve favorite photos' });
+    }
+  });
+
   // Toggle like status for a photo
   fastify.post('/api/gallery/public/events/:slug/photos/:photoId/like', { preHandler: verifyGuestAuth }, async (req, reply) => {
     const slug = req.params.slug.toLowerCase().trim();

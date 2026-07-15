@@ -126,6 +126,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
   // Tabs & Views
   const [viewMode, setViewMode] = useState<'matched' | 'all' | 'favorites'>('all')
+  const [favoritesList, setFavoritesList] = useState<any[]>([])
+  const [loadingFavorites, setLoadingFavorites] = useState(false)
   // Per-tab photo cache: tabKey -> { photos[], offset, hasMore }
   const [tabCache, setTabCache] = useState<Record<string, { photos: any[], offset: number, hasMore: boolean }>>({})
   const [loadingMore, setLoadingMore] = useState(false)
@@ -186,21 +188,20 @@ export default function GuestGalleryPhotos({ params }: Props) {
     } else if (viewMode === 'all') {
       return allPhotos
     } else if (viewMode === 'favorites') {
-      // Favorites come from ALL loaded pages across ALL tabs
-      return Object.values(tabCache).flatMap(t => t.photos).filter(p => p.isLiked)
+      return favoritesList
     }
     return []
-  }, [viewMode, photos, allPhotos, tabCache])
+  }, [viewMode, photos, allPhotos, favoritesList])
 
   const hasFavorites = useMemo(() => {
-    return Object.values(tabCache).some(t => t.photos.some(p => p.isLiked));
-  }, [tabCache]);
+    return favoritesList.length > 0
+  }, [favoritesList])
 
   useEffect(() => {
-    if (viewMode === 'favorites' && Object.keys(tabCache).length > 0 && !hasFavorites) {
-      setViewMode('all');
+    if (viewMode === 'favorites') {
+      loadFavoritesList()
     }
-  }, [viewMode, tabCache, hasFavorites]);
+  }, [viewMode, loadFavoritesList])
 
   // Preload natural aspects (fallback for legacy photos lacking width/height columns)
   useEffect(() => {
@@ -555,6 +556,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
             setViewMode(data.profile.hasFullAccess ? 'all' : 'matched')
           }
         }
+        loadFavoritesList()
         setIsProfileSynced(true)
       })
       .catch(err => {
@@ -563,7 +565,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
         localStorage.removeItem(`mv_gallery_guest_${slug}`)
         router.push(`/${slug}/gallery`)
       })
-  }, [slug, router, apiUrl])
+  }, [slug, router, apiUrl, loadFavoritesList])
 
   // Lock body scroll and handle Escape key to close modal
   useEffect(() => {
@@ -681,10 +683,61 @@ export default function GuestGalleryPhotos({ params }: Props) {
         return p
       }))
 
+      // Update in favoritesList state
+      setFavoritesList(prev => {
+        const exists = prev.some(p => p.id === photoId)
+        if (data.liked) {
+          if (exists) {
+            return prev.map(p => p.id === photoId ? { ...p, isLiked: true, likeCount: data.likeCount } : p)
+          } else {
+            // Find photo data in cache or default fallback
+            let foundPhoto = null
+            for (const tab of Object.keys(tabCache)) {
+              const match = tabCache[tab]?.photos.find(p => p.id === photoId)
+              if (match) {
+                foundPhoto = match
+                break
+              }
+            }
+            if (!foundPhoto) {
+              foundPhoto = photos.find(p => p.id === photoId)
+            }
+            const newItem = foundPhoto ? { ...foundPhoto, isLiked: true, likeCount: data.likeCount } : { id: photoId, isLiked: true, likeCount: data.likeCount }
+            return [...prev, newItem]
+          }
+        } else {
+          return prev.filter(p => p.id !== photoId)
+        }
+      })
+
     } catch (err) {
       console.error('Like toggle error:', err)
     }
   }
+
+  const loadFavoritesList = useCallback(async () => {
+    setLoadingFavorites(true)
+    const token = localStorage.getItem(`mv_gallery_token_${slug}`)
+    if (!token) {
+      setLoadingFavorites(false)
+      return
+    }
+
+    try {
+      const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/favorites`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (!res.ok) throw new Error('Failed to load favorites')
+      const data = await res.json()
+      setFavoritesList(data.photos || [])
+    } catch (err) {
+      console.error('Error loading favorites:', err)
+    } finally {
+      setLoadingFavorites(false)
+    }
+  }, [slug, apiUrl])
 
   const prefetchNextBatch = useCallback(async (tab: string, nextOffset: number) => {
     const token = localStorage.getItem(`mv_gallery_token_${slug}`)
@@ -1576,12 +1629,12 @@ export default function GuestGalleryPhotos({ params }: Props) {
         {/* VIEW MODE: MY FAVORITES */}
         {viewMode === 'favorites' && (
           <div className="w-full flex flex-col items-center animate-waterfall">
-            {allPhotos.filter(p => p.isLiked).length > 0 ? (
+            {favoritesList.length > 0 ? (
               <div style={{ display: 'flex', gap: '12px', width: '100%', background: '#fff', padding: '16px clamp(0.75rem, 3vw, 2.5rem) 32px' }} className="story-masonry">
-                {getBalancedColumns(allPhotos.filter(p => p.isLiked)).map((colPhotos, colIdx) => (
+                {getBalancedColumns(favoritesList).map((colPhotos, colIdx) => (
                   <div key={colIdx} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {colPhotos.map((p: any) => {
-                      const globalIdx = allPhotos.filter(p => p.isLiked).findIndex(item => item.r2Url === p.r2Url)
+                      const globalIdx = favoritesList.findIndex(item => item.r2Url === p.r2Url)
                       return (
                         <div
                           key={p.r2Url}
