@@ -13,15 +13,6 @@ const nextConfig = {
     webpackMemoryOptimizations: true,
     cpus: 1,
   },
-  async redirects() {
-    return [
-      {
-        source: '/admin/reports/:path*',
-        destination: '/admin/finance/summaries/:path*',
-        permanent: true,
-      },
-    ]
-  },
   async rewrites() {
     if (!apiTarget) return []
     return [

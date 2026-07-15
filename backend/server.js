@@ -388,6 +388,9 @@ const apiRoutes = async function apiRoutes(api) {}
 fastify.register(require('./routes/gallery'), {
     pool, requireAdmin, requireAuth
 })
+fastify.register(require('./routes/analytics'), {
+    pool, requireAdmin, requireAuth
+})
 // Removed /* ===================== PUBLIC WEBSITE ===================== */
 
 // Removed apiRoutes registration
