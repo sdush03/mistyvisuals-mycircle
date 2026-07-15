@@ -26,20 +26,12 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
       setInviteCode(code)
     }
 
-    const pToken = searchParams.get('previewToken')
-    if (pToken) {
-      localStorage.setItem(`mv_gallery_preview_token_${slug}`, pToken)
-    }
-
     const cToken = localStorage.getItem('mv_circle_token')
     if (cToken) {
       setCircleToken(cToken)
     }
 
-    const activePreviewToken = pToken || localStorage.getItem(`mv_gallery_preview_token_${slug}`)
-    const fetchUrl = activePreviewToken
-      ? `${apiUrl}/api/gallery/public/events/${slug}?previewToken=${activePreviewToken}`
-      : `${apiUrl}/api/gallery/public/events/${slug}`
+    const fetchUrl = `${apiUrl}/api/gallery/public/events/${slug}`
 
     // 1. Fetch public event details
     fetch(fetchUrl)
@@ -49,25 +41,6 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
       })
       .then(async data => {
         setEvent(data)
-
-        // Check if admin preview mode is active
-        if (data.isPreviewMode) {
-          const previewToken = activePreviewToken || ''
-          const localGuest = {
-            id: 999999,
-            name: 'Admin Preview',
-            email: 'admin@mistyvisuals.com',
-            phoneNumber: '9999999999',
-            hasSelfie: true,
-            hasFullAccess: true,
-            isPreviewMode: true
-          }
-          localStorage.setItem(`mv_gallery_token_${slug}`, previewToken)
-          localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(localGuest))
-          setGuest(localGuest)
-          router.push(`/${slug}/gallery/photos`)
-          return
-        }
 
         // 2. Check if already authenticated
         const token = localStorage.getItem(`mv_gallery_token_${slug}`)

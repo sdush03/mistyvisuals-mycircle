@@ -564,7 +564,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
     }
 
     const parsedGuest = JSON.parse(savedGuest)
-    if (!parsedGuest.isPreviewMode && (!parsedGuest.phoneNumber || !parsedGuest.hasSelfie)) {
+    if (!parsedGuest.phoneNumber || !parsedGuest.hasSelfie) {
       router.push(`/${slug}/gallery`)
       return
     }
