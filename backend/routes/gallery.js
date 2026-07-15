@@ -67,7 +67,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
       
       let decoded = null;
       try {
-        const sharedSecret = crypto.createHash('sha256').update(process.env.DATABASE_URL || 'fallback-secret-key').digest('hex');
+        const sharedSecret = 'mistyvisuals-shared-preview-secret-key-2026';
         decoded = fastify.jwt.verify(token, { secret: sharedSecret });
       } catch (err) {
         // Fallback to default verify

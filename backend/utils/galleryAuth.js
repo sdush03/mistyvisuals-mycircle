@@ -19,7 +19,7 @@ async function verifyGuestAuth(req, reply) {
     // Access fastify instance via req.server
     let decoded = null;
     try {
-      const sharedSecret = crypto.createHash('sha256').update(process.env.DATABASE_URL || 'fallback-secret-key').digest('hex');
+      const sharedSecret = 'mistyvisuals-shared-preview-secret-key-2026';
       decoded = req.server.jwt.verify(token, { secret: sharedSecret });
     } catch (err) {
       // Fallback to default verify
