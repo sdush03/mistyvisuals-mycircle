@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { prisma } = require('../prisma');
 const qdrant = require('../utils/qdrant');
 const { uploadAsset, deleteAsset, getPresignedUploadUrl } = require('../utils/r2');
@@ -3194,23 +3195,50 @@ module.exports = async function galleryRoutes(fastify, opts) {
     const guestId = parseInt(req.params.guestId);
     if (isNaN(guestId)) return reply.code(400).send({ error: 'Invalid user ID' });
 
-    // Require auth: guest JWT, family/circle JWT, or admin cookie
+    // Admin Preview dummy guestId check
+    if (guestId === 999999) {
+      return reply.code(404).send({ error: 'Selfie not found' });
+    }
+
+    // Require auth: guest JWT, family/circle JWT, admin cookie, or system HMAC signature
     let authedEmail = null;
     let isAdmin = false;
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      let signatureVerified = false;
       try {
-        const token = authHeader.split(' ')[1];
-        const decoded = fastify.jwt.verify(token);
-        if (decoded.role === 'guest' && decoded.email) {
-          authedEmail = decoded.email;
-        } else if (decoded.role === 'family' && decoded.email) {
-          authedEmail = decoded.email;
-        } else {
-          return reply.code(403).send({ error: 'Access denied' });
+        const parts = token.split('.');
+        if (parts.length === 2) {
+          const payloadStr = Buffer.from(parts[0], 'base64url').toString('utf8');
+          const signature = parts[1];
+          const sharedSecret = crypto.createHash('sha256').update(process.env.DATABASE_URL || 'fallback-secret-key').digest('hex');
+          const expectedSig = crypto.createHmac('sha256', sharedSecret).update(payloadStr).digest('hex');
+          if (signature === expectedSig) {
+            const payload = JSON.parse(payloadStr);
+            if (Math.abs(Date.now() - payload.timestamp) < 300000 && payload.guestId === guestId) {
+              isAdmin = true;
+              signatureVerified = true;
+            }
+          }
         }
       } catch (err) {
-        return reply.code(401).send({ error: 'Invalid or expired token' });
+        req.log.warn(`HMAC validation error: ${err.message}`);
+      }
+
+      if (!signatureVerified) {
+        try {
+          const decoded = fastify.jwt.verify(token);
+          if (decoded.role === 'guest' && decoded.email) {
+            authedEmail = decoded.email;
+          } else if (decoded.role === 'family' && decoded.email) {
+            authedEmail = decoded.email;
+          } else {
+            return reply.code(403).send({ error: 'Access denied' });
+          }
+        } catch (err) {
+          return reply.code(401).send({ error: 'Invalid or expired token' });
+        }
       }
     } else {
       // Fallback: admin cookie
