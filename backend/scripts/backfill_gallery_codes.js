@@ -1,6 +1,25 @@
 /**
  * Migration script to backfill unique 6-character alphanumeric join codes for all existing galleries.
  */
+// Load environment variables from .env file if present
+const fs = require('fs');
+const path = require('path');
+const envPath = path.join(__dirname, '..', '.env');
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  envContent.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const parts = trimmed.split('=');
+      const key = parts[0].trim();
+      const val = parts.slice(1).join('=').trim().replace(/(^['"]|['"]$)/g, ''); // strip optional quotes
+      if (key && !process.env[key]) {
+        process.env[key] = val;
+      }
+    }
+  });
+}
+
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
