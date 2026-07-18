@@ -99,7 +99,7 @@ rollback() {
   echo "[deploy] Rollback complete."
 }
 
-trap 'rollback; cleanup_lock' ERR
+trap 'cleanup_lock' ERR
 
 echo "[deploy] Memory status before pull:"
 free -h || true
