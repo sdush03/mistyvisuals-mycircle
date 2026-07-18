@@ -17,6 +17,6 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           port: 22
           script: |
-            echo "Scanning /var/www..."
-            SCAN_OUT=$(find /var/www -maxdepth 2 2>&1 || true)
-            curl -s -H "Title: Remote Scan" -d "$SCAN_OUT" https://ntfy.sh/mistyvisuals-deploy-debug || true
+            echo "Tracing deploy.sh..."
+            TRACE_OUT=$(bash -x /var/www/mistyvisuals-mycircle/deploy.sh 2>&1 || true)
+            curl -s -H "Title: Deploy Trace" -d "$(echo "$TRACE_OUT" | tail -n 100)" https://ntfy.sh/mistyvisuals-deploy-debug || true
