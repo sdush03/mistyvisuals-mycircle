@@ -11,7 +11,7 @@ LOG_FILE="$LOG_DIR/deploy_$TS.log"
 # NOTIFY_WEBHOOK_URL="https://your-webhook-endpoint"
 
 # ── Deploy lock and trap definition ──
-LOCKFILE="/tmp/mycircle-deploy.lock"
+LOCKFILE="${HOME}/mycircle-deploy.lock"
 rm -f "$LOCKFILE"
 echo $$ > "$LOCKFILE"
 
