@@ -73,6 +73,9 @@ notify() {
 
 rollback() {
   echo "[deploy] ERROR detected. Rolling back to $PREV_HASH..."
+  mkdir -p "$REPO_ROOT/frontend/public" || true
+  cp "$LOG_FILE" "$REPO_ROOT/frontend/public/deploy-log.txt" || true
+  chmod 644 "$REPO_ROOT/frontend/public/deploy-log.txt" || true
   notify "❌ Deploy failed on $(hostname). Rolling back to $PREV_HASH."
   git checkout main 2>/dev/null || true
   git reset --hard "$PREV_HASH"
@@ -167,6 +170,9 @@ else
 fi
 
 echo "[deploy] Done."
+mkdir -p "$REPO_ROOT/frontend/public" || true
+cp "$LOG_FILE" "$REPO_ROOT/frontend/public/deploy-log.txt" || true
+chmod 644 "$REPO_ROOT/frontend/public/deploy-log.txt" || true
 notify "✅ Deploy succeeded on $(hostname)."
 
 if [[ -n "$STASH_CREATED" ]]; then
