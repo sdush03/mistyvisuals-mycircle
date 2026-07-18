@@ -28,7 +28,15 @@ if [ -f "$LOCKFILE" ]; then
 fi
 echo $$ > "$LOCKFILE"
 # Clean up lock on exit (normal, error, or signal)
-cleanup_lock() { rm -f "$LOCKFILE"; }
+cleanup_lock() {
+  echo "[deploy] Copying logs to public folder..."
+  mkdir -p "$REPO_ROOT/frontend/public" || true
+  if [[ -f "${LOG_FILE:-}" ]]; then
+    cp "$LOG_FILE" "$REPO_ROOT/frontend/public/deploy-log.txt" || true
+    chmod 644 "$REPO_ROOT/frontend/public/deploy-log.txt" || true
+  fi
+  rm -f "$LOCKFILE"
+}
 trap cleanup_lock EXIT
 
 cd "$REPO_ROOT"
