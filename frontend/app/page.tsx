@@ -39,6 +39,108 @@ export default function CirclePage() {
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
 
+  const [inviteCodeInput, setInviteCodeInput] = useState('')
+  const [joiningCode, setJoiningCode] = useState(false)
+  const [joinCodeError, setJoinCodeError] = useState<string | null>(null)
+
+  const handleJoinByCode = async () => {
+    const trimmed = inviteCodeInput.trim().toUpperCase()
+    if (trimmed.length !== 6) return
+    setJoiningCode(true)
+    setJoinCodeError(null)
+    try {
+      const res = await fetch(`${apiUrl}/api/gallery/public/lookup-code/${trimmed}`)
+      if (!res.ok) {
+        throw new Error('Invalid invite code. Please check and try again.')
+      }
+      const data = await res.json()
+      router.push(`/${data.slug}/gallery?code=${trimmed}`)
+    } catch (err: any) {
+      setJoinCodeError(err.message)
+    } finally {
+      setJoiningCode(false)
+    }
+  }
+
+  const renderJoinCodeSection = () => {
+    return (
+      <div style={{
+        marginTop: '2rem',
+        width: '100%',
+        maxWidth: '340px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '0.75rem',
+        padding: '1.5rem',
+        border: '1px solid #f0ede8',
+        background: '#fcfbfa'
+      }}>
+        <p style={{
+          fontFamily: 'Montserrat, system-ui, sans-serif',
+          fontSize: '0.6875rem',
+          fontWeight: 600,
+          color: '#8c867e',
+          letterSpacing: '0.15em',
+          textTransform: 'uppercase',
+          margin: 0
+        }}>
+          Have an invite code?
+        </p>
+        <div style={{ display: 'flex', width: '100%', border: '1px solid #1c1a18', height: '42px', background: '#ffffff' }}>
+          <input 
+            type="text"
+            placeholder="ENTER 6-CHAR CODE"
+            value={inviteCodeInput}
+            onChange={(e) => setInviteCodeInput(e.target.value.toUpperCase().slice(0, 6))}
+            style={{
+              flex: 1,
+              fontFamily: 'Montserrat, system-ui, sans-serif',
+              fontSize: '0.8125rem',
+              padding: '0 0.75rem',
+              border: 'none',
+              outline: 'none',
+              backgroundColor: 'transparent',
+              textTransform: 'uppercase',
+              textAlign: 'center',
+              letterSpacing: '0.15em',
+              color: '#1c1a18'
+            }}
+          />
+          <button 
+            onClick={handleJoinByCode}
+            disabled={inviteCodeInput.length !== 6 || joiningCode}
+            style={{
+              fontFamily: 'Montserrat, system-ui, sans-serif',
+              fontSize: '0.6875rem',
+              fontWeight: 500,
+              color: '#ffffff',
+              backgroundColor: '#1c1a18',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              padding: '0 1.25rem',
+              border: 'none',
+              cursor: inviteCodeInput.length !== 6 ? 'default' : 'pointer',
+              transition: 'opacity 0.2s',
+              opacity: inviteCodeInput.length !== 6 ? 0.4 : 1,
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            {joiningCode ? '...' : 'Join'}
+          </button>
+        </div>
+        {joinCodeError && (
+          <p style={{ color: '#c53030', fontSize: '0.75rem', margin: '0.25rem 0 0 0', textAlign: 'center', fontFamily: 'Montserrat, sans-serif' }}>
+            {joinCodeError}
+          </p>
+        )}
+      </div>
+    )
+  }
+
   // Helper to fetch selfie image with auth and return a blob URL
   const fetchAuthenticatedSelfie = async (selfieGuestId: number, authToken?: string) => {
     const tkn = authToken || localStorage.getItem('mv_circle_token')
@@ -560,10 +662,13 @@ export default function CirclePage() {
             >
               Unlock My Circle
             </button>
+            {renderJoinCodeSection()}
           </div>
         ) : (
           /* Logged In Dashboard styling */
-          <div style={{ width: '100%' }}>
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {renderJoinCodeSection()}
+            
             {error && (
               <div style={{
                 background: '#fff5f5',
@@ -572,6 +677,9 @@ export default function CirclePage() {
                 padding: '0.75rem 1rem',
                 borderRadius: '2px',
                 fontSize: '0.75rem',
+                width: '100%',
+                maxWidth: '600px',
+                marginTop: '2rem',
                 marginBottom: '2rem'
               }}>
                 {error}

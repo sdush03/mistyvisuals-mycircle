@@ -351,6 +351,16 @@ module.exports = async function galleryRoutes(fastify, opts) {
       // Always ensure "Highlights" is the first tab
       const tabsWithHighlights = ['Highlights', ...initialTabs.filter(t => t !== 'Highlights')];
 
+      const fullCode = await generateUniqueCode();
+      let partialCode = null;
+      while (true) {
+        const candidate = await generateUniqueCode();
+        if (candidate !== fullCode) {
+          partialCode = candidate;
+          break;
+        }
+      }
+
       // If projectId is provided, use upsert on projectId — completely idempotent
       if (projectId) {
         const event = await prisma.galleryEvent.upsert({
@@ -370,7 +380,9 @@ module.exports = async function galleryRoutes(fastify, opts) {
             coverPhotoUrl: coverPhotoUrl || null,
             leadId: leadId ? parseInt(leadId, 10) : null,
             active: true,
-            tabs: tabsWithHighlights
+            tabs: tabsWithHighlights,
+            fullCode,
+            partialCode
           }
         });
         return event;
@@ -392,7 +404,9 @@ module.exports = async function galleryRoutes(fastify, opts) {
           qrToken: resolvedQrToken,
           coverPhotoUrl: coverPhotoUrl || null,
           leadId: leadId ? parseInt(leadId, 10) : null,
-          tabs: tabsWithHighlights
+          tabs: tabsWithHighlights,
+          fullCode,
+          partialCode
         }
       });
 
@@ -1281,6 +1295,64 @@ module.exports = async function galleryRoutes(fastify, opts) {
     }
   });
 
+  // Helper to generate a unique 6-character alphanumeric code
+  async function generateUniqueCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    while (true) {
+      let code = '';
+      for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      const existing = await prisma.galleryEvent.findFirst({
+        where: {
+          OR: [
+            { fullCode: code },
+            { partialCode: code }
+          ]
+        }
+      });
+      if (!existing) return code;
+    }
+  }
+
+  // Resolve invite code to gallery event slug & access level
+  fastify.get('/api/gallery/public/lookup-code/:code', async (req, reply) => {
+    const inputCode = req.params.code.trim().toUpperCase();
+    if (inputCode.length !== 6) {
+      return reply.code(400).send({ error: 'Invite code must be exactly 6 characters' });
+    }
+
+    try {
+      const event = await prisma.galleryEvent.findFirst({
+        where: {
+          OR: [
+            { fullCode: inputCode },
+            { partialCode: inputCode }
+          ]
+        },
+        select: {
+          slug: true,
+          title: true,
+          fullCode: true,
+          partialCode: true
+        }
+      });
+
+      if (!event) {
+        return reply.code(404).send({ error: 'Invalid invite code. Event not found.' });
+      }
+
+      return {
+        slug: event.slug,
+        title: event.title,
+        accessLevel: event.fullCode === inputCode ? 'full' : 'partial'
+      };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to lookup invite code' });
+    }
+  });
+
   // Load public details of the event
   fastify.get('/api/gallery/public/events/:slug', async (req, reply) => {
     const slug = req.params.slug.toLowerCase().trim();
@@ -1299,7 +1371,9 @@ module.exports = async function galleryRoutes(fastify, opts) {
           allowDownloads: true,
           allowBulkDownloads: true,
           projectId: true,
-          leadId: true
+          leadId: true,
+          fullCode: true,
+          partialCode: true
         }
       });
 
@@ -1308,34 +1382,12 @@ module.exports = async function galleryRoutes(fastify, opts) {
         return reply.code(404).send({ error: 'Gallery not found or inactive' });
       }
 
-      // Check if event has a passcode configured in projects table
-      let hasPasscode = false;
-      let resolvedProjectId = event.projectId;
-      if (!resolvedProjectId && event.leadId) {
-        const projRes = await pool.query(
-          `SELECT id FROM projects WHERE lead_id = $1 LIMIT 1`,
-          [event.leadId]
-        );
-        if (projRes.rows.length > 0) {
-          resolvedProjectId = projRes.rows[0].id;
-        }
-      }
-
-      if (resolvedProjectId) {
-        const passRes = await pool.query(
-          `SELECT passcode, partial_passcode FROM projects WHERE id::text = $1 LIMIT 1`,
-          [resolvedProjectId]
-        );
-        if (passRes.rows.length > 0) {
-          const dbPasscode = passRes.rows[0].passcode;
-          const dbPartialPasscode = passRes.rows[0].partial_passcode;
-          if (dbPasscode || dbPartialPasscode) {
-            hasPasscode = true;
-          }
-        }
-      }
-
+      const hasPasscode = !!(event.fullCode || event.partialCode);
       event.hasPasscode = hasPasscode;
+      
+      // Remove codes from returned event object to prevent leakage
+      delete event.fullCode;
+      delete event.partialCode;
       event.isPreviewMode = !!isPreview;
 
       // Filter tabs to only return those containing at least 1 photo
@@ -1780,29 +1832,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
         return reply.code(400).send({ error: 'Unsupported authentication provider' });
       }
 
-      // Retrieve passcode and partial_passcode from projects table
-      let dbPasscode = null;
-      let dbPartialPasscode = null;
-      let resolvedProjectId = event.projectId;
-      if (!resolvedProjectId && event.leadId) {
-        const projRes = await pool.query(
-          `SELECT id FROM projects WHERE lead_id = $1 LIMIT 1`,
-          [event.leadId]
-        );
-        if (projRes.rows.length) {
-          resolvedProjectId = projRes.rows[0].id;
-        }
-      }
-      if (resolvedProjectId) {
-        const passRes = await pool.query(
-          `SELECT passcode, partial_passcode FROM projects WHERE id::text = $1 LIMIT 1`,
-          [String(resolvedProjectId)]
-        );
-        if (passRes.rows.length) {
-          dbPasscode = passRes.rows[0].passcode;
-          dbPartialPasscode = passRes.rows[0].partial_passcode;
-        }
-      }
+      const dbPasscode = event.fullCode;
+      const dbPartialPasscode = event.partialCode;
 
       // Find or create guest (check if they exist first)
       let guest = await prisma.guest.findFirst({
@@ -1819,9 +1850,9 @@ module.exports = async function galleryRoutes(fastify, opts) {
             return reply.code(400).send({ error: 'Passcode is required to access this gallery' });
           }
         } else {
-          const cleanCode = code.trim().toLowerCase();
-          const cleanFull = dbPasscode ? dbPasscode.trim().toLowerCase() : null;
-          const cleanPartial = dbPartialPasscode ? dbPartialPasscode.trim().toLowerCase() : null;
+          const cleanCode = code.trim().toUpperCase();
+          const cleanFull = dbPasscode ? dbPasscode.trim().toUpperCase() : null;
+          const cleanPartial = dbPartialPasscode ? dbPartialPasscode.trim().toUpperCase() : null;
 
           if (cleanFull && cleanCode === cleanFull) {
             isCodeValid = true; // Full access granted
@@ -1928,29 +1959,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
       const event = await prisma.galleryEvent.findUnique({ where: { slug } });
       if (!event || !event.active) return reply.code(404).send({ error: 'Event not found or inactive' });
 
-      // Retrieve passcode and partial_passcode from projects table
-      let dbPasscode = null;
-      let dbPartialPasscode = null;
-      let resolvedProjectId = event.projectId;
-      if (!resolvedProjectId && event.leadId) {
-        const projRes = await pool.query(
-          `SELECT id FROM projects WHERE lead_id = $1 LIMIT 1`,
-          [event.leadId]
-        );
-        if (projRes.rows.length) {
-          resolvedProjectId = projRes.rows[0].id;
-        }
-      }
-      if (resolvedProjectId) {
-        const passRes = await pool.query(
-          `SELECT passcode, partial_passcode FROM projects WHERE id::text = $1 LIMIT 1`,
-          [String(resolvedProjectId)]
-        );
-        if (passRes.rows.length) {
-          dbPasscode = passRes.rows[0].passcode;
-          dbPartialPasscode = passRes.rows[0].partial_passcode;
-        }
-      }
+      const dbPasscode = event.fullCode;
+      const dbPartialPasscode = event.partialCode;
 
       // Find global user profile
       const user = await prisma.circleUser.findUnique({
@@ -1973,18 +1983,16 @@ module.exports = async function galleryRoutes(fastify, opts) {
             return reply.code(400).send({ error: 'Passcode is required to access this gallery' });
           }
         } else {
-          const cleanCode = code.trim().toLowerCase();
-          const cleanFull = dbPasscode ? dbPasscode.trim().toLowerCase() : null;
-          const cleanPartial = dbPartialPasscode ? dbPartialPasscode.trim().toLowerCase() : null;
+          const cleanCode = code.trim().toUpperCase();
+          const cleanFull = dbPasscode ? dbPasscode.trim().toUpperCase() : null;
+          const cleanPartial = dbPartialPasscode ? dbPartialPasscode.trim().toUpperCase() : null;
 
           if (cleanFull && cleanCode === cleanFull) {
             isCodeValid = true; // Full access granted
           } else if (cleanPartial && cleanCode === cleanPartial) {
             isCodeValid = false; // Partial access granted
           } else {
-            if (!guest) {
-              return reply.code(400).send({ error: 'Invalid passcode' });
-            }
+            return reply.code(400).send({ error: 'Invalid passcode' });
           }
         }
       }
@@ -2055,30 +2063,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
       if (!event) return reply.code(404).send({ error: 'Event not found' });
 
       // Verify the passcode
-      let resolvedProjectId = event.projectId;
-      if (!resolvedProjectId && event.leadId) {
-        const projRes = await pool.query(
-          `SELECT id FROM projects WHERE lead_id = $1 LIMIT 1`,
-          [event.leadId]
-        );
-        if (projRes.rows.length) {
-          resolvedProjectId = projRes.rows[0].id;
-        }
-      }
-
-      let isCodeValid = false;
-      if (resolvedProjectId) {
-        const passRes = await pool.query(
-          `SELECT passcode FROM projects WHERE id::text = $1 LIMIT 1`,
-          [String(resolvedProjectId)]
-        );
-        if (passRes.rows.length) {
-          const dbPasscode = passRes.rows[0].passcode;
-          if (dbPasscode && code.trim().toLowerCase() === dbPasscode.trim().toLowerCase()) {
-            isCodeValid = true;
-          }
-        }
-      }
+      const isCodeValid = event.fullCode && code.trim().toUpperCase() === event.fullCode.trim().toUpperCase();
 
       if (!isCodeValid) {
         return reply.code(400).send({ error: 'Invalid passcode' });
@@ -2972,6 +2957,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
           coverPhotoMobileUrl: event.coverPhotoMobileUrl,
           matchedCount,
           eventToken,
+          galleryFacesComplete: event.galleryFacesComplete,
           guestInfo: {
             id: g.id,
             name: user.name || g.name,

@@ -342,6 +342,8 @@ model GalleryEvent {
   allowDownloads         Boolean  @default(true) @map("allow_downloads")
   allowBulkDownloads     Boolean  @default(false) @map("allow_bulk_downloads")
   bulkDownloadPin        String?  @map("bulk_download_pin") @db.VarChar(255)
+  fullCode               String?  @unique @map("full_code") @db.VarChar(6)
+  partialCode            String?  @unique @map("partial_code") @db.VarChar(6)
   guests                 Guest[]
   photos                 Photo[]
 
@@ -912,7 +914,6 @@ model projects {
   invoice_id                             Int?
   slug                                   String?                @unique(map: "idx_projects_slug") @db.VarChar(255)
   passcode                               String?                @db.VarChar(50)
-  partial_passcode                       String?                @db.VarChar(50)
   finance_transactions                   finance_transactions[]
   invoices_invoices_project_idToprojects invoices[]             @relation("invoices_project_idToprojects")
   project_checklist                      project_checklist[]
