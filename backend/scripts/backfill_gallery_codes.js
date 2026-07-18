@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const envPath = path.join(__dirname, '..', '.env');
+console.log("[backfill] Loading env from:", envPath, "exists:", fs.existsSync(envPath));
 if (fs.existsSync(envPath)) {
   const envContent = fs.readFileSync(envPath, 'utf8');
   envContent.split('\n').forEach(line => {
@@ -13,11 +14,17 @@ if (fs.existsSync(envPath)) {
       const parts = trimmed.split('=');
       const key = parts[0].trim();
       const val = parts.slice(1).join('=').trim().replace(/(^['"]|['"]$)/g, ''); // strip optional quotes
-      if (key && !process.env[key]) {
+      if (key) {
         process.env[key] = val;
       }
     }
   });
+}
+if (process.env.DATABASE_URL) {
+  const masked = process.env.DATABASE_URL.replace(/:[^:@]+@/, ':***@');
+  console.log("[backfill] DATABASE_URL is set:", masked);
+} else {
+  console.log("[backfill] DATABASE_URL is NOT set!");
 }
 
 const { PrismaClient } = require('@prisma/client');
