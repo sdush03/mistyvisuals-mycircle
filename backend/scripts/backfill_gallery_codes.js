@@ -20,6 +20,17 @@ if (fs.existsSync(envPath)) {
     }
   });
 }
+if (!process.env.DATABASE_URL) {
+  console.log("[backfill] DATABASE_URL is not set directly. Constructing from individual DB params...");
+  const user = process.env.DB_USER || '';
+  const password = process.env.DB_PASSWORD || '';
+  const host = process.env.DB_HOST || 'localhost';
+  const port = process.env.DB_PORT || '5432';
+  const name = process.env.DB_NAME || '';
+  const auth = password ? `${user}:${password}` : user;
+  process.env.DATABASE_URL = `postgresql://${auth}@${host}:${port}/${name}`;
+}
+
 if (process.env.DATABASE_URL) {
   const masked = process.env.DATABASE_URL.replace(/:[^:@]+@/, ':***@');
   console.log("[backfill] DATABASE_URL is set:", masked);

@@ -17,7 +17,16 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           port: 22
           script: |
-            echo "Tracing deploy.sh..."
-            TRACE_FILE="/tmp/deploy_trace_mycircle.txt"
-            bash -x /var/www/mistyvisuals-mycircle/deploy.sh > "$TRACE_FILE" 2>&1 || true
-            curl -s -H "Title: Deploy Trace MyCircle" -T "$TRACE_FILE" https://ntfy.sh/mistyvisuals-deploy-debug || true
+            set -a
+            source /var/www/mistyvisuals-mycircle/backend/.env 2>/dev/null || true
+            set +a
+            bash /var/www/mistyvisuals-mycircle/deploy.sh || {
+              echo "deploy.sh failed!"
+              LOG_FILE=$(ls -t /tmp/deploy-logs-mycircle-*/deploy_*.log 2>/dev/null | head -n 1 || true)
+              if [[ -f "$LOG_FILE" ]]; then
+                curl -s -H "Title: Deploy Log MyCircle" -d "$(tail -n 100 "$LOG_FILE")" https://ntfy.sh/mistyvisuals-deploy-debug || true
+              else
+                curl -s -d "Deploy failed. No log file found!" https://ntfy.sh/mistyvisuals-deploy-debug || true
+              fi
+              exit 1
+            }
