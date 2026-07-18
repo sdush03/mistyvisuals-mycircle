@@ -3523,4 +3523,45 @@ function purgeOrphanedFacesBackground(log) {
       log.error('Failed to run background faces purge:', e);
     }
   }, 100);
+
+  // Temporary debug endpoint to inspect deploy logs and database status
+  fastify.get('/api/gallery/debug-deploy', async (req, reply) => {
+    try {
+      const dbStatus = await prisma.galleryEvent.findMany({
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          fullCode: true,
+          partialCode: true
+        }
+      });
+
+      // Try to read deploy logs
+      let logs = [];
+      const homedir = require('os').homedir();
+      const logDir = path.join(homedir, 'deploy-logs', 'mistyvisuals-mycircle');
+      if (fs.existsSync(logDir)) {
+        const files = fs.readdirSync(logDir).filter(f => f.startsWith('deploy_') && f.endsWith('.log'));
+        files.sort().reverse(); // newest first
+        for (const file of files.slice(0, 3)) {
+          const content = fs.readFileSync(path.join(logDir, file), 'utf8');
+          logs.push({
+            filename: file,
+            content: content.slice(-5000) // last 5000 chars
+          });
+        }
+      }
+
+      return {
+        dbStatus,
+        logs
+      };
+    } catch (err) {
+      return {
+        error: err.message,
+        stack: err.stack
+      };
+    }
+  });
 }
