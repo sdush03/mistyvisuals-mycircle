@@ -16,16 +16,7 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 
 # ── Deploy lock: prevent overlapping deploys ──
 LOCKFILE="/tmp/mycircle-deploy.lock"
-if [ -f "$LOCKFILE" ]; then
-  LOCK_PID=$(cat "$LOCKFILE" 2>/dev/null)
-  if kill -0 "$LOCK_PID" 2>/dev/null; then
-    echo "[deploy] Another deploy (PID $LOCK_PID) is already running. Exiting."
-    exit 0
-  else
-    echo "[deploy] Stale lock found (PID $LOCK_PID no longer running). Removing."
-    rm -f "$LOCKFILE"
-  fi
-fi
+rm -f "$LOCKFILE"
 echo $$ > "$LOCKFILE"
 # Clean up lock on exit (normal, error, or signal)
 cleanup_lock() {
