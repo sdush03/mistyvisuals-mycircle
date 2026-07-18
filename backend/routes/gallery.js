@@ -3525,7 +3525,7 @@ function purgeOrphanedFacesBackground(log) {
   }, 100);
 
   // Temporary debug endpoint to inspect deploy logs and database status
-  fastify.get('/api/gallery/debug-deploy', async (req, reply) => {
+  fastify.get('/api/gallery/public/debug-deploy', async (req, reply) => {
     try {
       const dbStatus = await prisma.galleryEvent.findMany({
         select: {
