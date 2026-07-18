@@ -1,3 +1,4 @@
+// Trigger backend redeploy to apply migrations and backfill
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
