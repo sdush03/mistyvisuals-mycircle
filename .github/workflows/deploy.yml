@@ -18,5 +18,6 @@ jobs:
           port: 22
           script: |
             echo "Tracing deploy.sh..."
-            TRACE_OUT=$(bash -x /var/www/mistyvisuals-mycircle/deploy.sh 2>&1 || true)
-            curl -s -H "Title: Deploy Trace" -d "$(echo "$TRACE_OUT" | tail -n 100)" https://ntfy.sh/mistyvisuals-deploy-debug || true
+            TRACE_FILE="/tmp/deploy_trace_mycircle.txt"
+            bash -x /var/www/mistyvisuals-mycircle/deploy.sh > "$TRACE_FILE" 2>&1 || true
+            curl -s -H "Title: Deploy Trace MyCircle" -T "$TRACE_FILE" https://ntfy.sh/mistyvisuals-deploy-debug || true
