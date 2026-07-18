@@ -38,7 +38,8 @@ for f in "$MIGRATIONS_DIR"/*.sql; do
     if [ "$fname" = "20260216_allow_null_lead_activities_lead_id.sql" ] || \
        [ "$fname" = "20260315_add_crew_management.sql" ] || \
        [ "$fname" = "20260422_create_smart_notification_log.sql" ] || \
-       [ "$fname" = "20260501_create_projects.sql" ]; then
+       [ "$fname" = "20260501_create_projects.sql" ] || \
+       [ "$fname" = "20260719_add_gallery_join_codes.sql" ]; then
       allow_drop=1
     fi
     if grep -Eiv "\\bdrop\\s+(not\\s+null|default)\\b" "$f" | grep -Eiq "\\b(drop|truncate)\\b|\\bdelete\\s+from\\b"; then

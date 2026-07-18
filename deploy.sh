@@ -131,6 +131,9 @@ if [[ -n "$BACKEND_CHANGED" ]]; then
     npx prisma generate
   fi
 
+  echo "[deploy] Running backfill for gallery codes..."
+  node "$REPO_ROOT/backend/scripts/backfill_gallery_codes.js"
+
   echo "[deploy] Restarting backend..."
   pm2 restart mycircle-backend --update-env
 else
