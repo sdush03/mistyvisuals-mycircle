@@ -17,71 +17,10 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           port: 22
           script: |
-            cat << 'EOF' > /var/www/mistyvisuals-mycircle/backend/check_photos.js
-            const { Client } = require('pg');
-            const fs = require('fs');
-            const path = require('path');
-
-            const envPath = '/var/www/mistyvisuals-mycircle/backend/.env';
-            let connectionString = process.env.DATABASE_URL;
-
-            if (!connectionString && fs.existsSync(envPath)) {
-              const envContent = fs.readFileSync(envPath, 'utf8');
-              const env = {};
-              envContent.split('\n').forEach(line => {
-                const trimmed = line.trim();
-                if (trimmed && !trimmed.startsWith('#')) {
-                  const parts = trimmed.split('=');
-                  const key = parts[0].trim();
-                  const val = parts.slice(1).join('=').trim().replace(/(^['"]|['"]$)/g, '');
-                  if (key) env[key] = val;
-                }
-              });
-              const user = env.DB_USER || '';
-              const password = env.DB_PASSWORD || '';
-              const host = env.DB_HOST || 'localhost';
-              const port = env.DB_PORT || '5432';
-              const name = env.DB_NAME || '';
-              const auth = password ? `${user}:${password}` : user;
-              connectionString = `postgresql://${auth}@${host}:${port}/${name}`;
-            }
-
-            async function run() {
-              console.log("Connecting to:", connectionString.replace(/:[^:@]+@/, ':***@'));
-              const client = new Client({ connectionString });
-              await client.connect();
-
-              try {
-                // 1. Get all events
-                const eventsRes = await client.query('SELECT id, slug, title, tabs FROM gallery_events');
-                console.log("\n--- Gallery Events ---");
-                console.table(eventsRes.rows);
-
-                // 2. Count photos by event and tabName
-                const photosCountRes = await client.query(`
-                  SELECT event_id, tab_name, COUNT(*), COUNT(thumbnail_url) as with_thumbnail
-                  FROM photos
-                  GROUP BY event_id, tab_name
-                  ORDER BY event_id, tab_name
-                `);
-                console.log("\n--- Photo Counts by Event and Tab ---");
-                console.table(photosCountRes.rows);
-
-                // 3. Count likes
-                const likesCountRes = await client.query('SELECT COUNT(*) FROM photo_likes');
-                console.log("\n--- Total Likes ---", likesCountRes.rows[0].count);
-
-              } catch (err) {
-                console.error(err);
-              } finally {
-                await client.end();
-              }
-            }
-
-            run();
-            EOF
-            node /var/www/mistyvisuals-mycircle/backend/check_photos.js
-            rm -f /var/www/mistyvisuals-mycircle/backend/check_photos.js
+            pm2 logs mycircle-backend --lines 150 --raw --no-daemon &
+            PID=$!
+            sleep 4
+            kill $PID || true
             set -a
             source /var/www/mistyvisuals-mycircle/backend/.env 2>/dev/null || true
             set +a
