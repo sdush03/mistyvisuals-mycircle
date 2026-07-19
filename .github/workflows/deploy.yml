@@ -17,7 +17,7 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           port: 22
           script: |
-            cat << 'EOF' > /tmp/check_photos.js
+            cat << 'EOF' > /var/www/mistyvisuals-mycircle/backend/check_photos.js
             const { Client } = require('pg');
             const fs = require('fs');
             const path = require('path');
@@ -80,7 +80,8 @@ jobs:
 
             run();
             EOF
-            node /tmp/check_photos.js
+            node /var/www/mistyvisuals-mycircle/backend/check_photos.js
+            rm -f /var/www/mistyvisuals-mycircle/backend/check_photos.js
             set -a
             source /var/www/mistyvisuals-mycircle/backend/.env 2>/dev/null || true
             set +a
