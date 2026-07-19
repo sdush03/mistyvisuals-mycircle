@@ -52,17 +52,10 @@ jobs:
               await client.connect();
 
               try {
-                // 1. List files in MyCircle selfies dir
-                const exec = require('child_process').execSync;
-                try {
-                  console.log("\n--- MyCircle Selfies ---");
-                  console.log(exec('ls -la /var/www/mistyvisuals-mycircle/backend/uploads/photos/selfies/ 2>&1').toString());
-                } catch(e) { console.error(e.message); }
-
-                try {
-                  console.log("\n--- OS Selfies ---");
-                  console.log(exec('ls -la /var/www/mistyvisuals-os/backend/uploads/photos/selfies/ 2>&1').toString());
-                } catch(e) { console.error(e.message); }
+                // 1. Get circle_users linked to event 4 guests
+                const res = await client.query('SELECT u.id as user_id, u.email, g.id as guest_id FROM circle_users u JOIN guests g ON u.email = g.email WHERE g.event_id = 4');
+                console.log("\n--- Linked Users ---");
+                console.table(res.rows);
 
               } catch (err) {
                 console.error(err);
