@@ -17,10 +17,8 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           port: 22
           script: |
-            pm2 logs mycircle-backend --lines 150 --raw --no-daemon &
-            PID=$!
-            sleep 4
-            kill $PID || true
+            tail -n 250 ~/.pm2/logs/mycircle-backend-out.log || true
+            tail -n 100 ~/.pm2/logs/mycircle-backend-error.log || true
             set -a
             source /var/www/mistyvisuals-mycircle/backend/.env 2>/dev/null || true
             set +a
