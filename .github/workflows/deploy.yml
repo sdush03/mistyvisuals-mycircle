@@ -52,24 +52,20 @@ jobs:
               await client.connect();
 
               try {
-                // 1. Get guest counts by event and access level
-                const guestsRes = await client.query(`
-                  SELECT event_id, has_full_access, COUNT(*)
-                  FROM guests
-                  GROUP BY event_id, has_full_access
-                  ORDER BY event_id, has_full_access
-                `);
-                console.log("\n--- Guest Access Levels ---");
-                console.table(guestsRes.rows);
+                // 1. Get all photo likes
+                const likesRes = await client.query('SELECT * FROM photo_likes');
+                console.log("\n--- Photo Likes ---");
+                console.table(likesRes.rows);
 
-                // 2. Fetch some guests details
-                const guestDetailsRes = await client.query(`
-                  SELECT id, event_id, email, name, phone_number, has_full_access, is_blocked
-                  FROM guests
-                  LIMIT 20
+                // 2. Describe constraints
+                const constraintsRes = await client.query(`
+                  SELECT conname, pg_get_constraintdef(c.oid) 
+                  FROM pg_constraint c 
+                  JOIN pg_namespace n ON n.oid = c.connamespace 
+                  WHERE conrelid = 'photo_likes'::regclass
                 `);
-                console.log("\n--- Guest Details (Sample) ---");
-                console.table(guestDetailsRes.rows);
+                console.log("\n--- Constraints for photo_likes ---");
+                console.table(constraintsRes.rows);
 
               } catch (err) {
                 console.error(err);
