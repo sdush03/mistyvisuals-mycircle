@@ -7,9 +7,9 @@ import {
   ScrollView, 
   Image, 
   Pressable, 
-  Dimensions, 
-  SafeAreaView 
+  Dimensions 
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
@@ -32,8 +32,16 @@ interface FeaturedStoryViewProps {
 
 export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedStoryViewProps) {
   const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
+  const insets = useSafeAreaInsets();
 
   if (!story) return null;
+
+  const locationText = (story.location || '').toUpperCase();
+  const titleText = story.title || '';
+  const dateText = story.date || '';
+  const subtitleText = (story.subtitle || '').toUpperCase();
+  const descriptionText = story.description || '';
+  const galleryImages = Array.isArray(story.images) ? story.images : [];
 
   return (
     <Modal
@@ -43,13 +51,13 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
       onRequestClose={onClose}
     >
       <View style={styles.container}>
-        <SafeAreaView style={styles.header}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
           <Pressable style={styles.closeButton} onPress={onClose}>
             <Text style={styles.closeText}>✕ CLOSE</Text>
           </Pressable>
           <Text style={styles.headerTitle}>FEATURED STORY</Text>
-          <View style={{ width: 60 }} /> {/* Spacer for centering */}
-        </SafeAreaView>
+          <View style={{ width: 60 }} />
+        </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Hero Banner */}
@@ -57,25 +65,24 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
             <Image source={story.coverImage} style={styles.heroImage} />
             <View style={styles.heroOverlay} />
             <View style={styles.titleContainer}>
-              <Text style={styles.storyLocation}>{story.location.toUpperCase()}</Text>
-              <Text style={styles.storyTitle}>{story.title}</Text>
-              <Text style={styles.storyDate}>{story.date}</Text>
+              {locationText ? <Text style={styles.storyLocation}>{locationText}</Text> : null}
+              {titleText ? <Text style={styles.storyTitle}>{titleText}</Text> : null}
+              {dateText ? <Text style={styles.storyDate}>{dateText}</Text> : null}
             </View>
           </View>
 
           {/* Editorial Content */}
           <View style={styles.editorialContainer}>
-            <Text style={styles.editorialSubtitle}>{story.subtitle.toUpperCase()}</Text>
+            {subtitleText ? <Text style={styles.editorialSubtitle}>{subtitleText}</Text> : null}
             <View style={styles.divider} />
-            <Text style={styles.descriptionText}>{story.description}</Text>
+            {descriptionText ? <Text style={styles.descriptionText}>{descriptionText}</Text> : null}
           </View>
 
           {/* Photo Gallery Grid */}
           <View style={styles.galleryContainer}>
             <Text style={styles.galleryHeader}>THE GALLERY</Text>
             <View style={styles.grid}>
-              {story.images.map((img, index) => {
-                // Alternating heights for a mini-masonry effect
+              {galleryImages.map((img, index) => {
                 const isTall = index % 3 === 0;
                 return (
                   <Pressable 
@@ -99,23 +106,25 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
             onRequestClose={() => setActiveImageIndex(null)}
           >
             <View style={styles.lightboxContainer}>
-              <SafeAreaView style={styles.lightboxHeader}>
+              <View style={[styles.lightboxHeader, { paddingTop: Math.max(insets.top, 12) }]}>
                 <Pressable 
                   style={styles.lightboxClose} 
                   onPress={() => setActiveImageIndex(null)}
                 >
                   <Text style={styles.lightboxCloseText}>✕ Close</Text>
                 </Pressable>
-              </SafeAreaView>
+              </View>
               <View style={styles.lightboxImageContainer}>
-                <Image 
-                  source={story.images[activeImageIndex]} 
-                  style={styles.lightboxImage} 
-                  resizeMode="contain" 
-                />
+                {galleryImages[activeImageIndex] ? (
+                  <Image 
+                    source={galleryImages[activeImageIndex]} 
+                    style={styles.lightboxImage} 
+                    resizeMode="contain" 
+                  />
+                ) : null}
               </View>
               {/* Simple Navigation */}
-              <View style={styles.lightboxFooter}>
+              <View style={[styles.lightboxFooter, { paddingBottom: Math.max(insets.bottom, 24) }]}>
                 <Pressable 
                   disabled={activeImageIndex === 0}
                   onPress={() => setActiveImageIndex(activeImageIndex - 1)}
@@ -124,12 +133,12 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                   <Text style={styles.lightboxNavText}>◀ PREV</Text>
                 </Pressable>
                 <Text style={styles.lightboxIndex}>
-                  {activeImageIndex + 1} / {story.images.length}
+                  {`${activeImageIndex + 1} / ${galleryImages.length}`}
                 </Text>
                 <Pressable 
-                  disabled={activeImageIndex === story.images.length - 1}
+                  disabled={activeImageIndex === galleryImages.length - 1}
                   onPress={() => setActiveImageIndex(activeImageIndex + 1)}
-                  style={[styles.lightboxNavButton, activeImageIndex === story.images.length - 1 && { opacity: 0.3 }]}
+                  style={[styles.lightboxNavButton, activeImageIndex === galleryImages.length - 1 && { opacity: 0.3 }]}
                 >
                   <Text style={styles.lightboxNavText}>NEXT ▶</Text>
                 </Pressable>

@@ -6,9 +6,9 @@ import {
   Modal, 
   ScrollView, 
   Image, 
-  Pressable, 
-  SafeAreaView 
+  Pressable 
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface Article {
   id: string;
@@ -27,7 +27,14 @@ interface ArticleViewProps {
 }
 
 export default function ArticleView({ isOpen, onClose, article }: ArticleViewProps) {
+  const insets = useSafeAreaInsets();
   if (!article) return null;
+
+  const categoryText = (article.category || '').toUpperCase();
+  const titleText = article.title || '';
+  const dateText = article.date || '';
+  const readTimeText = article.readTime || '';
+  const contentParagraphs = Array.isArray(article.content) ? article.content : [];
 
   return (
     <Modal
@@ -37,13 +44,13 @@ export default function ArticleView({ isOpen, onClose, article }: ArticleViewPro
       onRequestClose={onClose}
     >
       <View style={styles.container}>
-        <SafeAreaView style={styles.header}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
           <Pressable style={styles.closeButton} onPress={onClose}>
             <Text style={styles.closeText}>✕ CLOSE</Text>
           </Pressable>
           <Text style={styles.headerTitle}>CIRCLE JOURNAL</Text>
-          <View style={{ width: 60 }} /> {/* Spacer for centering */}
-        </SafeAreaView>
+          <View style={{ width: 60 }} />
+        </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Cover Image */}
@@ -54,12 +61,12 @@ export default function ArticleView({ isOpen, onClose, article }: ArticleViewPro
 
           {/* Article Header Metadata */}
           <View style={styles.metaContainer}>
-            <Text style={styles.articleCategory}>{article.category.toUpperCase()}</Text>
-            <Text style={styles.articleTitle}>{article.title}</Text>
+            {categoryText ? <Text style={styles.articleCategory}>{categoryText}</Text> : null}
+            {titleText ? <Text style={styles.articleTitle}>{titleText}</Text> : null}
             <View style={styles.metaRow}>
-              <Text style={styles.metaText}>{article.date}</Text>
+              {dateText ? <Text style={styles.metaText}>{dateText}</Text> : null}
               <Text style={styles.metaDivider}>•</Text>
-              <Text style={styles.metaText}>{article.readTime}</Text>
+              {readTimeText ? <Text style={styles.metaText}>{readTimeText}</Text> : null}
               <Text style={styles.metaDivider}>•</Text>
               <Text style={styles.metaText}>By Misty Visuals</Text>
             </View>

@@ -110,17 +110,37 @@ const ARTICLES = [
   }
 ];
 
-const VIBES = ['Luxury', 'Destination', 'Intimate', 'Traditional', 'Beach', 'Mountain'];
+const VIBES = ['All', 'Luxury', 'Destination', 'Intimate', 'Traditional'];
 
 export default function HomeScreen() {
   const { token, profile, setEventDetails } = useAuthStore();
   const [events, setEvents] = useState<any[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
-  const [selectedVibe, setSelectedVibe] = useState('Luxury');
+  const [selectedVibe, setSelectedVibe] = useState('All');
 
   // Modals for full articles / portfolios
   const [selectedStory, setSelectedStory] = useState<any | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<any | null>(null);
+
+  const [websiteStories, setWebsiteStories] = useState<any[]>([]);
+
+  // Fetch featured stories from website API
+  useEffect(() => {
+    const fetchWebsiteStories = async () => {
+      try {
+        const res = await fetch('https://www.mistyvisuals.com/api/website/stories');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setWebsiteStories(data);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to fetch website stories:', e);
+      }
+    };
+    fetchWebsiteStories();
+  }, []);
 
   // Fetch joined wedding events if authenticated
   useEffect(() => {
@@ -146,6 +166,35 @@ export default function HomeScreen() {
 
     fetchUserEvents();
   }, [token]);
+
+  const handleStoryPress = async (story: any) => {
+    if (story.slug) {
+      try {
+        const res = await fetch(`https://www.mistyvisuals.com/api/website/stories/${story.slug}`);
+        if (res.ok) {
+          const fullStory = await res.json();
+          const photos = fullStory.photos || [];
+          const galleryImages = photos.map((p: any) => ({ uri: p.file_url_mobile || p.file_url }));
+          const coverUri = fullStory.cover_image_mobile_url || fullStory.cover_image_url || fullStory.grid_image_url;
+          setSelectedStory({
+            id: String(fullStory.id),
+            title: fullStory.title,
+            subtitle: fullStory.subtitle || fullStory.category || 'Portfolio Story',
+            location: fullStory.location || 'Misty Visuals',
+            date: fullStory.date || '',
+            coverImage: coverUri ? { uri: coverUri } : require('@/assets/images/portfolio/sunset_couple.jpg'),
+            description: fullStory.subtitle || 'Unscripted moments and intentional design.',
+            images: galleryImages.length > 0 ? galleryImages : (coverUri ? [{ uri: coverUri }] : [require('@/assets/images/portfolio/sunset_couple.jpg')]),
+          });
+          return;
+        }
+      } catch (e) {
+        console.warn('Failed to load full story from website:', e);
+      }
+    }
+
+    setSelectedStory(story);
+  };
 
   // Determine the dynamic header greeting
   const getGreetingHeader = () => {
@@ -192,35 +241,36 @@ export default function HomeScreen() {
     router.replace('/mycircle');
   };
 
-  // Helper to filter showcase items by selected Vibe
-  const getFilteredVibeImages = () => {
-    // Simulating vibe photo grid by repeating our loaded pictures
-    switch (selectedVibe) {
-      case 'Luxury':
-        return [
-          { img: require('@/assets/images/portfolio/palace_wedding.jpg'), title: 'Udaipur' },
-          { img: require('@/assets/images/portfolio/indian_bride.jpg'), title: 'Royal Lehenga' }
-        ];
-      case 'Destination':
-        return [
-          { img: require('@/assets/images/portfolio/sunset_couple.jpg'), title: 'Hillside Embrace' },
-          { img: require('@/assets/images/portfolio/palace_wedding.jpg'), title: 'Lake Balcony' }
-        ];
-      case 'Intimate':
-        return [
-          { img: require('@/assets/images/portfolio/sunset_couple.jpg'), title: 'Golden Vows' }
-        ];
-      case 'Traditional':
-        return [
-          { img: require('@/assets/images/portfolio/indian_bride.jpg'), title: 'Pheras' }
-        ];
-      default:
-        return [
-          { img: require('@/assets/images/portfolio/sunset_couple.jpg'), title: 'Couple' },
-          { img: require('@/assets/images/portfolio/palace_wedding.jpg'), title: 'Palace' },
-          { img: require('@/assets/images/portfolio/indian_bride.jpg'), title: 'Bride' }
-        ];
+  // Dynamic Vibe filters from website story categories
+  const vibeFilters = React.useMemo(() => {
+    const categoriesSet = new Set<string>();
+    const sourceStories = websiteStories.length > 0 ? websiteStories : FEATURED_STORIES;
+    sourceStories.forEach((s: any) => {
+      const cats = (s.category || '').split(',').map((c: string) => c.trim()).filter(Boolean);
+      cats.forEach((c: string) => categoriesSet.add(c));
+    });
+    if (categoriesSet.size === 0) return ['All', 'Destination', 'Intimate', 'Luxury', 'Traditional'];
+    return ['All', ...Array.from(categoriesSet).sort()];
+  }, [websiteStories]);
+
+  // Helper to filter website portfolio stories by selected Vibe
+  const getFilteredVibeStories = () => {
+    const sourceStories = websiteStories.length > 0 ? websiteStories : FEATURED_STORIES;
+
+    if (selectedVibe === 'All') {
+      return sourceStories;
     }
+
+    return sourceStories.filter((s: any) => {
+      const v = selectedVibe.toLowerCase();
+      const dbCategories = (s.category || '').split(',').map((c: string) => c.trim().toLowerCase());
+      if (dbCategories.includes(v)) return true;
+
+      const title = (s.title || '').toLowerCase();
+      const sub = (s.subtitle || '').toLowerCase();
+      const loc = (s.location || '').toLowerCase();
+      return title.includes(v) || sub.includes(v) || loc.includes(v);
+    });
   };
 
   return (
@@ -291,16 +341,33 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>FEATURED BY MISTY VISUALS</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-            {FEATURED_STORIES.map((story) => (
+            {(websiteStories.length > 0
+              ? websiteStories
+                  .filter((s) => s.is_featured || websiteStories.every(item => !item.is_featured))
+                  .map((s) => ({
+                    id: String(s.id),
+                    slug: s.slug,
+                    title: s.title,
+                    subtitle: s.subtitle || s.category || 'Featured Story',
+                    location: s.location || 'Misty Visuals',
+                    date: s.date || '',
+                    coverImage: (s.cover_image_mobile_url || s.cover_image_url || s.grid_image_url) 
+                      ? { uri: s.cover_image_mobile_url || s.cover_image_url || s.grid_image_url }
+                      : require('@/assets/images/portfolio/sunset_couple.jpg'),
+                    description: s.subtitle || 'Unscripted moments and intentional design.',
+                    images: []
+                  }))
+              : FEATURED_STORIES
+            ).map((story) => (
               <Pressable 
                 key={story.id} 
                 style={styles.featuredCard}
-                onPress={() => setSelectedStory(story)}
+                onPress={() => handleStoryPress(story)}
               >
                 <Image source={story.coverImage} style={styles.featuredImage} />
                 <View style={styles.featuredOverlay} />
                 <View style={styles.featuredContent}>
-                  <Text style={styles.featuredLocation}>{story.location.toUpperCase()}</Text>
+                  <Text style={styles.featuredLocation}>{(story.location || 'MISTY VISUALS').toUpperCase()}</Text>
                   <Text style={styles.featuredTitle}>{story.title}</Text>
                   <Text style={styles.featuredReadMore}>View Collection →</Text>
                 </View>
@@ -334,7 +401,7 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>BROWSE BY VIBE</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibePillScroll}>
-            {VIBES.map((vibe) => (
+            {vibeFilters.map((vibe) => (
               <Pressable 
                 key={vibe} 
                 style={[styles.vibePill, selectedVibe === vibe && styles.vibePillActive]}
@@ -347,12 +414,42 @@ export default function HomeScreen() {
 
           {/* Vibe mini gallery */}
           <View style={styles.vibeGalleryGrid}>
-            {getFilteredVibeImages().map((item, index) => (
-              <View key={index} style={styles.vibeGalleryItem}>
-                <Image source={item.img} style={styles.vibeGalleryImage} />
-                <Text style={styles.vibeGalleryLabel}>{item.title}</Text>
+            {getFilteredVibeStories().length > 0 ? (
+              getFilteredVibeStories().map((item: any, index: number) => {
+                const coverSrc = item.img
+                  ? item.img
+                  : item.cover_image_mobile_url || item.cover_image_url || item.grid_image_url
+                  ? { uri: item.cover_image_mobile_url || item.cover_image_url || item.grid_image_url }
+                  : require('@/assets/images/portfolio/sunset_couple.jpg');
+                
+                const titleText = item.title || '';
+                const subText = item.subtitle || item.location || '';
+
+                return (
+                  <Pressable 
+                    key={item.id || index} 
+                    style={styles.vibeGalleryItem}
+                    onPress={() => handleStoryPress(item)}
+                  >
+                    <Image source={coverSrc} style={styles.vibeGalleryImage} />
+                    {titleText ? (
+                      <Text style={styles.vibeGalleryLabel} numberOfLines={1}>
+                        {titleText}
+                      </Text>
+                    ) : null}
+                    {subText ? (
+                      <Text style={styles.vibeGallerySublabel} numberOfLines={1}>
+                        {subText}
+                      </Text>
+                    ) : null}
+                  </Pressable>
+                );
+              })
+            ) : (
+              <View style={styles.emptyVibeContainer}>
+                <Text style={styles.emptyVibeText}>No stories found under "{selectedVibe}".</Text>
               </View>
-            ))}
+            )}
           </View>
         </View>
 
@@ -620,13 +717,34 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   vibeGalleryLabel: {
-    fontFamily: 'System',
-    fontSize: 10,
+    fontFamily: 'serif',
+    fontSize: 12,
     fontWeight: '600',
-    color: '#8c867e',
+    color: '#1c1a18',
     marginTop: 6,
     textAlign: 'center',
+  },
+  vibeGallerySublabel: {
+    fontFamily: 'System',
+    fontSize: 9,
+    fontWeight: '500',
+    color: '#8c867e',
+    marginTop: 2,
+    textAlign: 'center',
     letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  emptyVibeContainer: {
+    width: '100%',
+    paddingVertical: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyVibeText: {
+    fontFamily: 'serif',
+    fontSize: 12,
+    fontStyle: 'italic',
+    color: '#8c867e',
   },
   ctaCard: {
     marginHorizontal: 24,
