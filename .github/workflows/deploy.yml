@@ -52,10 +52,17 @@ jobs:
               await client.connect();
 
               try {
-                // 1. Get 10 sample photos
-                const photosRes = await client.query('SELECT id, r2_url, thumbnail_url FROM photos WHERE event_id = 4 LIMIT 10');
-                console.log("\n--- Sample Photos ---");
-                console.table(photosRes.rows);
+                // 1. List files in MyCircle selfies dir
+                const exec = require('child_process').execSync;
+                try {
+                  console.log("\n--- MyCircle Selfies ---");
+                  console.log(exec('ls -la /var/www/mistyvisuals-mycircle/backend/uploads/photos/selfies/ 2>&1').toString());
+                } catch(e) { console.error(e.message); }
+
+                try {
+                  console.log("\n--- OS Selfies ---");
+                  console.log(exec('ls -la /var/www/mistyvisuals-os/backend/uploads/photos/selfies/ 2>&1').toString());
+                } catch(e) { console.error(e.message); }
 
               } catch (err) {
                 console.error(err);
