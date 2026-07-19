@@ -69,6 +69,16 @@ async function verifyGuestAuth(req, reply) {
     const dbGuest = await prisma.guest.findUnique({
       where: { id: guestId }
     });
+
+    if (!isAdminPreview) {
+      if (!dbGuest) {
+        return reply.code(403).send({ error: 'Access denied: Participant removed from gallery' });
+      }
+      if (dbGuest.isBlocked) {
+        return reply.code(403).send({ error: 'Access denied: Participant is blocked' });
+      }
+    }
+
     req.guest = {
       ...decoded,
       guestId,

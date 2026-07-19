@@ -1453,12 +1453,18 @@ module.exports = async function galleryRoutes(fastify, opts) {
               });
             }
             guestId = adminGuest.id;
-          } else if (decoded.role === 'guest' && decoded.eventId === event.id) {
+          } else if (decoded.role === 'guest' && (Number(decoded.eventId) === event.id || (decoded.slug && decoded.slug.toLowerCase().trim() === slug))) {
             guestId = decoded.guestId;
             const dbGuest = await prisma.guest.findUnique({
               where: { id: guestId }
             });
-            hasFullAccess = dbGuest ? dbGuest.hasFullAccess : decoded.hasFullAccess;
+            if (!dbGuest) {
+              return reply.code(403).send({ error: 'Access denied: Participant removed from gallery' });
+            }
+            if (dbGuest.isBlocked) {
+              return reply.code(403).send({ error: 'Access denied: Participant is blocked' });
+            }
+            hasFullAccess = dbGuest.hasFullAccess;
           } else {
             return reply.code(403).send({ error: 'Token does not match this event' });
           }
@@ -1497,7 +1503,14 @@ module.exports = async function galleryRoutes(fastify, opts) {
         // Apply per-tab filter if requested (overrides the OR above)
         if (tabFilter) {
           delete whereClause.OR;
-          whereClause.tabName = tabFilter;
+          let actualTab = tabFilter;
+          if (event.tabs && Array.isArray(event.tabs)) {
+            const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === tabFilter.toLowerCase());
+            if (matchedTab) {
+              actualTab = matchedTab;
+            }
+          }
+          whereClause.tabName = actualTab;
         }
       }
 
