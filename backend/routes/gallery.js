@@ -2962,11 +2962,34 @@ module.exports = async function galleryRoutes(fastify, opts) {
           hasFullAccess: g.hasFullAccess
         }, { expiresIn: '7d' });
 
+        const eventDate = new Date(event.date);
+        const today = new Date();
+        const isSameDay = eventDate.getUTCFullYear() === today.getUTCFullYear() &&
+          eventDate.getUTCMonth() === today.getUTCMonth() &&
+          eventDate.getUTCDate() === today.getUTCDate();
+
+        // 1. Primary Source of Truth: DB field `event.stage`
+        let stage = event.stage;
+
+        // 2. Temporary Migration Fallback (only executed if event.stage is null/undefined)
+        if (!stage) {
+          if (event.highlightsReady || event.isHighlights) {
+            stage = 'HIGHLIGHTS';
+          } else if (eventDate > today && !isSameDay) {
+            stage = 'UPCOMING';
+          } else if (isSameDay) {
+            stage = 'LIVE';
+          } else {
+            stage = 'READY';
+          }
+        }
+
         eventsList.push({
           id: event.id,
           title: event.title,
           slug: event.slug,
           date: event.date,
+          stage,
           coverPhotoUrl: event.coverPhotoUrl,
           coverPhotoMobileUrl: event.coverPhotoMobileUrl,
           matchedCount,

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Image, useColorScheme, StyleSheet, Platform, View, Pressable, Text, Modal, ActivityIndicator } from 'react-native';
+import { Image, useColorScheme, StyleSheet, Platform, View, Pressable, Text, Modal, ActivityIndicator, StatusBar } from 'react-native';
 import { Tabs, router, useSegments } from 'expo-router';
 import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import * as SplashScreen from 'expo-splash-screen';
@@ -44,12 +44,14 @@ function RootLayoutContent() {
 
   // Determine current active tab
   const currentTab = segments[0] === 'mycircle' ? 'mycircle' : 'index';
-  const headerHeight = 56 + insets.top;
+  const topInset = insets.top;
+  const headerHeight = 48 + topInset;
 
   // While auth is being restored from SecureStore, show a blank loading screen
   if (isLoading) {
     return (
       <View style={styles.loadingScreen}>
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
         <Image
           source={require('@/assets/images/logo-black.png')}
           style={styles.loadingLogo}
@@ -63,8 +65,9 @@ function RootLayoutContent() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
         {/* Global Header */}
-        <View style={[styles.globalHeader, { height: headerHeight, paddingTop: insets.top }]}>
+        <View style={[styles.globalHeader, { height: headerHeight, paddingTop: topInset }]}>
           <Image
             source={require('@/assets/images/logo-black.png')}
             style={styles.headerLogo}

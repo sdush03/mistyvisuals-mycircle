@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { 
   StyleSheet, 
   View, 
@@ -10,8 +10,11 @@ import {
   ActivityIndicator, 
   Dimensions, 
   SafeAreaView, 
-  StatusBar 
+  StatusBar,
+  Animated,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuthStore } from '../store/authStore';
 import api from '../services/api';
@@ -124,6 +127,10 @@ export default function HomeScreen() {
 
   const [websiteStories, setWebsiteStories] = useState<any[]>([]);
 
+  // Stored matched counts for detecting new photos
+  const [lastMatchedCounts, setLastMatchedCounts] = useState<Record<string, number>>({});
+  const [countsLoaded, setCountsLoaded] = useState(false);
+
   // Fetch featured stories from website API
   useEffect(() => {
     const fetchWebsiteStories = async () => {
@@ -140,6 +147,16 @@ export default function HomeScreen() {
       }
     };
     fetchWebsiteStories();
+  }, []);
+
+  // Load previously stored matchedCounts from AsyncStorage on mount
+  useEffect(() => {
+    AsyncStorage.getItem('@mycircle_matched_counts')
+      .then(stored => {
+        if (stored) setLastMatchedCounts(JSON.parse(stored));
+      })
+      .catch(() => {})
+      .finally(() => setCountsLoaded(true));
   }, []);
 
   // Fetch joined wedding events if authenticated
@@ -196,44 +213,212 @@ export default function HomeScreen() {
     setSelectedStory(story);
   };
 
-  // Determine the dynamic header greeting
-  const getGreetingHeader = () => {
-    if (!profile || !profile.name) {
-      return {
-        greeting: 'Welcome to My Circle',
-        subtitle: 'Every celebration. Every memory. One place.'
-      };
-    }
-
-    const hrs = new Date().getHours();
-    let greet = 'Good Morning';
-    if (hrs >= 12 && hrs < 17) greet = 'Good Afternoon';
-    else if (hrs >= 17 || hrs < 4) greet = 'Good Evening';
-
-    // Figure out priority message
-    let subtitle = 'Explore recent memories and upcoming celebrations.';
-    if (events.length > 0) {
-      const upcoming = events.find(e => new Date(e.date) > new Date());
-      const processing = events.find(e => new Date(e.date) <= new Date() && !e.galleryFacesComplete);
-      const matched = events.reduce((sum, e) => sum + (e.matchedCount || 0), 0);
-
-      if (upcoming) {
-        const days = Math.ceil((new Date(upcoming.date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-        subtitle = `Your next celebration is in ${days} days.`;
-      } else if (processing) {
-        subtitle = `Photos from ${processing.title} are being curated.`;
-      } else if (matched > 0) {
-        subtitle = `We found ${matched} matched photos of you!`;
-      }
-    }
-
-    return {
-      greeting: `${greet}, ${profile.name.split(' ')[0]} 👋`,
-      subtitle
-    };
+  // Helper for same-day date comparison
+  const isSameDay = (d1: Date, d2: Date) => {
+    return (
+      d1.getFullYear() === d2.getFullYear() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getDate() === d2.getDate()
+    );
   };
 
-  const headerInfo = getGreetingHeader();
+  // Lifecycle Stage Resolver:
+  // 1. Primary Source of Truth: `ev.stage`
+  // 2. Legacy Migration Fallback: executed ONLY if `ev.stage` is null/undefined
+  const resolveCanonicalStage = (ev: any, today: Date): 'UPCOMING' | 'LIVE' | 'READY' | 'HIGHLIGHTS' => {
+    // 1. Primary Source of Truth
+    if (ev.stage) {
+      return ev.stage;
+    }
+
+    // 2. Temporary Migration Fallback (only executed if ev.stage is null/undefined)
+    if (ev.highlightsReady || ev.isHighlights) {
+      return 'HIGHLIGHTS';
+    }
+
+    const eventDate = new Date(ev.date);
+    const isToday = isSameDay(eventDate, today);
+
+    if (eventDate > today && !isToday) {
+      return 'UPCOMING';
+    }
+    if (isToday) {
+      return 'LIVE';
+    }
+
+    return 'READY';
+  };
+
+  // ─── Scalable Hero Priority Engine ──────────────────────────────────────────
+  const singleHeroCard = React.useMemo(() => {
+    const today = new Date();
+    const params = {
+      events,
+      lastMatchedCounts,
+      profileName: profile?.name,
+      today,
+    };
+
+    // Scalable Priority Registry (evaluated top-down in array order)
+    const HERO_PRIORITY_EVALUATORS = [
+      // 1. NEW_MATCHES
+      ({ events: evts, lastMatchedCounts: counts }: any) => {
+        for (const ev of evts) {
+          const currentCount = ev.matchedCount || 0;
+          const prevCount = counts[ev.slug] ?? null;
+          if (prevCount !== null && currentCount > prevCount) {
+            const diff = currentCount - prevCount;
+            return {
+              type: 'NEW_MATCHES',
+              icon: '✨',
+              headline: `We found ${diff} new memo${diff === 1 ? 'ry' : 'ries'} of you.`,
+              subtitle: `${ev.title} · Your gallery has been updated`,
+              cta: 'View Gallery →',
+              eventSlug: ev.slug,
+            };
+          }
+        }
+        return null;
+      },
+
+      // 2. NEW_HIGHLIGHTS
+      ({ events: evts, today: now }: any) => {
+        for (const ev of evts) {
+          const stage = resolveCanonicalStage(ev, now);
+          if (stage === 'HIGHLIGHTS') {
+            return {
+              type: 'NEW_HIGHLIGHTS',
+              icon: '✨',
+              headline: `Highlights from ${ev.title} are now available.`,
+              subtitle: 'View curated highlights & top moments',
+              cta: 'View Highlights →',
+              eventSlug: ev.slug,
+            };
+          }
+        }
+        return null;
+      },
+
+      // 3. ANNIVERSARY
+      ({ events: evts, today: now }: any) => {
+        for (const ev of evts) {
+          const eventDate = new Date(ev.date);
+          if (eventDate < now && !isSameDay(eventDate, now)) {
+            const weddingYear = eventDate.getFullYear();
+            const weddingMonth = eventDate.getMonth();
+            const weddingDay = eventDate.getDate();
+
+            if (weddingYear < now.getFullYear()) {
+              let nextAnniv = new Date(now.getFullYear(), weddingMonth, weddingDay);
+              if (nextAnniv < now && !isSameDay(nextAnniv, now)) {
+                nextAnniv = new Date(now.getFullYear() + 1, weddingMonth, weddingDay);
+              }
+
+              const isAnnivToday = isSameDay(nextAnniv, now);
+              const daysUntil = Math.ceil((nextAnniv.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+              if (isAnnivToday) {
+                return {
+                  type: 'ANNIVERSARY',
+                  icon: '❤️',
+                  headline: 'One year ago today...',
+                  subtitle: `Relive ${ev.title}'s celebration`,
+                  cta: 'Relive Gallery →',
+                  eventSlug: ev.slug,
+                };
+              } else if (daysUntil <= 14 && daysUntil > 0) {
+                return {
+                  type: 'ANNIVERSARY',
+                  icon: '❤️',
+                  headline: `${ev.title}'s anniversary in ${daysUntil} day${daysUntil === 1 ? '' : 's'}`,
+                  subtitle: `Relive ${ev.title}'s celebration`,
+                  cta: 'Relive Gallery →',
+                  eventSlug: ev.slug,
+                };
+              }
+            }
+          }
+        }
+        return null;
+      },
+
+      // 4. UPCOMING
+      ({ events: evts, today: now }: any) => {
+        for (const ev of evts) {
+          const stage = resolveCanonicalStage(ev, now);
+          if (stage === 'UPCOMING') {
+            const eventDate = new Date(ev.date);
+            const days = Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            return {
+              type: 'UPCOMING',
+              icon: '📅',
+              headline: `${ev.title} celebrate in ${days} day${days === 1 ? '' : 's'}.`,
+              subtitle: 'See venue, schedule & updates',
+              cta: 'View Event →',
+              eventSlug: ev.slug,
+            };
+          }
+        }
+        return null;
+      },
+
+      // 5. LIVE
+      ({ events: evts, today: now }: any) => {
+        for (const ev of evts) {
+          const stage = resolveCanonicalStage(ev, now);
+          if (stage === 'LIVE') {
+            return {
+              type: 'LIVE',
+              icon: '🎉',
+              headline: `Today is ${ev.title}'s wedding day!`,
+              subtitle: 'Celebration is live · Access updates & shared photos',
+              cta: 'Open Celebration →',
+              eventSlug: ev.slug,
+            };
+          }
+        }
+        return null;
+      },
+
+      // 6. WELCOME (Fallback)
+      ({ profileName, today: now }: any) => {
+        const firstName = profileName ? profileName.split(' ')[0] : '';
+        const hrs = now.getHours();
+        const greet = hrs < 12 ? 'Good Morning' : hrs < 17 ? 'Good Afternoon' : 'Good Evening';
+        return {
+          type: 'WELCOME',
+          icon: '👋',
+          headline: firstName ? `Welcome back, ${firstName}` : 'Welcome to My Circle',
+          subtitle: 'Every celebration. Every memory. One place.',
+          cta: '',
+          eventSlug: null,
+        };
+      },
+    ];
+
+    for (const evaluator of HERO_PRIORITY_EVALUATORS) {
+      const card = evaluator(params);
+      if (card) return card;
+    }
+    return null;
+  }, [events, lastMatchedCounts, profile?.name]);
+
+  // Persist matched counts once events load
+  useEffect(() => {
+    if (!countsLoaded) return;
+    if (events.length > 0) {
+      const newCounts: Record<string, number> = {};
+      events.forEach((e) => { newCounts[e.slug] = e.matchedCount || 0; });
+      AsyncStorage.setItem('@mycircle_matched_counts', JSON.stringify(newCounts)).catch(() => {});
+    }
+  }, [events, countsLoaded]);
+
+  const handleHeroPress = (card: any) => {
+    if (card.eventSlug) {
+      setEventDetails(card.eventSlug, null);
+      router.replace('/mycircle');
+    }
+  };
 
   const handleEventCardClick = (ev: any) => {
     // If it's a ready event, go directly to the gallery inside mycircle tab
@@ -278,34 +463,51 @@ export default function HomeScreen() {
       <StatusBar barStyle="dark-content" />
       
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Dynamic Greeting Hero */}
-        <View style={styles.heroSection}>
-          <Text style={styles.greetingText}>{headerInfo.greeting}</Text>
-          <Text style={styles.subtitleText}>{headerInfo.subtitle}</Text>
-        </View>
+        {/* ── 1. Single Intelligent Hero Card ─────────────────────────────── */}
+        {singleHeroCard && (
+          <Pressable
+            style={styles.heroSection}
+            onPress={() => handleHeroPress(singleHeroCard)}
+            disabled={!singleHeroCard.eventSlug}
+          >
+            <View style={styles.heroCardContentContainer}>
+              <Text style={styles.heroIcon}>{singleHeroCard.icon}</Text>
+              <Text style={styles.greetingText}>{singleHeroCard.headline}</Text>
+              <Text style={styles.subtitleText}>{singleHeroCard.subtitle}</Text>
+              {singleHeroCard.cta ? (
+                <Text style={styles.heroCta}>{singleHeroCard.cta}</Text>
+              ) : null}
+            </View>
+          </Pressable>
+        )}
 
-        {/* Layer 2: "What's Happening" (Active Circle Cards) */}
+        {/* ── 2. What's Happening (Only for users with joined celebrations) ── */}
         {token && events.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionHeader}>WHAT'S HAPPENING</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
               {events.map((ev) => {
-                const isUpcoming = new Date(ev.date) > new Date();
-                const isProcessing = new Date(ev.date) <= new Date() && !ev.galleryFacesComplete;
+                const today = new Date();
+                const eventDate = new Date(ev.date);
+                const stage = resolveCanonicalStage(ev, today);
 
-                let cardBadge = 'READY';
-                let badgeColor = '#4caf50';
+                let badgeColor = '#60646c';
                 let statusMsg = `${ev.matchedCount || 0} photo${ev.matchedCount === 1 ? '' : 's'} matched`;
 
-                if (isUpcoming) {
-                  const days = Math.ceil((new Date(ev.date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                  cardBadge = 'UPCOMING';
-                  badgeColor = '#00bcd4';
-                  statusMsg = `${days} days left until wedding`;
-                } else if (isProcessing) {
-                  cardBadge = 'CURATING';
-                  badgeColor = '#ff9800';
-                  statusMsg = 'Photos are being sorted';
+                if (stage === 'UPCOMING') {
+                  const days = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                  badgeColor = '#8c867e';
+                  statusMsg = `Wedding in ${days} day${days === 1 ? '' : 's'}`;
+                } else if (stage === 'LIVE') {
+                  badgeColor = '#a07850';
+                  statusMsg = 'Happening today! 🎊';
+                } else if (stage === 'HIGHLIGHTS') {
+                  badgeColor = '#a07850';
+                  statusMsg = 'Curated highlights ready';
+                } else {
+                  // READY
+                  badgeColor = '#60646c';
+                  statusMsg = `${ev.matchedCount || 0} photo${ev.matchedCount === 1 ? '' : 's'} matched`;
                 }
 
                 return (
@@ -323,7 +525,7 @@ export default function HomeScreen() {
                         </View>
                       )}
                       <View style={[styles.badge, { backgroundColor: badgeColor }]}>
-                        <Text style={styles.badgeText}>{cardBadge}</Text>
+                        <Text style={styles.badgeText}>{stage}</Text>
                       </View>
                     </View>
                     <View style={styles.cardInfo}>
@@ -365,7 +567,11 @@ export default function HomeScreen() {
                 onPress={() => handleStoryPress(story)}
               >
                 <Image source={story.coverImage} style={styles.featuredImage} />
-                <View style={styles.featuredOverlay} />
+                <LinearGradient 
+                  colors={['transparent', 'rgba(18, 16, 14, 0.15)', 'rgba(18, 16, 14, 0.85)']} 
+                  locations={[0, 0.45, 1]} 
+                  style={styles.featuredOverlay} 
+                />
                 <View style={styles.featuredContent}>
                   <Text style={styles.featuredLocation}>{(story.location || 'MISTY VISUALS').toUpperCase()}</Text>
                   <Text style={styles.featuredTitle}>{story.title}</Text>
@@ -494,24 +700,40 @@ const styles = StyleSheet.create({
   },
   heroSection: {
     paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 32,
+    paddingTop: 28,
+    paddingBottom: 26,
     borderBottomWidth: 1,
     borderBottomColor: '#f0ede8',
     backgroundColor: '#fbfaf8',
   },
+  heroCardContentContainer: {
+    width: '100%',
+  },
+  heroIcon: {
+    fontSize: 26,
+    marginBottom: 8,
+  },
   greetingText: {
     fontFamily: 'System',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     color: '#1c1a18',
-    marginBottom: 8,
+    marginBottom: 6,
+    letterSpacing: -0.3,
   },
   subtitleText: {
     fontFamily: 'serif',
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 20,
     color: '#60646c',
+  },
+  heroCta: {
+    marginTop: 12,
+    fontFamily: 'System',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#a07850',
+    letterSpacing: 0.4,
   },
   section: {
     paddingTop: 32,
@@ -598,7 +820,6 @@ const styles = StyleSheet.create({
   },
   featuredOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(28, 26, 24, 0.45)',
   },
   featuredContent: {
     position: 'absolute',

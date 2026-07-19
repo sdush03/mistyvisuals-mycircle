@@ -10,6 +10,7 @@ import {
   Dimensions 
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
@@ -63,7 +64,11 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
           {/* Hero Banner */}
           <View style={styles.heroContainer}>
             <Image source={story.coverImage} style={styles.heroImage} />
-            <View style={styles.heroOverlay} />
+            <LinearGradient
+              colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.18)', 'rgba(0,0,0,0.65)']}
+              locations={[0, 0.5, 1]}
+              style={styles.heroOverlay}
+            />
             <View style={styles.titleContainer}>
               {locationText ? <Text style={styles.storyLocation}>{locationText}</Text> : null}
               {titleText ? <Text style={styles.storyTitle}>{titleText}</Text> : null}
@@ -199,7 +204,6 @@ const styles = StyleSheet.create({
   },
   heroOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(28, 26, 24, 0.35)',
   },
   titleContainer: {
     position: 'absolute',
