@@ -52,20 +52,10 @@ jobs:
               await client.connect();
 
               try {
-                // 1. Get all photo likes
-                const likesRes = await client.query('SELECT * FROM photo_likes');
-                console.log("\n--- Photo Likes ---");
-                console.table(likesRes.rows);
-
-                // 2. Describe constraints
-                const constraintsRes = await client.query(`
-                  SELECT conname, pg_get_constraintdef(c.oid) 
-                  FROM pg_constraint c 
-                  JOIN pg_namespace n ON n.oid = c.connamespace 
-                  WHERE conrelid = 'photo_likes'::regclass
-                `);
-                console.log("\n--- Constraints for photo_likes ---");
-                console.table(constraintsRes.rows);
+                // 1. Get 10 sample photos
+                const photosRes = await client.query('SELECT id, r2_url, thumbnail_url FROM photos WHERE event_id = 4 LIMIT 10');
+                console.log("\n--- Sample Photos ---");
+                console.table(photosRes.rows);
 
               } catch (err) {
                 console.error(err);
