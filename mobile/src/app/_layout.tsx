@@ -213,7 +213,10 @@ function CustomFloatingTabBar({ activeTab, isCollapsed, bottomInset, profile, on
     width: widthVal.value,
   }));
 
+  const setTabBarCollapsed = useAuthStore((state) => state.setTabBarCollapsed);
+
   const handleTabPress = (tabName: 'index' | 'mycircle' | 'profile') => {
+    setTabBarCollapsed(false);
     if (tabName === 'index') {
       router.replace('/');
     } else if (tabName === 'mycircle') {

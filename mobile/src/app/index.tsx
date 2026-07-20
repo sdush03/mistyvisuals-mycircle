@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuthStore } from '../store/authStore';
+import { useScrollTabBarCollapse } from '../hooks/useScrollTabBarCollapse';
 import api from '../services/api';
 
 import { Linking } from 'react-native';
@@ -68,6 +69,8 @@ export default function HomeScreen() {
   const [selectedMoodboardId, setSelectedMoodboardId] = useState<string | null>(null);
   const [isAllStoriesOpen, setIsAllStoriesOpen] = useState(false);
   const [isJoinCelebrationModalOpen, setIsJoinCelebrationModalOpen] = useState(false);
+
+  const handleScroll = useScrollTabBarCollapse();
 
   const [websiteStories, setWebsiteStories] = useState<any[]>([]);
   const [websiteFilms, setWebsiteFilms] = useState<any[]>([]);
@@ -661,7 +664,12 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
         {/* ── 1. Hero Card (Minimalist Architectural — Editorial Copy) ── */}
         {singleHeroCard && (
           <Animated.View style={{ opacity: heroFadeAnim }}>

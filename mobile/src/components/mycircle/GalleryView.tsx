@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useAuthStore } from '../../store/authStore';
+import { useScrollTabBarCollapse } from '../../hooks/useScrollTabBarCollapse';
 import api, { guestApi, API_BASE_URL } from '../../services/api';
 
 const { width } = Dimensions.get('window');
@@ -55,18 +56,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const eventCoverUrl = useAuthStore((state) => state.eventCoverUrl);
   const eventTitle = useAuthStore((state) => state.eventTitle);
   const setTabBarCollapsed = useAuthStore((state) => state.setTabBarCollapsed);
-
-  const handleScroll = (event: any) => {
-    const currentOffset = event.nativeEvent.contentOffset.y;
-    const direction = currentOffset > prevOffset ? 'down' : 'up';
-    setPrevOffset(currentOffset);
-
-    if (direction === 'down' && currentOffset > 60) {
-      setTabBarCollapsed(true);
-    } else if (direction === 'up') {
-      setTabBarCollapsed(false);
-    }
-  };
+  const handleScroll = useScrollTabBarCollapse();
 
   const fetchPhotos = async () => {
     try {

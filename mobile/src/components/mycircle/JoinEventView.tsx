@@ -14,6 +14,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as SecureStore from 'expo-secure-store';
 import { useAuthStore } from '../../store/authStore';
+import { useScrollTabBarCollapse } from '../../hooks/useScrollTabBarCollapse';
 import api from '../../services/api';
 import JoinCelebrationModal from '../JoinCelebrationModal';
 
@@ -33,6 +34,8 @@ export default function JoinEventView({ onSuccess }: JoinEventViewProps) {
   const [events, setEvents] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+
+  const handleScroll = useScrollTabBarCollapse();
 
   const setEventDetails = useAuthStore((state) => state.setEventDetails);
   const profile = useAuthStore((state) => state.profile);
@@ -141,6 +144,8 @@ export default function JoinEventView({ onSuccess }: JoinEventViewProps) {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.gridContainer}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
         >
           <View style={styles.gridRow}>
             {/* Render joined gallery cards */}
