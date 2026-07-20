@@ -356,8 +356,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f3f4f6',
   },
   headerLogo: {
-    height: 28,
-    width: 100,
+    height: 38,
+    width: 135,
     tintColor: '#000000',
   },
   profileHeaderBtn: {
