@@ -722,9 +722,11 @@ export default function HomeScreen() {
                       style={styles.myCircleCardOverlay} 
                     />
                     <View style={styles.myCircleCardContent}>
-                      <Text style={styles.myCircleCardLocation}>{locationText}</Text>
-                      <Text style={styles.myCircleCardTitle}>{ev.title}</Text>
-                      <Text style={styles.myCircleCardStatus}>{statusMsg}</Text>
+                      <View style={styles.myCircleCardMainText}>
+                        <Text style={styles.myCircleCardTitle}>{ev.title}</Text>
+                        <Text style={styles.myCircleCardStatus}>{statusMsg}</Text>
+                      </View>
+                      <Text style={styles.myCircleCardLocationRight}>{locationText}</Text>
                     </View>
                   </Pressable>
                 );
@@ -1245,15 +1247,13 @@ const styles = StyleSheet.create({
     bottom: 18,
     left: 18,
     right: 18,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
   },
-  myCircleCardLocation: {
-    fontFamily: 'System',
-    fontSize: 8,
-    fontWeight: '700',
-    letterSpacing: 2,
-    color: '#d0c8be',
-    marginBottom: 4,
-    opacity: 0.85,
+  myCircleCardMainText: {
+    flex: 1,
+    marginRight: 12,
   },
   myCircleCardTitle: {
     fontFamily: 'serif',
@@ -1268,6 +1268,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#e5dfd5',
     letterSpacing: 0.3,
+  },
+  myCircleCardLocationRight: {
+    fontFamily: 'System',
+    fontSize: 8,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    color: '#d0c8be',
+    opacity: 0.85,
+    marginBottom: 2,
   },
   featuredCard: {
     width: width * 0.7,
