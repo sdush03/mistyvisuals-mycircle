@@ -1,0 +1,475 @@
+import React, { useState, useEffect } from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  ScrollView,
+  Dimensions,
+  SafeAreaView,
+  Platform,
+} from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as SecureStore from 'expo-secure-store';
+import { useAuthStore } from '../store/authStore';
+import api from '../services/api';
+
+const JOINED_EVENTS_KEY = 'joined_events_list';
+const { width, height } = Dimensions.get('window');
+
+export interface JoinCelebrationModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onSuccess?: (slug: string, passcode: string | null) => void;
+}
+
+export default function JoinCelebrationModal({
+  visible,
+  onClose,
+  onSuccess,
+}: JoinCelebrationModalProps) {
+  const [eventInput, setEventInput] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [recentEvents, setRecentEvents] = useState<Array<{ slug: string; title: string; date?: string }>>([]);
+
+  const setEventDetails = useAuthStore((state) => state.setEventDetails);
+
+  // Load recently joined events when modal opens
+  useEffect(() => {
+    if (visible) {
+      loadRecentEvents();
+    }
+  }, [visible]);
+
+  const loadRecentEvents = async () => {
+    try {
+      const eventsStr = await SecureStore.getItemAsync(JOINED_EVENTS_KEY);
+      if (eventsStr) {
+        setRecentEvents(JSON.parse(eventsStr));
+      }
+    } catch (e) {
+      console.error('Failed to load recent events', e);
+    }
+  };
+
+  const saveEventToRecent = async (slug: string, title: string) => {
+    try {
+      const currentList = [...recentEvents];
+      const exists = currentList.find((e) => e.slug === slug);
+      if (!exists) {
+        const newList = [{ slug, title, date: new Date().toISOString() }, ...currentList].slice(0, 10);
+        setRecentEvents(newList);
+        await SecureStore.setItemAsync(JOINED_EVENTS_KEY, JSON.stringify(newList));
+      }
+    } catch (e) {
+      console.error('Failed to save event to recent list', e);
+    }
+  };
+
+  const handleJoin = async (slug: string, passcode: string | null) => {
+    try {
+      setIsSubmitting(true);
+      const res = await api.get(`/api/gallery/public/events/${slug}`);
+      const eventData = res.data;
+
+      await saveEventToRecent(slug, eventData.title || slug);
+      setEventDetails(slug, passcode, eventData.coverPhotoMobileUrl || eventData.coverPhotoUrl, eventData.title);
+      
+      if (onSuccess) {
+        onSuccess(slug, passcode);
+      }
+      handleClose();
+    } catch (err: any) {
+      console.error(err);
+      const msg = err.response?.data?.error || 'Celebration not found. Please check the code or link.';
+      Alert.alert('Celebration Not Found', msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const parseAndJoinUrl = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    // 1. Check if full URL
+    try {
+      if (trimmed.includes('http://') || trimmed.includes('https://') || trimmed.includes('mycircle://')) {
+        const urlObj = new URL(trimmed.replace('mycircle://', 'https://'));
+        const pathSegments = urlObj.pathname.split('/').filter(Boolean);
+        const slug = pathSegments[0];
+        const passcode = urlObj.searchParams.get('code') || urlObj.searchParams.get('passcode');
+
+        if (slug) {
+          handleJoin(slug, passcode);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('URL parsing failed, treating as code/slug', e);
+    }
+
+    // 2. Check 6-char alphanumeric invite code
+    const codePattern = /^[A-Z0-9]{6}$/i;
+    if (codePattern.test(trimmed)) {
+      try {
+        setIsSubmitting(true);
+        const res = await api.get(`/api/gallery/public/lookup-code/${trimmed.toUpperCase()}`);
+        if (res.data && res.data.slug) {
+          handleJoin(res.data.slug, trimmed.toUpperCase());
+          return;
+        }
+      } catch (err) {
+        console.warn('Invite code lookup failed, treating as slug', err);
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+
+    // 3. Fallback: treat as direct slug
+    handleJoin(trimmed, null);
+  };
+
+  const handleBarCodeScanned = ({ data }: { data: string }) => {
+    setShowScanner(false);
+    parseAndJoinUrl(data);
+  };
+
+  const handleClose = () => {
+    setShowScanner(false);
+    setEventInput('');
+    onClose();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={handleClose}
+    >
+      <SafeAreaView style={styles.modalBackdrop}>
+        <View style={styles.modalCardContainer}>
+          {/* Header */}
+          <View style={styles.modalHeader}>
+            <View>
+              <Text style={styles.modalCategory}>MY CIRCLE</Text>
+              <Text style={styles.modalTitle}>Join a Celebration</Text>
+            </View>
+            <Pressable style={styles.closeBtn} onPress={handleClose}>
+              <Text style={styles.closeBtnText}>✕</Text>
+            </Pressable>
+          </View>
+
+          {showScanner ? (
+            /* QR Code Camera View */
+            <View style={styles.scannerBody}>
+              <Text style={styles.scannerSubtitle}>
+                Align the QR code inside the frame to join.
+              </Text>
+              {!cameraPermission?.granted ? (
+                <View style={styles.permContainer}>
+                  <Text style={styles.permText}>Camera permission is required to scan QR code.</Text>
+                  <Pressable style={styles.primaryBtn} onPress={requestCameraPermission}>
+                    <Text style={styles.primaryBtnText}>Grant Permission</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.scannerFrame}>
+                  <CameraView
+                    style={styles.cameraView}
+                    barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+                    onBarcodeScanned={handleBarCodeScanned}
+                  />
+                </View>
+              )}
+              <Pressable style={styles.secondaryBtn} onPress={() => setShowScanner(false)}>
+                <Text style={styles.secondaryBtnText}>Back to Text Input</Text>
+              </Pressable>
+            </View>
+          ) : (
+            /* Main Form View */
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.formBody}>
+              <Text style={styles.inputLabel}>
+                Scan the event QR code or enter your 6-character invite code / event link.
+              </Text>
+
+              <TextInput
+                style={styles.textInput}
+                placeholder="Enter event code or paste link"
+                placeholderTextColor="#9ca3af"
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={eventInput}
+                onChangeText={setEventInput}
+                editable={!isSubmitting}
+              />
+
+              <View style={styles.buttonRow}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.secondaryBtn,
+                    pressed && styles.btnPressed,
+                  ]}
+                  onPress={() => setShowScanner(true)}
+                  disabled={isSubmitting}
+                >
+                  <Text style={styles.secondaryBtnText}>Scan QR Code</Text>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.primaryBtn,
+                    pressed && styles.btnPressed,
+                    isSubmitting && styles.btnDisabled,
+                  ]}
+                  onPress={() => parseAndJoinUrl(eventInput)}
+                  disabled={isSubmitting || !eventInput.trim()}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator color="#ffffff" size="small" />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>Join Gallery</Text>
+                  )}
+                </Pressable>
+              </View>
+
+              {/* Recent Events */}
+              {recentEvents.length > 0 && (
+                <View style={styles.recentContainer}>
+                  <Text style={styles.recentHeader}>RECENT CELEBRATIONS</Text>
+                  {recentEvents.map((item) => (
+                    <Pressable
+                      key={item.slug}
+                      style={({ pressed }) => [
+                        styles.recentItem,
+                        pressed && styles.recentItemPressed,
+                      ]}
+                      onPress={() => handleJoin(item.slug, null)}
+                      disabled={isSubmitting}
+                    >
+                      <View>
+                        <Text style={styles.recentItemTitle}>{item.title}</Text>
+                        <Text style={styles.recentItemSlug}>{item.slug}</Text>
+                      </View>
+                      <Text style={styles.recentItemArrow}>→</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+          )}
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(18, 16, 14, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  modalCardContainer: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    maxHeight: height * 0.85,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0ede8',
+  },
+  modalCategory: {
+    fontFamily: 'System',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 2,
+    color: '#a07850',
+    marginBottom: 4,
+  },
+  modalTitle: {
+    fontFamily: 'serif',
+    fontSize: 22,
+    fontWeight: '300',
+    color: '#1c1a18',
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f3f0ea',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeBtnText: {
+    fontSize: 14,
+    color: '#60646c',
+    fontWeight: '600',
+  },
+  formBody: {
+    paddingBottom: 20,
+  },
+  inputLabel: {
+    fontFamily: 'System',
+    fontSize: 13,
+    color: '#60646c',
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  textInput: {
+    backgroundColor: '#fbfaf8',
+    borderWidth: 1,
+    borderColor: '#e5e0d8',
+    borderRadius: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 14,
+    color: '#1c1a18',
+    marginBottom: 16,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  secondaryBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#1c1a18',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryBtnText: {
+    fontFamily: 'System',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: '#1c1a18',
+    textTransform: 'uppercase',
+  },
+  primaryBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    backgroundColor: '#1c1a18',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryBtnText: {
+    fontFamily: 'System',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: '#ffffff',
+    textTransform: 'uppercase',
+  },
+  btnPressed: {
+    opacity: 0.8,
+  },
+  btnDisabled: {
+    backgroundColor: '#8c867e',
+  },
+  scannerBody: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  scannerSubtitle: {
+    fontFamily: 'System',
+    fontSize: 13,
+    color: '#60646c',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  scannerFrame: {
+    width: 240,
+    height: 240,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#a07850',
+    marginBottom: 24,
+  },
+  cameraView: {
+    flex: 1,
+  },
+  permContainer: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  permText: {
+    fontFamily: 'System',
+    fontSize: 13,
+    color: '#60646c',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  recentContainer: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f0ede8',
+    paddingTop: 16,
+  },
+  recentHeader: {
+    fontFamily: 'System',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 2,
+    color: '#8c867e',
+    marginBottom: 12,
+  },
+  recentItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: '#fbfaf8',
+    borderWidth: 1,
+    borderColor: '#f0ede8',
+    borderRadius: 4,
+    marginBottom: 8,
+  },
+  recentItemPressed: {
+    backgroundColor: '#f3f0ea',
+  },
+  recentItemTitle: {
+    fontFamily: 'serif',
+    fontSize: 15,
+    fontWeight: '300',
+    color: '#1c1a18',
+  },
+  recentItemSlug: {
+    fontFamily: 'System',
+    fontSize: 10,
+    color: '#8c867e',
+    marginTop: 2,
+  },
+  recentItemArrow: {
+    fontFamily: 'System',
+    fontSize: 14,
+    color: '#a07850',
+  },
+});

@@ -47,6 +47,7 @@ import FeaturedStoryView from '../components/home/FeaturedStoryView';
 import ArticleView from '../components/home/ArticleView';
 import MoodboardsView, { CURATED_MOODBOARDS } from '../components/home/MoodboardsView';
 import AllStoriesView from '../components/home/AllStoriesView';
+import JoinCelebrationModal from '../components/JoinCelebrationModal';
 
 const { width } = Dimensions.get('window');
 
@@ -66,6 +67,7 @@ export default function HomeScreen() {
   const [isMoodboardsOpen, setIsMoodboardsOpen] = useState(false);
   const [selectedMoodboardId, setSelectedMoodboardId] = useState<string | null>(null);
   const [isAllStoriesOpen, setIsAllStoriesOpen] = useState(false);
+  const [isJoinCelebrationModalOpen, setIsJoinCelebrationModalOpen] = useState(false);
 
   const [websiteStories, setWebsiteStories] = useState<any[]>([]);
   const [websiteFilms, setWebsiteFilms] = useState<any[]>([]);
@@ -197,31 +199,29 @@ export default function HomeScreen() {
   }, []);
 
   // Fetch joined wedding events if authenticated
-  useEffect(() => {
-    const fetchUserEvents = async () => {
-      if (!token) {
-        setEvents([]);
-        AsyncStorage.removeItem('@mycircle_user_events_cache').catch(() => {});
-        return;
+  const fetchUserEvents = useCallback(async () => {
+    if (!token) {
+      setEvents([]);
+      AsyncStorage.removeItem('@mycircle_user_events_cache').catch(() => {});
+      return;
+    }
+    try {
+      const res = await api.get('/api/gallery/family/events');
+      const rawEvents: any[] = res.data.events || [];
+      setEvents(rawEvents);
+      AsyncStorage.setItem('@mycircle_user_events_cache', JSON.stringify(rawEvents)).catch(() => {});
+    } catch (err: any) {
+      if (err?.response?.status !== 401) {
+        console.warn('fetchUserEvents failed:', err?.message);
       }
-      try {
-        const res = await api.get('/api/gallery/family/events');
-        const rawEvents: any[] = res.data.events || [];
-        setEvents(rawEvents);
-        AsyncStorage.setItem('@mycircle_user_events_cache', JSON.stringify(rawEvents)).catch(() => {});
-      } catch (err: any) {
-        // 401 means the token is expired/invalid — the API interceptor handles
-        // session cleanup. Swallow silently here to avoid a noisy console error.
-        if (err?.response?.status !== 401) {
-          console.warn('fetchUserEvents failed:', err?.message);
-        }
-      } finally {
-        setLoadingEvents(false);
-      }
-    };
-
-    fetchUserEvents();
+    } finally {
+      setLoadingEvents(false);
+    }
   }, [token]);
+
+  useEffect(() => {
+    fetchUserEvents();
+  }, [fetchUserEvents]);
 
   const handleStoryPress = async (story: any) => {
     if (story.slug) {
@@ -1025,7 +1025,7 @@ export default function HomeScreen() {
               ? 'Join using your invitation code to unlock your private memories and AI face-matched photos.'
               : 'Enter your invitation code or scan a QR code to unlock more private memories.'}
           </Text>
-          <Pressable style={styles.joinCtaBtn} onPress={() => router.replace('/mycircle')}>
+          <Pressable style={styles.joinCtaBtn} onPress={() => setIsJoinCelebrationModalOpen(true)}>
             <Text style={styles.joinCtaBtnText}>JOIN CELEBRATION →</Text>
           </Pressable>
         </View>
@@ -1053,9 +1053,16 @@ export default function HomeScreen() {
       <AllStoriesView
         isOpen={isAllStoriesOpen}
         onClose={() => setIsAllStoriesOpen(false)}
-        stories={websiteStories}
-        initialVibe={selectedVibe}
+        stories={getFilteredVibeStories()}
         onSelectStory={(story) => handleStoryPress(story)}
+      />
+
+      <JoinCelebrationModal
+        visible={isJoinCelebrationModalOpen}
+        onClose={() => setIsJoinCelebrationModalOpen(false)}
+        onSuccess={() => {
+          fetchUserEvents();
+        }}
       />
     </View>
   );
@@ -1321,8 +1328,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     color: '#ffffff',
     opacity: 0.9,
-    alignSelf: 'flex-end',
-    textAlign: 'right',
   },
   articlesContainer: {
     paddingHorizontal: 24,

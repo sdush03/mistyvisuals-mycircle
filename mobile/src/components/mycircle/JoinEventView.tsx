@@ -1,390 +1,400 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TextInput, Pressable, ActivityIndicator, Alert, ScrollView } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import {
+  StyleSheet,
+  View,
+  Text,
+  Pressable,
+  ActivityIndicator,
+  ScrollView,
+  Dimensions,
+  SafeAreaView,
+  StatusBar,
+} from 'react-native';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as SecureStore from 'expo-secure-store';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
+import JoinCelebrationModal from '../JoinCelebrationModal';
 
 const JOINED_EVENTS_KEY = 'joined_events_list';
+const { width } = Dimensions.get('window');
+
+// 2-column layout math: 24px screen padding on each side, 12px gap between columns
+const PADDING = 24;
+const GAP = 12;
+const COLUMN_WIDTH = (width - PADDING * 2 - GAP) / 2;
 
 interface JoinEventViewProps {
   onSuccess: (slug: string, passcode: string | null) => void;
 }
 
 export default function JoinEventView({ onSuccess }: JoinEventViewProps) {
-  const [eventInput, setEventInput] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  const [showScanner, setShowScanner] = useState(false);
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  
-  const [recentEvents, setRecentEvents] = useState<Array<{ slug: string; title: string; date?: string }>>([]);
-  const setEventDetails = useAuthStore((state) => state.setEventDetails);
+  const [events, setEvents] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
 
-  // Load recently joined events from local secure store
+  const setEventDetails = useAuthStore((state) => state.setEventDetails);
+  const profile = useAuthStore((state) => state.profile);
+
+  // Load user's joined events from backend API + fallback to SecureStore
   useEffect(() => {
-    const loadRecentEvents = async () => {
-      try {
-        const eventsStr = await SecureStore.getItemAsync(JOINED_EVENTS_KEY);
-        if (eventsStr) {
-          setRecentEvents(JSON.parse(eventsStr));
-        }
-      } catch (e) {
-        console.error('Failed to load recent events', e);
-      }
-    };
-    loadRecentEvents();
+    fetchEvents();
   }, []);
 
-  const saveEventToRecent = async (slug: string, title: string) => {
+  const fetchEvents = async () => {
     try {
-      const currentList = [...recentEvents];
-      const exists = currentList.find((e) => e.slug === slug);
-      if (!exists) {
-        const newList = [{ slug, title, date: new Date().toISOString() }, ...currentList].slice(0, 10);
-        setRecentEvents(newList);
-        await SecureStore.setItemAsync(JOINED_EVENTS_KEY, JSON.stringify(newList));
-      }
-    } catch (e) {
-      console.error('Failed to save event to recent list', e);
-    }
-  };
-
-  const handleJoin = async (slug: string, passcode: string | null) => {
-    try {
-      setIsSubmitting(true);
-
-      // Validate that the event exists by calling the public event details API
-      const res = await api.get(`/api/gallery/public/events/${slug}`);
-      const eventData = res.data;
+      setIsLoading(true);
       
-      await saveEventToRecent(slug, eventData.title);
-      setEventDetails(slug, passcode);
-      onSuccess(slug, passcode);
-    } catch (err: any) {
-      console.error(err);
-      const msg = err.response?.data?.error || 'Event not found. Check the code/link and try again.';
-      Alert.alert('Event Not Found', msg);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const parseAndJoinUrl = async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-
-    // Check if it's a full URL
-    // e.g. https://mycircle.mistyvisuals.com/wedding-slug?code=1234
-    // or mycircle://wedding-slug?code=1234
-    try {
-      if (trimmed.includes('http://') || trimmed.includes('https://') || trimmed.includes('mycircle://')) {
-        const urlObj = new URL(trimmed.replace('mycircle://', 'https://'));
-        const pathSegments = urlObj.pathname.split('/').filter(Boolean);
-        
-        // The first segment after the domain is the slug
-        // Note: in Next.js structure it could be [slug]/gallery or just [slug]
-        const slug = pathSegments[0];
-        const passcode = urlObj.searchParams.get('code') || urlObj.searchParams.get('passcode');
-        
-        if (slug) {
-          handleJoin(slug, passcode);
-          return;
-        }
+      // 1. Fetch live events list from family endpoint
+      const res = await api.get('/api/gallery/family/events');
+      if (res.data?.events && Array.isArray(res.data.events)) {
+        setEvents(res.data.events);
+      } else {
+        // Fallback to recent events from SecureStore
+        loadRecentEvents();
       }
     } catch (e) {
-      console.warn('URL parsing failed, treating as slug/code', e);
+      console.warn('Failed to fetch family events list, falling back to local storage:', e);
+      loadRecentEvents();
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    // Check if it's a 6-character alphanumeric invite code
-    const codePattern = /^[A-Z0-9]{6}$/i;
-    if (codePattern.test(trimmed)) {
-      try {
-        setIsSubmitting(true);
-        const res = await api.get(`/api/gallery/public/lookup-code/${trimmed.toUpperCase()}`);
-        if (res.data && res.data.slug) {
-          handleJoin(res.data.slug, trimmed.toUpperCase());
-          return;
-        }
-      } catch (err) {
-        console.warn('Invite code lookup failed, falling back to slug', err);
-      } finally {
-        setIsSubmitting(false);
+  const loadRecentEvents = async () => {
+    try {
+      const storedStr = await SecureStore.getItemAsync(JOINED_EVENTS_KEY);
+      if (storedStr) {
+        const parsed = JSON.parse(storedStr);
+        setEvents(parsed);
       }
+    } catch (e) {
+      console.error('Failed to load recent events from storage:', e);
     }
-
-    // Fallback: treat as direct slug
-    handleJoin(trimmed, null);
   };
 
-  const handleBarCodeScanned = ({ data }: { data: string }) => {
-    setShowScanner(false);
-    parseAndJoinUrl(data);
+  // Helper for My Circle card status subtext (Editorial Lifecycle Presentation)
+  const getMyCircleStatusCopy = (ev: any): string => {
+    const today = new Date();
+    const eventDate = new Date(ev.date || Date.now());
+    const isToday =
+      eventDate.getFullYear() === today.getFullYear() &&
+      eventDate.getMonth() === today.getMonth() &&
+      eventDate.getDate() === today.getDate();
+
+    if (ev.stage === 'HIGHLIGHTS' || ev.highlightsReady || ev.isHighlights) {
+      return 'Highlights ready';
+    }
+
+    if (ev.stage === 'UPCOMING' || (eventDate > today && !isToday)) {
+      const days = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (days <= 1) return 'Wedding tomorrow';
+      return `In ${days} days`;
+    }
+
+    if (ev.stage === 'LIVE' || isToday) {
+      return 'Happening today';
+    }
+
+    if (ev.stage === 'CURATING' || (eventDate < today && !isToday && (ev.matchedCount || 0) === 0 && ev.stage !== 'READY')) {
+      return 'Currently curating';
+    }
+
+    return 'Gallery ready';
   };
 
-  if (showScanner) {
-    if (!cameraPermission) {
-      return (
-        <View style={styles.container}>
-          <ActivityIndicator size="large" color="#ffffff" />
-        </View>
-      );
-    }
-
-    if (!cameraPermission.granted) {
-      return (
-        <View style={styles.container}>
-          <Text style={styles.title}>Camera Permission Required</Text>
-          <Text style={styles.subtitle}>
-            We need camera access to scan the Event QR code.
-          </Text>
-          <Pressable style={styles.button} onPress={requestCameraPermission}>
-            <Text style={styles.buttonText}>Grant Permission</Text>
-          </Pressable>
-          <Pressable style={styles.cancelBtn} onPress={() => setShowScanner(false)}>
-            <Text style={styles.cancelBtnText}>Cancel</Text>
-          </Pressable>
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Scan Event QR Code</Text>
-        <Text style={styles.subtitle}>Align the QR code inside the frame to join the gallery.</Text>
-        
-        <View style={styles.scannerContainer}>
-          <CameraView
-            style={styles.scanner}
-            barcodeScannerSettings={{
-              barcodeTypes: ['qr'],
-            }}
-            onBarcodeScanned={handleBarCodeScanned}
-          />
-        </View>
-
-        <Pressable style={styles.cancelBtn} onPress={() => setShowScanner(false)}>
-          <Text style={styles.cancelBtnText}>Back to Text Input</Text>
-        </Pressable>
-      </View>
-    );
-  }
+  const handleSelectEvent = (ev: any) => {
+    const slug = ev.slug;
+    const coverUrl = ev.coverPhotoUrl || ev.coverPhotoSquareUrl || ev.coverPhotoMobileUrl || null;
+    const title = ev.title || slug;
+    
+    setEventDetails(slug, ev.passcode || null, coverUrl, title);
+    onSuccess(slug, ev.passcode || null);
+  };
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContainer} style={styles.scrollView}>
-      <Text style={styles.title}>Join an Event</Text>
-      <Text style={styles.subtitle}>
-        Scan the QR code at the event or enter the event link/code below.
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Event slug or paste link here"
-        placeholderTextColor="rgba(0, 0, 0, 0.4)"
-        autoCapitalize="none"
-        autoCorrect={false}
-        value={eventInput}
-        onChangeText={setEventInput}
-        editable={!isSubmitting}
-      />
-
-      <View style={styles.btnRow}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.scannerBtn,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={() => setShowScanner(true)}
-          disabled={isSubmitting}
-        >
-          <Text style={styles.scannerBtnText}>Scan QR Code</Text>
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.submitBtn,
-            pressed && styles.buttonPressed,
-            isSubmitting && styles.buttonDisabled,
-          ]}
-          onPress={() => parseAndJoinUrl(eventInput)}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text style={styles.submitBtnText}>Join</Text>
-          )}
-        </Pressable>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+      
+      {/* Editorial Header */}
+      <View style={styles.header}>
+        <View style={styles.headerTitleRow}>
+          <View>
+            <Text style={styles.headerCategory}>MY CIRCLE</Text>
+            <Text style={styles.headerTitle}>All Celebrations</Text>
+          </View>
+          <Pressable style={styles.addBtn} onPress={() => setIsJoinModalOpen(true)}>
+            <Text style={styles.addBtnText}>+ Join</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.headerSubtitle}>
+          Select a celebration gallery to explore your private memories.
+        </Text>
       </View>
 
-      {recentEvents.length > 0 && (
-        <View style={styles.recentSection}>
-          <Text style={styles.recentTitle}>Your Recent Events</Text>
-          {recentEvents.map((event) => (
-            <Pressable
-              key={event.slug}
-              style={({ pressed }) => [
-                styles.eventItem,
-                pressed && styles.eventItemPressed,
-              ]}
-              onPress={() => handleJoin(event.slug, null)}
-              disabled={isSubmitting}
-            >
-              <Text style={styles.eventItemText}>{event.title}</Text>
-              <Text style={styles.eventItemSubtext}>{event.slug}</Text>
-            </Pressable>
-          ))}
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#1c1a18" />
         </View>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.gridContainer}
+        >
+          <View style={styles.gridRow}>
+            {/* Render joined gallery cards */}
+            {events.map((ev) => {
+              const coverUrl = ev.coverPhotoUrl || ev.coverPhotoSquareUrl || ev.coverPhotoMobileUrl || null;
+              const statusMsg = getMyCircleStatusCopy(ev);
+              const locationText = (ev.location || 'MISTY VISUALS').toUpperCase();
+
+              return (
+                <Pressable
+                  key={ev.id || ev.slug}
+                  style={({ pressed }) => [
+                    styles.galleryCard,
+                    pressed && styles.cardPressed,
+                  ]}
+                  onPress={() => handleSelectEvent(ev)}
+                >
+                  {coverUrl ? (
+                    <Image source={{ uri: coverUrl }} style={styles.cardCoverImage} contentFit="cover" />
+                  ) : (
+                    <View style={styles.cardFallbackImage}>
+                      <Text style={{ fontSize: 28, color: '#a07850' }}>✨</Text>
+                    </View>
+                  )}
+
+                  {/* Dark linear gradient overlay matching Featured Stories */}
+                  <LinearGradient
+                    colors={['transparent', 'rgba(18, 16, 14, 0.25)', 'rgba(18, 16, 14, 0.9)']}
+                    locations={[0, 0.45, 1]}
+                    style={styles.cardOverlay}
+                  />
+
+                  {/* Content overlay at bottom */}
+                  <View style={styles.cardContent}>
+                    <Text style={styles.cardTag} numberOfLines={1}>{locationText}</Text>
+                    <Text style={styles.cardTitle} numberOfLines={1}>{ev.title}</Text>
+                    <View style={styles.cardBottomRow}>
+                      <Text style={styles.cardStatus} numberOfLines={1}>{statusMsg}</Text>
+                      <Text style={styles.cardCta}>View →</Text>
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            })}
+
+            {/* ── Join Celebration / Join Circle Card at the end of 2-column grid ── */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.joinCard,
+                pressed && styles.cardPressed,
+              ]}
+              onPress={() => setIsJoinModalOpen(true)}
+            >
+              <View style={styles.joinIconCircle}>
+                <Text style={styles.joinIconPlus}>+</Text>
+              </View>
+              <Text style={styles.joinCardTitle}>Join Circle</Text>
+              <Text style={styles.joinCardSubtext}>Scan QR or enter code</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       )}
-    </ScrollView>
+
+      {/* Pop-up Modal Component for Joining Celebrations */}
+      <JoinCelebrationModal
+        visible={isJoinModalOpen}
+        onClose={() => setIsJoinModalOpen(false)}
+        onSuccess={() => {
+          fetchEvents();
+        }}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  scrollContainer: {
-    padding: 30,
-    justifyContent: 'center',
-    paddingTop: 80,
-  },
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 30,
   },
-  title: {
-    fontSize: 20,
-    color: '#000000',
-    fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#4b5563',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 35,
-  },
-  input: {
-    width: '100%',
-    padding: 15,
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    color: '#000000',
-    fontSize: 15,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  btnRow: {
-    flexDirection: 'row',
-    gap: 15,
-    marginBottom: 40,
-    width: '100%',
-  },
-  scannerBtn: {
-    flex: 1,
-    padding: 15,
-    borderWidth: 1,
-    borderColor: '#cccccc',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scannerBtnText: {
-    color: '#000000',
-    fontSize: 15,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  submitBtn: {
-    flex: 1,
-    padding: 15,
-    backgroundColor: '#000000',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitBtnText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  buttonPressed: {
-    opacity: 0.8,
-  },
-  buttonDisabled: {
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  scannerContainer: {
-    width: 280,
-    height: 280,
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 3,
-    borderColor: '#000000',
-    marginBottom: 40,
-  },
-  scanner: {
-    flex: 1,
-  },
-  cancelBtn: {
-    padding: 12,
-  },
-  cancelBtnText: {
-    color: 'rgba(0, 0, 0, 0.5)',
-    fontSize: 14,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  button: {
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    backgroundColor: '#000000',
-    borderRadius: 5,
-    marginTop: 15,
-    marginBottom: 15,
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  recentSection: {
-    width: '100%',
-  },
-  recentTitle: {
-    fontSize: 15,
-    color: 'rgba(0, 0, 0, 0.4)',
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 15,
-  },
-  eventItem: {
-    width: '100%',
-    padding: 15,
-    backgroundColor: '#f9fafb',
+  header: {
+    paddingHorizontal: PADDING,
+    paddingTop: 16,
+    paddingBottom: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    marginBottom: 5,
+    borderBottomColor: '#f0ede8',
   },
-  eventItemPressed: {
-    backgroundColor: '#f3f4f6',
+  headerTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 6,
   },
-  eventItemText: {
-    color: '#000000',
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 3,
+  headerCategory: {
+    fontFamily: 'System',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 2,
+    color: '#a07850',
+    marginBottom: 4,
   },
-  eventItemSubtext: {
-    color: 'rgba(0, 0, 0, 0.4)',
+  headerTitle: {
+    fontFamily: 'serif',
+    fontSize: 26,
+    fontWeight: '300',
+    color: '#1c1a18',
+  },
+  addBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    backgroundColor: '#1c1a18',
+    borderRadius: 14,
+    marginTop: 4,
+  },
+  addBtnText: {
+    fontFamily: 'System',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    color: '#ffffff',
+  },
+  headerSubtitle: {
+    fontFamily: 'System',
     fontSize: 12,
+    color: '#60646c',
+    lineHeight: 18,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gridContainer: {
+    paddingHorizontal: PADDING,
+    paddingTop: 20,
+    paddingBottom: 40,
+  },
+  gridRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: GAP,
+  },
+  galleryCard: {
+    width: COLUMN_WIDTH,
+    height: COLUMN_WIDTH * 1.35,
+    backgroundColor: '#1c1a18',
+    borderRadius: 4,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  cardPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  cardCoverImage: {
+    width: '100%',
+    height: '100%',
+  },
+  cardFallbackImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#1c1a18',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  cardContent: {
+    position: 'absolute',
+    bottom: 14,
+    left: 12,
+    right: 12,
+  },
+  cardTag: {
+    fontFamily: 'System',
+    fontSize: 7,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    color: '#d0c8be',
+    marginBottom: 3,
+    opacity: 0.85,
+  },
+  cardTitle: {
+    fontFamily: 'serif',
+    fontSize: 16,
+    fontWeight: '300',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  cardBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  cardStatus: {
+    fontFamily: 'System',
+    fontSize: 9,
+    color: '#e5dfd5',
+    flex: 1,
+    marginRight: 6,
+  },
+  cardCta: {
+    fontFamily: 'System',
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    color: '#ffffff',
+    opacity: 0.9,
+  },
+
+  /* Join Card (Last card in 2-column grid) */
+  joinCard: {
+    width: COLUMN_WIDTH,
+    height: COLUMN_WIDTH * 1.35,
+    backgroundColor: '#fbfaf8',
+    borderWidth: 1.5,
+    borderColor: '#e5e0d8',
+    borderStyle: 'dashed',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  joinIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#a07850',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  joinIconPlus: {
+    fontSize: 22,
+    fontWeight: '300',
+    color: '#a07850',
+    lineHeight: 24,
+  },
+  joinCardTitle: {
+    fontFamily: 'serif',
+    fontSize: 16,
+    fontWeight: '300',
+    color: '#1c1a18',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  joinCardSubtext: {
+    fontFamily: 'System',
+    fontSize: 10,
+    color: '#8c867e',
+    textAlign: 'center',
+    lineHeight: 14,
   },
 });
