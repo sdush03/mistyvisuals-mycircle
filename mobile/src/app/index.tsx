@@ -51,9 +51,11 @@ export default function HomeScreen() {
   const [websiteFilms, setWebsiteFilms] = useState<any[]>([]);
   const [likedPhotos, setLikedPhotos] = useState<any[]>([]);
 
-  // Stored matched counts for detecting new photos
-  const [lastMatchedCounts, setLastMatchedCounts] = useState<Record<string, number>>({});
+  // Hero seen data: tracks first-discovery time + last-seen count per event slug
+  // Used for B+D combined expiry: show 7 days from first discovery OR on new photos
+  const [heroSeenData, setHeroSeenData] = useState<Record<string, { lastSeenCount: number; firstSeenAt: number }>>({});
   const [countsLoaded, setCountsLoaded] = useState(false);
+  const HERO_MATCH_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
   // Load liked photos from storage
   useEffect(() => {
@@ -78,17 +80,17 @@ export default function HomeScreen() {
     return match ? match[1] : null;
   };
 
-  // Load cached stories, films, matchedCounts & events from AsyncStorage on mount for instant Frame 1 rendering
+  // Load cached stories, films, heroSeenData & events from AsyncStorage on mount for instant Frame 1 rendering
   useEffect(() => {
     AsyncStorage.multiGet([
-      '@mycircle_matched_counts',
+      '@mycircle_hero_seen_data',
       '@mycircle_user_events_cache',
       '@mycircle_cached_website_stories',
       '@mycircle_cached_website_films',
     ])
-      .then(([countsItem, eventsItem, storiesItem, filmsItem]) => {
-        if (countsItem[1]) {
-          try { setLastMatchedCounts(JSON.parse(countsItem[1])); } catch (_) {}
+      .then(([seenDataItem, eventsItem, storiesItem, filmsItem]) => {
+        if (seenDataItem[1]) {
+          try { setHeroSeenData(JSON.parse(seenDataItem[1])); } catch (_) {}
         }
         if (eventsItem[1]) {
           try {
@@ -246,24 +248,39 @@ export default function HomeScreen() {
   // ─── Scalable Hero Priority Engine ──────────────────────────────────────────
   const singleHeroCard = React.useMemo(() => {
     const today = new Date();
+    const now = today.getTime();
     const params = {
       events,
-      lastMatchedCounts,
+      heroSeenData,
       profileName: profile?.name,
       today,
     };
 
     // Scalable Priority Registry (evaluated top-down in array order)
     const HERO_PRIORITY_EVALUATORS = [
-      // 1. NEW_MATCHES / MATCHES_FOUND (Supports Single & Multi-Wedding Aggregation)
-      ({ events: evts, lastMatchedCounts: counts }: any) => {
+      // 1. NEW_MATCHES / MATCHES_FOUND — B+D combined expiry:
+      //    Show if (new photos since last view) OR (within 7 days of first discovery)
+      ({ events: evts, heroSeenData: seen }: any) => {
+        const now = Date.now();
         const eventsWithMatches = evts.filter((e: any) => (e.matchedCount || 0) > 0);
+        // Filter to only events that still pass the B+D gate
+        const visibleEvents = eventsWithMatches.filter((e: any) => {
+          const currentCount = e.matchedCount || 0;
+          const seenEntry = seen[e.slug];
+          if (!seenEntry) return true; // Never seen → always show (starts 7-day window)
+          const hasNewPhotos = currentCount > seenEntry.lastSeenCount;
+          const withinWindow = (now - seenEntry.firstSeenAt) < HERO_MATCH_EXPIRY_MS;
+          return hasNewPhotos || withinWindow;
+        });
 
-        if (eventsWithMatches.length === 1) {
-          const ev = eventsWithMatches[0];
+        if (visibleEvents.length === 0) return null;
+
+        if (visibleEvents.length === 1) {
+          const ev = visibleEvents[0];
           const currentCount = ev.matchedCount || 0;
-          const prevCount = counts[ev.slug] ?? null;
-          const isNew = prevCount !== null && currentCount > prevCount;
+          const seenEntry = seen[ev.slug];
+          const prevCount = seenEntry?.lastSeenCount ?? 0;
+          const isNew = seenEntry && currentCount > prevCount;
           const diff = isNew ? currentCount - prevCount : currentCount;
 
           return {
@@ -276,20 +293,19 @@ export default function HomeScreen() {
             cta: 'View Gallery →',
             eventSlug: ev.slug,
           };
-        } else if (eventsWithMatches.length > 1) {
-          const totalMatches = eventsWithMatches.reduce((sum: number, e: any) => sum + (e.matchedCount || 0), 0);
-          const topEvent = eventsWithMatches[0];
+        } else {
+          const totalMatches = visibleEvents.reduce((sum: number, e: any) => sum + (e.matchedCount || 0), 0);
+          const topEvent = visibleEvents[0];
 
           return {
             type: 'NEW_MATCHES',
             icon: '✨',
-            headline: `We found ${totalMatches} memories of you across ${eventsWithMatches.length} celebrations.`,
+            headline: `We found ${totalMatches} memories of you across ${visibleEvents.length} celebrations.`,
             subtitle: `Latest: ${topEvent.title}`,
             cta: 'View Gallery →',
             eventSlug: topEvent.slug,
           };
         }
-        return null;
       },
 
       // 2. NEW_HIGHLIGHTS
@@ -412,21 +428,47 @@ export default function HomeScreen() {
       if (card) return card;
     }
     return null;
-  }, [events, lastMatchedCounts, profile?.name, loadingEvents]);
+  }, [events, heroSeenData, profile?.name, loadingEvents]);
 
-  // Persist matched counts once events load
+  // When new events arrive: initialise heroSeenData entries for any event with matches
+  // (sets firstSeenAt if this is the first time we see a non-zero matchedCount)
   useEffect(() => {
-    if (!countsLoaded) return;
-    if (events.length > 0) {
-      const newCounts: Record<string, number> = {};
-      events.forEach((e) => { newCounts[e.slug] = e.matchedCount || 0; });
-      AsyncStorage.setItem('@mycircle_matched_counts', JSON.stringify(newCounts)).catch(() => {});
-    }
+    if (!countsLoaded || events.length === 0) return;
+    const now = Date.now();
+    setHeroSeenData(prev => {
+      let changed = false;
+      const next = { ...prev };
+      events.forEach((e: any) => {
+        if ((e.matchedCount || 0) > 0 && !next[e.slug]) {
+          // First ever detection of matches for this event — start the 7-day window
+          next[e.slug] = { lastSeenCount: 0, firstSeenAt: now };
+          changed = true;
+        }
+      });
+      if (changed) {
+        AsyncStorage.setItem('@mycircle_hero_seen_data', JSON.stringify(next)).catch(() => {});
+      }
+      return changed ? next : prev;
+    });
   }, [events, countsLoaded]);
 
   const handleHeroPress = (card: any) => {
     if (card.eventSlug) {
-      const targetEvent = events.find((e) => e.slug === card.eventSlug);
+      // Mark current matchedCount as seen so hero only reappears on new photos
+      const targetEvent = events.find((e: any) => e.slug === card.eventSlug);
+      if (targetEvent && (targetEvent.matchedCount || 0) > 0) {
+        setHeroSeenData(prev => {
+          const next = {
+            ...prev,
+            [card.eventSlug]: {
+              lastSeenCount: targetEvent.matchedCount,
+              firstSeenAt: prev[card.eventSlug]?.firstSeenAt ?? Date.now(),
+            },
+          };
+          AsyncStorage.setItem('@mycircle_hero_seen_data', JSON.stringify(next)).catch(() => {});
+          return next;
+        });
+      }
       const coverUrl = targetEvent?.coverPhotoMobileUrl || targetEvent?.coverPhotoUrl || null;
       const title = targetEvent?.title || null;
       setEventDetails(card.eventSlug, null, coverUrl, title);
