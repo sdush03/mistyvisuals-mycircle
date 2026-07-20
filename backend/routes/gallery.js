@@ -3009,6 +3009,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
           stage,
           coverPhotoUrl: event.coverPhotoUrl,
           coverPhotoMobileUrl: event.coverPhotoMobileUrl,
+          coverPhotoSquareUrl: event.coverPhotoSquareUrl,
           matchedCount,
           highlightsPhotoCount,
           eventToken,

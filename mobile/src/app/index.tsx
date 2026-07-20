@@ -612,7 +612,7 @@ export default function HomeScreen() {
           return next;
         });
       }
-      const coverUrl = targetEvent?.coverPhotoMobileUrl || targetEvent?.coverPhotoUrl || null;
+      const coverUrl = targetEvent?.coverPhotoUrl || targetEvent?.coverPhotoSquareUrl || targetEvent?.coverPhotoMobileUrl || null;
       const title = targetEvent?.title || null;
       setEventDetails(card.eventSlug, null, coverUrl, title);
       router.replace('/mycircle');
@@ -620,7 +620,7 @@ export default function HomeScreen() {
   };
 
   const handleEventCardClick = (ev: any) => {
-    const coverUrl = ev.coverPhotoMobileUrl || ev.coverPhotoUrl || null;
+    const coverUrl = ev.coverPhotoUrl || ev.coverPhotoSquareUrl || ev.coverPhotoMobileUrl || null;
     setEventDetails(ev.slug, null, coverUrl, ev.title);
     router.replace('/mycircle');
   };
@@ -700,7 +700,7 @@ export default function HomeScreen() {
               {events.map((ev) => {
                 const today = new Date();
                 const statusMsg = getMyCircleStatusCopy(ev, today);
-                const coverUrl = ev.coverPhotoMobileUrl || ev.coverPhotoUrl || null;
+                const coverUrl = ev.coverPhotoUrl || ev.coverPhotoSquareUrl || ev.coverPhotoMobileUrl || null;
                 const locationText = (ev.location || 'MISTY VISUALS').toUpperCase();
 
                 return (
