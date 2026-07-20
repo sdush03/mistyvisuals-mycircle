@@ -72,6 +72,29 @@ export default function HomeScreen() {
     WELCOME_EDITORIALS[Math.floor(Math.random() * WELCOME_EDITORIALS.length)]
   );
 
+  // Live Hero message stability — keyed by event slug so the same message shows
+  // throughout the entire LIVE period. Only picks a new variant when a different
+  // event goes LIVE (or on next app launch).
+  const LIVE_MESSAGES: Array<(title: string) => { h: string; s: string }> = [
+    (t) => ({ h: `Today, ${t} celebrate their love.`, s: 'Wishing them a lifetime of happiness.' }),
+    (_) => ({ h: "What a beautiful day to celebrate together.", s: 'Celebrating beautiful beginnings.' }),
+    (_) => ({ h: "Here's to love, laughter and a lifetime of memories.", s: 'May every moment become a cherished memory.' }),
+    (_) => ({ h: 'May today be filled with unforgettable moments.', s: 'Celebrating beautiful beginnings.' }),
+  ];
+  // { slug: { h, s } } — persists for the component lifetime
+  const liveMessageRef = React.useRef<Record<string, { h: string; s: string }>>({});
+  const getStableLiveMessage = (slug: string, title: string): { h: string; s: string } => {
+    if (!liveMessageRef.current[slug]) {
+      const pick = LIVE_MESSAGES[Math.floor(Math.random() * LIVE_MESSAGES.length)](title);
+      liveMessageRef.current[slug] = pick;
+    }
+    return liveMessageRef.current[slug];
+  };
+
+  // Hero fade transition — fades out to 0 then back to 1 whenever the hero type changes
+  const heroFadeAnim = React.useRef(new Animated.Value(1)).current;
+  const prevHeroTypeRef = React.useRef<string | null>(null);
+
   // Load liked photos from storage
   useEffect(() => {
     AsyncStorage.getItem('@mycircle_liked_photos')
@@ -293,11 +316,14 @@ export default function HomeScreen() {
           const prevCount = seenEntry?.lastSeenCount ?? 0;
           const isNew = seenEntry && currentCount > prevCount;
           const diff = isNew ? currentCount - prevCount : currentCount;
+          // Singular: "a memory" / Plural: "N memories"
+          const countLabel = (n: number, fresh: boolean) =>
+            n === 1
+              ? fresh ? 'a new memory' : 'a memory'
+              : fresh ? `${n} new memories` : `${n} memories`;
           return {
             type: 'NEW_MATCHES',
-            headline: isNew
-              ? `We found ${diff} new ${diff === 1 ? 'memory' : 'memories'} of you.`
-              : `We found ${currentCount} ${currentCount === 1 ? 'memory' : 'memories'} of you.`,
+            headline: `We found ${countLabel(diff, !!isNew)} of you.`,
             subtitle: `From ${ev.title}'s celebration.`,
             cta: 'View Gallery →',
             eventSlug: ev.slug,
@@ -305,10 +331,11 @@ export default function HomeScreen() {
         } else {
           const total = visibleEvents.reduce((s: number, e: any) => s + (e.matchedCount || 0), 0);
           const top = visibleEvents[0];
+          const totalLabel = total === 1 ? 'a memory' : `${total} memories`;
           return {
             type: 'NEW_MATCHES',
-            headline: `We found ${total} ${total === 1 ? 'memory' : 'memories'} of you.`,
-            subtitle: `Across ${visibleEvents.length} celebrations, including ${top.title}.`,
+            headline: `We found ${totalLabel} of you.`,
+            subtitle: `Across ${visibleEvents.length} celebrations.`,
             cta: 'View Gallery →',
             eventSlug: top.slug,
           };
@@ -369,17 +396,11 @@ export default function HomeScreen() {
         return null;
       },
 
-      // 4. LIVE CELEBRATION — warm, joyful, no CTA
+      // 4. LIVE CELEBRATION — warm, joyful, no CTA, stable message per slug
       ({ events: evts, today: now }: any) => {
-        const liveMessages = [
-          (title: string) => ({ h: `Today, ${title} celebrate their love.`, s: 'Wishing them a lifetime of happiness.' }),
-          (_: string) => ({ h: 'What a beautiful day to celebrate together.', s: 'Celebrating beautiful beginnings.' }),
-          (_: string) => ({ h: 'Here\'s to love, laughter and a lifetime of memories.', s: 'May every moment become a cherished memory.' }),
-          (_: string) => ({ h: 'May today be filled with unforgettable moments.', s: 'Celebrating beautiful beginnings.' }),
-        ];
         for (const ev of evts) {
           if (resolveCanonicalStage(ev, now) === 'LIVE') {
-            const pick = liveMessages[Math.floor(Math.random() * liveMessages.length)](ev.title);
+            const pick = getStableLiveMessage(ev.slug, ev.title);
             return {
               type: 'LIVE',
               headline: pick.h,
@@ -470,6 +491,19 @@ export default function HomeScreen() {
     }
     return null;
   }, [events, heroSeenData, profile?.name, loadingEvents]);
+
+  // Hero fade transition — triggers only when the hero TYPE changes (not on content updates)
+  useEffect(() => {
+    const currentType = singleHeroCard?.type ?? null;
+    if (prevHeroTypeRef.current !== null && prevHeroTypeRef.current !== currentType) {
+      // Type changed: fade out → new content renders → fade in
+      Animated.sequence([
+        Animated.timing(heroFadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
+        Animated.timing(heroFadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]).start();
+    }
+    prevHeroTypeRef.current = currentType;
+  }, [singleHeroCard?.type]);
 
   // When new events arrive: initialise heroSeenData entries for any event with matches
   // (sets firstSeenAt if this is the first time we see a non-zero matchedCount)
@@ -562,24 +596,26 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* ── 1. Hero Card (Minimalist Architectural — Editorial Copy) ── */}
         {singleHeroCard && (
-          <Pressable
-            style={styles.heroSection}
-            onPress={() => handleHeroPress(singleHeroCard)}
-            disabled={!singleHeroCard.eventSlug || !singleHeroCard.cta}
-          >
-            <View style={styles.heroContentRow}>
-              <View style={styles.heroGoldLine} />
-              <View style={styles.heroTextContainer}>
-                <Text style={styles.greetingText}>{singleHeroCard.headline}</Text>
-                <Text style={styles.subtitleText}>{singleHeroCard.subtitle}</Text>
-                {singleHeroCard.cta ? (
-                  <View style={styles.heroCtaButton}>
-                    <Text style={styles.heroCtaText}>{singleHeroCard.cta}</Text>
-                  </View>
-                ) : null}
+          <Animated.View style={{ opacity: heroFadeAnim }}>
+            <Pressable
+              style={styles.heroSection}
+              onPress={() => handleHeroPress(singleHeroCard)}
+              disabled={!singleHeroCard.eventSlug || !singleHeroCard.cta}
+            >
+              <View style={styles.heroContentRow}>
+                <View style={styles.heroGoldLine} />
+                <View style={styles.heroTextContainer}>
+                  <Text style={styles.greetingText}>{singleHeroCard.headline}</Text>
+                  <Text style={styles.subtitleText}>{singleHeroCard.subtitle}</Text>
+                  {singleHeroCard.cta ? (
+                    <View style={styles.heroCtaButton}>
+                      <Text style={styles.heroCtaText}>{singleHeroCard.cta}</Text>
+                    </View>
+                  ) : null}
+                </View>
               </View>
-            </View>
-          </Pressable>
+            </Pressable>
+          </Animated.View>
         )}
 
         {/* ── 2. What's Happening (Only for users with joined celebrations) ── */}
