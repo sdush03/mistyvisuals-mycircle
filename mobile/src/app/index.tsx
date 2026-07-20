@@ -690,29 +690,41 @@ export default function HomeScreen() {
         {token && events.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionHeader}>MY CIRCLE</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              contentContainerStyle={styles.horizontalScroll}
+              snapToInterval={width * 0.82 + 16}
+              decelerationRate="fast"
+            >
               {events.map((ev) => {
                 const today = new Date();
                 const statusMsg = getMyCircleStatusCopy(ev, today);
+                const coverUrl = ev.coverPhotoMobileUrl || ev.coverPhotoUrl || null;
+                const locationText = (ev.location || 'MISTY VISUALS').toUpperCase();
 
                 return (
                   <Pressable 
                     key={ev.id} 
-                    style={styles.eventCard}
+                    style={styles.myCircleCard}
                     onPress={() => handleEventCardClick(ev)}
                   >
-                    <View style={styles.cardImageContainer}>
-                      {ev.coverPhotoUrl ? (
-                        <Image source={{ uri: ev.coverPhotoUrl }} style={styles.cardImage} />
-                      ) : (
-                        <View style={styles.cardImageFallback}>
-                          <Text style={{ fontSize: 24 }}>✨</Text>
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.cardInfo}>
-                      <Text style={styles.cardTitle} numberOfLines={1}>{ev.title}</Text>
-                      <Text style={styles.cardSubtext}>{statusMsg}</Text>
+                    {coverUrl ? (
+                      <Image source={{ uri: coverUrl }} style={styles.myCircleCardImage} />
+                    ) : (
+                      <View style={styles.myCircleCardFallback}>
+                        <Text style={{ fontSize: 32, color: '#a07850' }}>✨</Text>
+                      </View>
+                    )}
+                    <LinearGradient 
+                      colors={['transparent', 'rgba(18, 16, 14, 0.2)', 'rgba(18, 16, 14, 0.88)']} 
+                      locations={[0, 0.45, 1]} 
+                      style={styles.myCircleCardOverlay} 
+                    />
+                    <View style={styles.myCircleCardContent}>
+                      <Text style={styles.myCircleCardLocation}>{locationText}</Text>
+                      <Text style={styles.myCircleCardTitle}>{ev.title}</Text>
+                      <Text style={styles.myCircleCardStatus}>{statusMsg}</Text>
                     </View>
                   </Pressable>
                 );
@@ -1203,6 +1215,59 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
     fontSize: 10,
     color: '#8c867e',
+  },
+  myCircleCard: {
+    width: width * 0.82,
+    height: 380,
+    marginRight: 16,
+    backgroundColor: '#1c1a18',
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 4,
+  },
+  myCircleCardImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  myCircleCardFallback: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#1c1a18',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  myCircleCardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  myCircleCardContent: {
+    position: 'absolute',
+    bottom: 24,
+    left: 20,
+    right: 20,
+  },
+  myCircleCardLocation: {
+    fontFamily: 'System',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 2,
+    color: '#d0c8be',
+    marginBottom: 6,
+    opacity: 0.85,
+  },
+  myCircleCardTitle: {
+    fontFamily: 'serif',
+    fontSize: 24,
+    fontWeight: '300',
+    color: '#ffffff',
+    marginBottom: 6,
+    lineHeight: 30,
+  },
+  myCircleCardStatus: {
+    fontFamily: 'System',
+    fontSize: 12,
+    color: '#e5dfd5',
+    letterSpacing: 0.3,
   },
   featuredCard: {
     width: width * 0.7,
