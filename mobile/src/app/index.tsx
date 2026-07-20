@@ -701,7 +701,6 @@ export default function HomeScreen() {
                 const today = new Date();
                 const statusMsg = getMyCircleStatusCopy(ev, today);
                 const coverUrl = ev.coverPhotoUrl || ev.coverPhotoSquareUrl || ev.coverPhotoMobileUrl || null;
-                const locationText = (ev.location || 'MISTY VISUALS').toUpperCase();
 
                 return (
                   <Pressable 
@@ -723,10 +722,11 @@ export default function HomeScreen() {
                     />
                     <View style={styles.myCircleCardContent}>
                       <Text style={styles.myCircleCardTitle}>{ev.title}</Text>
-                      <Text style={styles.myCircleCardStatus}>{statusMsg}</Text>
-                      <Text style={styles.myCircleCardCta}>View Gallery →</Text>
+                      <View style={styles.myCircleCardBottomRow}>
+                        <Text style={styles.myCircleCardStatus}>{statusMsg}</Text>
+                        <Text style={styles.myCircleCardCta}>View Gallery →</Text>
+                      </View>
                     </View>
-                    <Text style={styles.myCircleCardBrand}>{locationText}</Text>
                   </Pressable>
                 );
               })}
@@ -1243,24 +1243,30 @@ const styles = StyleSheet.create({
   },
   myCircleCardContent: {
     position: 'absolute',
-    bottom: 16,
+    bottom: 18,
     left: 18,
-    right: 140,
+    right: 18,
   },
   myCircleCardTitle: {
     fontFamily: 'serif',
-    fontSize: 19,
+    fontSize: 20,
     fontWeight: '300',
     color: '#ffffff',
-    marginBottom: 2,
-    lineHeight: 23,
+    marginBottom: 4,
+    lineHeight: 25,
+  },
+  myCircleCardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
   },
   myCircleCardStatus: {
     fontFamily: 'System',
-    fontSize: 10,
-    color: '#d0c8be',
-    marginBottom: 6,
+    fontSize: 11,
+    color: '#e5dfd5',
     letterSpacing: 0.3,
+    flex: 1,
+    marginRight: 12,
   },
   myCircleCardCta: {
     fontFamily: 'System',
@@ -1268,17 +1274,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 1,
     color: '#ffffff',
-  },
-  myCircleCardBrand: {
-    position: 'absolute',
-    bottom: 16,
-    right: 18,
-    fontFamily: 'System',
-    fontSize: 8,
-    fontWeight: '700',
-    letterSpacing: 1.8,
-    color: '#d0c8be',
-    opacity: 0.85,
+    opacity: 0.9,
   },
   featuredCard: {
     width: width * 0.7,
