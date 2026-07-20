@@ -106,7 +106,7 @@ export default function JoinEventView({ onSuccess }: JoinEventViewProps) {
 
   const handleSelectEvent = (ev: any) => {
     const slug = ev.slug;
-    const coverUrl = ev.coverPhotoUrl || ev.coverPhotoSquareUrl || ev.coverPhotoMobileUrl || null;
+    const coverUrl = ev.coverPhotoMobileUrl || ev.coverPhotoUrl || ev.coverPhotoSquareUrl || null;
     const title = ev.title || slug;
     
     setEventDetails(slug, ev.passcode || null, coverUrl, title);
@@ -145,7 +145,7 @@ export default function JoinEventView({ onSuccess }: JoinEventViewProps) {
           <View style={styles.gridRow}>
             {/* Render joined gallery cards */}
             {events.map((ev) => {
-              const coverUrl = ev.coverPhotoUrl || ev.coverPhotoSquareUrl || ev.coverPhotoMobileUrl || null;
+              const coverUrl = ev.coverPhotoMobileUrl || ev.coverPhotoUrl || ev.coverPhotoSquareUrl || null;
               const statusMsg = getMyCircleStatusCopy(ev);
               const locationText = (ev.location || 'MISTY VISUALS').toUpperCase();
 
