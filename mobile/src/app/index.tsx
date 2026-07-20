@@ -529,15 +529,10 @@ export default function HomeScreen() {
             <View style={styles.heroContentRow}>
               <View style={styles.heroGoldLine} />
               <View style={styles.heroTextContainer}>
-                <View style={styles.heroHeaderRow}>
-                  <Text style={styles.greetingText}>
-                    Welcome back,{'\n'}
-                    {profile?.name || 'Guest'}
-                  </Text>
-                  <View style={styles.heroBadgeInline}>
-                    <Text style={styles.heroBadgeText}>AI DISCOVERY</Text>
-                  </View>
-                </View>
+                <Text style={styles.greetingText}>
+                  Welcome back,{'\n'}
+                  {profile?.name || 'Guest'}
+                </Text>
 
                 <Text style={styles.subtitleText}>{singleHeroCard.headline}</Text>
 
