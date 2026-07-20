@@ -519,7 +519,7 @@ export default function HomeScreen() {
       <StatusBar barStyle="dark-content" />
       
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* ── 1. Single Intelligent Hero Card (Concept 2: Minimalist Architectural Gallery) ── */}
+        {/* ── 1. Single Intelligent Hero (Minimalist Architectural Layout - Unboxed) ── */}
         {singleHeroCard && (
           <Pressable
             style={styles.heroSection}
@@ -529,16 +529,21 @@ export default function HomeScreen() {
             <View style={styles.heroContentRow}>
               <View style={styles.heroGoldLine} />
               <View style={styles.heroTextContainer}>
-                <View style={styles.heroBadge}>
-                  <Text style={styles.heroBadgeText}>
-                    {singleHeroCard.type === 'NEW_MATCHES' ? 'AI DISCOVERY' : 'FEATURED'}
+                <View style={styles.heroHeaderRow}>
+                  <Text style={styles.greetingText}>
+                    Welcome back,{'\n'}
+                    {profile?.name || 'Guest'}
                   </Text>
+                  <View style={styles.heroBadgeInline}>
+                    <Text style={styles.heroBadgeText}>AI DISCOVERY</Text>
+                  </View>
                 </View>
-                <Text style={styles.greetingText}>{singleHeroCard.headline}</Text>
-                <Text style={styles.subtitleText}>{singleHeroCard.subtitle}</Text>
+
+                <Text style={styles.subtitleText}>{singleHeroCard.headline}</Text>
+
                 {singleHeroCard.cta ? (
                   <View style={styles.heroCtaButton}>
-                    <Text style={styles.heroCtaText}>{singleHeroCard.cta}</Text>
+                    <Text style={styles.heroCtaText}>View Memories →</Text>
                   </View>
                 ) : null}
               </View>
@@ -940,27 +945,17 @@ const styles = StyleSheet.create({
     paddingBottom: 100, // Space for bottom custom navigation tab
   },
   heroSection: {
-    marginHorizontal: 20,
-    marginTop: 18,
-    marginBottom: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 22,
-    borderRadius: 18,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: 'rgba(197, 160, 89, 0.22)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 24,
+    backgroundColor: 'transparent',
   },
   heroContentRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
   },
   heroGoldLine: {
-    width: 2,
+    width: 2.5,
     backgroundColor: '#C5A059',
     borderRadius: 2,
     marginRight: 16,
@@ -968,12 +963,32 @@ const styles = StyleSheet.create({
   heroTextContainer: {
     flex: 1,
   },
-  heroBadge: {
-    backgroundColor: 'rgba(197, 160, 89, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(197, 160, 89, 0.3)',
+  heroHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 8,
+  },
+  greetingText: {
+    fontFamily: 'serif',
+    fontSize: 26,
+    fontWeight: '500',
+    color: '#1c1917',
+    lineHeight: 32,
+    letterSpacing: -0.3,
+  },
+  heroBadgeInline: {
+    backgroundColor: 'rgba(197, 160, 89, 0.22)',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
+    borderRadius: 100,
+    marginLeft: 10,
+    marginTop: 6,
+  },
+  heroBadge: {
+    backgroundColor: 'rgba(197, 160, 89, 0.22)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 100,
     alignSelf: 'flex-start',
     marginBottom: 10,
@@ -982,38 +997,30 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
     fontSize: 9.5,
     fontWeight: '700',
-    color: '#9E7A32',
+    color: '#8C6721',
     letterSpacing: 1.5,
-  },
-  greetingText: {
-    fontFamily: 'serif',
-    fontSize: 21,
-    fontWeight: '600',
-    color: '#1c1917',
-    lineHeight: 28,
-    letterSpacing: -0.2,
-    marginBottom: 4,
   },
   subtitleText: {
     fontFamily: 'System',
-    fontSize: 13,
-    lineHeight: 19,
-    color: '#605856',
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#403d39',
+    marginTop: 6,
   },
   heroCtaButton: {
-    marginTop: 16,
+    marginTop: 18,
     backgroundColor: '#1c1917',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderRadius: 100,
     alignSelf: 'flex-start',
   },
   heroCtaText: {
     fontFamily: 'System',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#DFB76C',
-    letterSpacing: 0.4,
+    color: '#ffffff',
+    letterSpacing: 0.3,
   },
   section: {
     paddingTop: 32,
