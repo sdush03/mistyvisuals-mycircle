@@ -2956,6 +2956,17 @@ module.exports = async function galleryRoutes(fastify, opts) {
           }
         }
 
+        // Count photos in the Highlights tab — used by the client to detect
+        // when new highlights are published and reset the hero visibility window
+        let highlightsPhotoCount = 0;
+        try {
+          highlightsPhotoCount = await prisma.photo.count({
+            where: { eventId: event.id, tabName: 'Highlights' }
+          });
+        } catch (e) {
+          req.log.warn(`highlightsPhotoCount failed for event ${event.id}:`, e.message);
+        }
+
         const eventToken = fastify.jwt.sign({
           guestId: g.id,
           userId: user.id,
@@ -2997,6 +3008,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
           coverPhotoUrl: event.coverPhotoUrl,
           coverPhotoMobileUrl: event.coverPhotoMobileUrl,
           matchedCount,
+          highlightsPhotoCount,
           eventToken,
           galleryFacesComplete: event.galleryFacesComplete,
           guestInfo: {

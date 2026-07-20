@@ -57,6 +57,11 @@ export default function HomeScreen() {
   const [countsLoaded, setCountsLoaded] = useState(false);
   const HERO_MATCH_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+  // Highlights Hero visibility: { firstShownAt, lastSeenCount } per slug
+  // firstShownAt starts the 21-day window; resets when highlightsPhotoCount increases
+  const [highlightsHeroData, setHighlightsHeroData] = useState<Record<string, { firstShownAt: number; lastSeenCount: number }>>({});
+  const HERO_HIGHLIGHTS_EXPIRY_MS = 21 * 24 * 60 * 60 * 1000; // 21 days
+
   // Welcome Hero editorial rotation — pick once per session, session-stable via ref
   const WELCOME_EDITORIALS = [
     'Discover beautiful celebrations captured by Misty Visuals.',
@@ -122,13 +127,17 @@ export default function HomeScreen() {
   useEffect(() => {
     AsyncStorage.multiGet([
       '@mycircle_hero_seen_data',
+      '@mycircle_highlights_hero_data',
       '@mycircle_user_events_cache',
       '@mycircle_cached_website_stories',
       '@mycircle_cached_website_films',
     ])
-      .then(([seenDataItem, eventsItem, storiesItem, filmsItem]) => {
+      .then(([seenDataItem, highlightsItem, eventsItem, storiesItem, filmsItem]) => {
         if (seenDataItem[1]) {
           try { setHeroSeenData(JSON.parse(seenDataItem[1])); } catch (_) {}
+        }
+        if (highlightsItem[1]) {
+          try { setHighlightsHeroData(JSON.parse(highlightsItem[1])); } catch (_) {}
         }
         if (eventsItem[1]) {
           try {
@@ -290,6 +299,7 @@ export default function HomeScreen() {
     const params = {
       events,
       heroSeenData,
+      highlightsHeroData,
       profileName: profile?.name,
       today,
     };
@@ -342,10 +352,17 @@ export default function HomeScreen() {
         }
       },
 
-      // 2. NEW HIGHLIGHTS — stage-driven
-      ({ events: evts, today: now }: any) => {
+      // 2. NEW HIGHLIGHTS — 21-day visibility window from first discovery, resets on new highlights
+      ({ events: evts, today: now, highlightsHeroData: hlData }: any) => {
+        const nowMs = Date.now();
         for (const ev of evts) {
           if (resolveCanonicalStage(ev, now) === 'HIGHLIGHTS') {
+            const entry = hlData[ev.slug];
+            if (!entry) return null; // Initialised async by useEffect below — skip until ready
+            const currentCount = ev.highlightsPhotoCount || 0;
+            const hasNewHighlights = currentCount > entry.lastSeenCount;
+            const withinWindow = (nowMs - entry.firstShownAt) < HERO_HIGHLIGHTS_EXPIRY_MS;
+            if (!hasNewHighlights && !withinWindow) return null; // 21-day window expired, no new content
             return {
               type: 'NEW_HIGHLIGHTS',
               headline: `${ev.title}'s highlights are ready.`,
@@ -490,7 +507,7 @@ export default function HomeScreen() {
       if (card) return card;
     }
     return null;
-  }, [events, heroSeenData, profile?.name, loadingEvents]);
+  }, [events, heroSeenData, highlightsHeroData, profile?.name, loadingEvents]);
 
   // Hero fade transition — triggers only when the hero TYPE changes (not on content updates)
   useEffect(() => {
@@ -504,6 +521,37 @@ export default function HomeScreen() {
     }
     prevHeroTypeRef.current = currentType;
   }, [singleHeroCard?.type]);
+
+  // When events arrive: initialise / reset highlightsHeroData for any event in HIGHLIGHTS stage.
+  // - First detection: set firstShownAt=now, lastSeenCount=current (starts 21-day window)
+  // - New highlights added (count increased): reset firstShownAt=now to restart the 21-day window
+  useEffect(() => {
+    if (!countsLoaded || events.length === 0) return;
+    const today = new Date();
+    const now = Date.now();
+    setHighlightsHeroData(prev => {
+      let changed = false;
+      const next = { ...prev };
+      events.forEach((e: any) => {
+        if (resolveCanonicalStage(e, today) !== 'HIGHLIGHTS') return;
+        const currentCount = e.highlightsPhotoCount || 0;
+        const entry = next[e.slug];
+        if (!entry) {
+          // First time seeing this event in HIGHLIGHTS — start the 21-day window
+          next[e.slug] = { firstShownAt: now, lastSeenCount: currentCount };
+          changed = true;
+        } else if (currentCount > entry.lastSeenCount) {
+          // New highlights published — reset the window to give full 21 more days
+          next[e.slug] = { firstShownAt: now, lastSeenCount: currentCount };
+          changed = true;
+        }
+      });
+      if (changed) {
+        AsyncStorage.setItem('@mycircle_highlights_hero_data', JSON.stringify(next)).catch(() => {});
+      }
+      return changed ? next : prev;
+    });
+  }, [events, countsLoaded]);
 
   // When new events arrive: initialise heroSeenData entries for any event with matches
   // (sets firstSeenAt if this is the first time we see a non-zero matchedCount)
