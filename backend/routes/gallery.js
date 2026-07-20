@@ -2946,8 +2946,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
                 }
               }
             } else {
-              // Real Qdrant: use searchVectors — same path as the actual gallery endpoint
-              const mainMatches = await qdrant.searchVectors(event.id, anchorVector, 500, 0.35);
+              // Real Qdrant: use searchVectors — same params as the actual gallery matched-photos endpoint
+              const mainMatches = await qdrant.searchVectors(event.id, anchorVector, 100, 0.35);
               const matchedPhotoIds = new Set(mainMatches.map(m => m.photo_id));
               matchedCount = matchedPhotoIds.size;
             }
