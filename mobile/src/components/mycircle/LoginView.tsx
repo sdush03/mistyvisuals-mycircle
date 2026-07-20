@@ -4,8 +4,9 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
 
-// Web Client ID from your .env.local file
+// Web & iOS Client IDs from Google Cloud Console
 const GOOGLE_WEB_CLIENT_ID = '813548862884-nisdjmc8avi1p5c5joj7pp6o6lg7j6as.apps.googleusercontent.com';
+const GOOGLE_IOS_CLIENT_ID = '813548862884-m06a6t1mbo7v71qipthtao91bg105lqt.apps.googleusercontent.com';
 
 // Safe dynamic imports for Google Sign-In to prevent crashes in Expo Go
 let NativeGoogleSignin: any = null;
@@ -18,7 +19,7 @@ try {
   NativeGoogleSigninButton = GoogleModule.GoogleSigninButton;
   isGoogleNativeAvailable = !!NativeGoogleSignin;
 } catch (e) {
-  console.warn('Google Sign-In native module not available. Bypassing for Expo Go.');
+  console.warn('Google Sign-In native module not available.');
 }
 
 interface LoginViewProps {
@@ -28,15 +29,21 @@ interface LoginViewProps {
 export default function LoginView({ onSuccess }: LoginViewProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const setAuth = useAuthStore((state) => state.setAuth);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
   const eventSlug = useAuthStore((state) => state.eventSlug);
   const passcode = useAuthStore((state) => state.passcode);
 
   useEffect(() => {
     if (isGoogleNativeAvailable && NativeGoogleSignin) {
-      NativeGoogleSignin.configure({
-        webClientId: GOOGLE_WEB_CLIENT_ID,
-        offlineAccess: true,
-      });
+      try {
+        NativeGoogleSignin.configure({
+          webClientId: GOOGLE_WEB_CLIENT_ID,
+          iosClientId: GOOGLE_IOS_CLIENT_ID,
+          offlineAccess: true,
+        });
+      } catch (e) {
+        console.warn('GoogleSignin configure error:', e);
+      }
     }
   }, []);
 
@@ -58,6 +65,25 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
       const { token, profile } = res.data;
 
       await setAuth(token, profile);
+
+      // Fetch full profile (selfieUrl) from family/events in the background
+      try {
+        const eventsRes = await api.get('/api/gallery/family/events', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (eventsRes.data?.profile || eventsRes.data?.selfieUrl) {
+          const selfieUrl = eventsRes.data.selfieUrl
+            ? `https://mycircle.mistyvisuals.com${eventsRes.data.selfieUrl}`
+            : null;
+          await updateProfile({
+            ...eventsRes.data.profile,
+            selfieUrl,
+          });
+        }
+      } catch (e) {
+        // Non-critical — profile photo update failed silently
+      }
+
       onSuccess();
     } catch (err: any) {
       console.error(err);
@@ -69,48 +95,27 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
   };
 
   const signInWithGoogle = async () => {
-    if (!isGoogleNativeAvailable || !NativeGoogleSignin) {
-      // Sandbox Bypass mode for Expo Go
-      Alert.alert(
-        'Expo Go Sandbox Mode',
-        'Real Google Sign-In requires a standalone native build. Continue in sandbox mode for testing?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Test Sandbox',
-            onPress: async () => {
-              setIsLoggingIn(true);
-              // Set a mock profile to allow exploring the rest of the flow
-              await setAuth('mock-sandbox-token', {
-                id: 9999,
-                name: 'Demo Event Guest',
-                email: 'guest@mistyvisuals.com',
-                phoneNumber: '',
-                hasSelfie: false,
-              });
-              setIsLoggingIn(false);
-              onSuccess();
-            },
-          },
-        ]
-      );
-      return;
-    }
-
     try {
       setIsLoggingIn(true);
+      if (!isGoogleNativeAvailable || !NativeGoogleSignin) {
+        throw new Error('Native Google Sign-In not available in current environment');
+      }
+
       await NativeGoogleSignin.hasPlayServices();
       const userInfo = await NativeGoogleSignin.signIn();
-      const idToken = userInfo.data?.idToken || userInfo.idToken;
+      const idToken = userInfo.data?.idToken || userInfo.idToken || (userInfo as any)?.idToken;
       
       if (idToken) {
         await handleAuthSuccess(idToken, 'google');
       } else {
-        throw new Error('Google Sign-In failed to return an ID Token');
+        throw new Error('Google Sign-In completed but no ID Token was provided by Google.');
       }
     } catch (error: any) {
       console.error('Google Sign-In error', error);
-      Alert.alert('Google Sign-In Failed', 'Make sure your Google Play Services are working.');
+      if (error.code !== 'SIGN_IN_CANCELLED') {
+        Alert.alert('Google Sign-In Error', error.message || 'Google authentication failed. Please try again.');
+      }
+    } finally {
       setIsLoggingIn(false);
     }
   };
@@ -133,7 +138,7 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
     } catch (error: any) {
       console.error('Apple Sign-In error', error);
       if (error.code !== 'ERR_REQUEST_CANCELED') {
-        Alert.alert('Apple Sign-In', 'Apple login failed.');
+        Alert.alert('Apple Sign-In Error', error.message || 'Apple authentication failed.');
       }
       setIsLoggingIn(false);
     }
@@ -164,8 +169,8 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
               onPress={signInWithGoogle}
             />
           ) : (
-            <Pressable style={styles.mockGoogleBtn} onPress={signInWithGoogle}>
-              <Text style={styles.mockGoogleBtnText}>Sign in with Google (Sandbox)</Text>
+            <Pressable style={styles.googleButton} onPress={signInWithGoogle}>
+              <Text style={{ color: '#000000', fontWeight: '600' }}>Sign in with Google</Text>
             </Pressable>
           )}
 

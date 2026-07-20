@@ -24,15 +24,10 @@ export default function MyCircleScreen() {
     isLoading,
     eventSlug,
     passcode,
-    loadStoredAuth,
     setEventDetails,
     logout,
   } = useAuthStore();
-
-  // Load auth state from SecureStore on startup
-  useEffect(() => {
-    loadStoredAuth();
-  }, []);
+  // Note: loadStoredAuth() is already called by _layout.tsx on mount — no need to duplicate here.
 
   // Parse deep link when it changes
   useEffect(() => {
@@ -51,20 +46,42 @@ export default function MyCircleScreen() {
 
       try {
         setIsValidatingEvent(true);
+
+        // 1. Try exchanging global family session token for event guest token (Seamless SSO)
+        const res = await api.post(`/api/gallery/public/events/${eventSlug}/auth-from-family`, {
+          code: passcode || undefined,
+        });
+
+        if (res.data?.token) {
+          // User is authorized for this celebration — bypass passcode screen completely!
+          setEventRequiresPasscode(false);
+          return;
+        }
+      } catch (err: any) {
+        const errorMsg = err?.response?.data?.error || '';
+        if (errorMsg.toLowerCase().includes('passcode')) {
+          setEventRequiresPasscode(true);
+          return;
+        }
+      } finally {
+        setIsValidatingEvent(false);
+      }
+
+      try {
+        setIsValidatingEvent(true);
         const res = await api.get(`/api/gallery/public/events/${eventSlug}`);
         const eventData = res.data;
         setEventRequiresPasscode(!!eventData.hasPasscode);
       } catch (err) {
         console.error('Failed to validate event requirements', err);
-        // If validation fails (e.g. offline/inactive), default to passcode check to be safe
-        setEventRequiresPasscode(true);
+        setEventRequiresPasscode(false);
       } finally {
         setIsValidatingEvent(false);
       }
     };
 
     checkEventStatus();
-  }, [eventSlug]);
+  }, [eventSlug, passcode]);
 
   const handleDeepLink = (incomingUrl: string) => {
     try {
@@ -78,12 +95,17 @@ export default function MyCircleScreen() {
       const code = Array.isArray(rawCode) ? rawCode[0] : rawCode;
 
       if (slug) {
-        // Strip trailing subpaths if any (e.g. wedding-slug/gallery/photos -> wedding-slug)
+        // Strip trailing subpaths if any
         const parts = slug.split('/');
         slug = parts[0];
       } else if (parsed.hostname && parsed.hostname !== 'mycircle.mistyvisuals.com') {
-        // Fallback for custom scheme where slug is the hostname (e.g. mycircle://wedding-slug)
-        slug = parsed.hostname;
+        // Fallback for custom scheme where slug is hostname (ignore IP addresses & dev hosts)
+        const isIpOrDev = /^(?:\d{1,3}\.){3}\d{1,3}$/.test(parsed.hostname) || parsed.hostname === 'localhost' || parsed.hostname === 'exp';
+        if (!isIpOrDev) {
+          slug = parsed.hostname;
+        } else {
+          slug = null;
+        }
       }
 
       if (slug) {
@@ -153,7 +175,7 @@ export default function MyCircleScreen() {
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#12100e',
     justifyContent: 'center',
     alignItems: 'center',
   },

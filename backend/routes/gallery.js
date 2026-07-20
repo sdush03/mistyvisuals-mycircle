@@ -2924,32 +2924,35 @@ module.exports = async function galleryRoutes(fastify, opts) {
         let matchedCount = 0;
 
         if (anchorVector) {
-          const validPhotos = await prisma.photo.findMany({
-            where: { eventId: event.id },
-            select: { id: true }
-          });
-          const validPhotoIds = new Set(validPhotos.map(p => p.id));
-
-          let dbVectors = [];
-          if (qdrant.isMock) {
-            dbVectors = qdrant.mockCache
-              .filter(item => item.eventId === event.id && validPhotoIds.has(item.photoId))
-              .map(item => ({
-                photoId: item.photoId,
-                faceId: item.faceId,
-                vector: item.vector
-              }));
-          }
-
-          if (dbVectors.length > 0) {
-            try {
-              const res = await faceRecManager.matchSelfie(selfiePath, dbVectors, []);
-              if (res.matches) {
-                matchedCount = res.matches.length;
+          try {
+            if (qdrant.isMock) {
+              // Mock mode: use local cosine similarity via searchVectors
+              const validPhotos = await prisma.photo.findMany({
+                where: { eventId: event.id },
+                select: { id: true }
+              });
+              const validPhotoIds = new Set(validPhotos.map(p => p.id));
+              const dbVectors = qdrant.mockCache
+                .filter(item => item.eventId === event.id && validPhotoIds.has(item.photoId))
+                .map(item => ({
+                  photoId: item.photoId,
+                  faceId: item.faceId,
+                  vector: item.vector
+                }));
+              if (dbVectors.length > 0) {
+                const res = await faceRecManager.matchSelfie(selfiePath, dbVectors, []);
+                if (res.matches) {
+                  matchedCount = res.matches.length;
+                }
               }
-            } catch (matchErr) {
-              req.log.error(`Match execution failed for event ${event.id}:`, matchErr.message);
+            } else {
+              // Real Qdrant: use searchVectors — same path as the actual gallery endpoint
+              const mainMatches = await qdrant.searchVectors(event.id, anchorVector, 500, 0.35);
+              const matchedPhotoIds = new Set(mainMatches.map(m => m.photo_id));
+              matchedCount = matchedPhotoIds.size;
             }
+          } catch (matchErr) {
+            req.log.warn(`matchedCount computation failed for event ${event.id}:`, matchErr.message);
           }
         }
 
@@ -2973,7 +2976,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
         // 2. Temporary Migration Fallback (only executed if event.stage is null/undefined)
         if (!stage) {
-          if (event.highlightsReady || event.isHighlights) {
+          const hasHighlightsTab = Array.isArray(event.tabs) && event.tabs.some(t => t && t.toLowerCase() === 'highlights');
+          if (event.highlightsReady || event.isHighlights || hasHighlightsTab) {
             stage = 'HIGHLIGHTS';
           } else if (eventDate > today && !isSameDay) {
             stage = 'UPCOMING';

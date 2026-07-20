@@ -53,6 +53,7 @@ export default function JoinEventView({ onSuccess }: JoinEventViewProps) {
   const handleJoin = async (slug: string, passcode: string | null) => {
     try {
       setIsSubmitting(true);
+
       // Validate that the event exists by calling the public event details API
       const res = await api.get(`/api/gallery/public/events/${slug}`);
       const eventData = res.data;

@@ -10,6 +10,7 @@ export interface GuestProfile {
   email: string;
   phoneNumber?: string | null;
   hasSelfie?: boolean;
+  selfieUrl?: string | null;
 }
 
 interface AuthState {
@@ -18,12 +19,14 @@ interface AuthState {
   isLoading: boolean;
   eventSlug: string | null;
   passcode: string | null;
+  eventCoverUrl: string | null;
+  eventTitle: string | null;
   isTabBarCollapsed: boolean;
   setTabBarCollapsed: (collapsed: boolean) => void;
   
   setAuth: (token: string, profile: GuestProfile) => Promise<void>;
   updateProfile: (profile: Partial<GuestProfile>) => Promise<void>;
-  setEventDetails: (slug: string | null, passcode: string | null) => void;
+  setEventDetails: (slug: string | null, passcode: string | null, coverUrl?: string | null, title?: string | null) => void;
   loadStoredAuth: () => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -34,14 +37,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: true,
   eventSlug: null,
   passcode: null,
+  eventCoverUrl: null,
+  eventTitle: null,
   isTabBarCollapsed: false,
   
   setTabBarCollapsed: (collapsed) => set({ isTabBarCollapsed: collapsed }),
 
   setAuth: async (token, profile) => {
     try {
+      const { selfieUrl, ...persistentProfile } = profile;
       await SecureStore.setItemAsync(TOKEN_KEY, token);
-      await SecureStore.setItemAsync(PROFILE_KEY, JSON.stringify(profile));
+      await SecureStore.setItemAsync(PROFILE_KEY, JSON.stringify(persistentProfile));
       set({ token, profile, isLoading: false });
     } catch (e) {
       console.error('Error saving auth state', e);
@@ -53,15 +59,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!currentProfile) return;
     const newProfile = { ...currentProfile, ...updatedFields };
     try {
-      await SecureStore.setItemAsync(PROFILE_KEY, JSON.stringify(newProfile));
+      const { selfieUrl, ...persistentProfile } = newProfile;
+      await SecureStore.setItemAsync(PROFILE_KEY, JSON.stringify(persistentProfile));
       set({ profile: newProfile });
     } catch (e) {
       console.error('Error updating profile state', e);
     }
   },
 
-  setEventDetails: (eventSlug, passcode) => {
-    set({ eventSlug, passcode });
+  setEventDetails: (eventSlug, passcode, eventCoverUrl = null, eventTitle = null) => {
+    set({ eventSlug, passcode, eventCoverUrl, eventTitle });
   },
 
   loadStoredAuth: async () => {

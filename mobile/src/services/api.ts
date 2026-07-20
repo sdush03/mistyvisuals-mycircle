@@ -13,11 +13,15 @@ const api = axios.create({
 });
 
 // Automatically inject authorization header if token exists
+// ONLY injects the family token when NO Authorization header is already set.
+// This lets callers pass a per-event guest token without it being overwritten.
 api.interceptors.request.use(
   (config) => {
-    const token = useAuthStore.getState().token;
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (!config.headers.Authorization) {
+      const token = useAuthStore.getState().token;
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -45,3 +49,14 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+// A bare axios instance with NO auth interceptors.
+// Use this when you already have a per-event guest token and need
+// to call verifyGuestAuth-protected endpoints without header overwriting.
+export const guestApi = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+

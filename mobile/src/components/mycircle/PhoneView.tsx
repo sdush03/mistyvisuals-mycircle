@@ -24,7 +24,7 @@ export default function PhoneView({ onSuccess }: PhoneViewProps) {
 
     try {
       setIsSubmitting(true);
-      
+
       const updateUrl = eventSlug
         ? `/api/gallery/public/events/${eventSlug}/phone`
         : `/api/gallery/family/profile/update`;

@@ -59,10 +59,13 @@ export default function CameraViewScreen({ onSuccess }: CameraViewProps) {
   };
 
   const uploadSelfie = async () => {
-    if (!capturedPhoto) return;
-
     try {
       setIsUploading(true);
+
+      if (!capturedPhoto) {
+        Alert.alert('No Photo Captured', 'Please take a live selfie before continuing.');
+        return;
+      }
       
       const formData = new FormData();
       formData.append('selfie', {
@@ -253,6 +256,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     textTransform: 'uppercase',
+  },
+  skipBtn: {
+    marginTop: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  skipBtnText: {
+    fontFamily: 'System',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8c867e',
+    letterSpacing: 1,
   },
   loader: {
     marginTop: 20,

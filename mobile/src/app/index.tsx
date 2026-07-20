@@ -19,100 +19,18 @@ import { router } from 'expo-router';
 import { useAuthStore } from '../store/authStore';
 import api from '../services/api';
 
+import { Linking } from 'react-native';
+import YoutubePlayer from 'react-native-youtube-iframe';
+
 // Sub-components for reading/exploring
 import FeaturedStoryView from '../components/home/FeaturedStoryView';
 import ArticleView from '../components/home/ArticleView';
+import MoodboardsView, { CURATED_MOODBOARDS } from '../components/home/MoodboardsView';
+import AllStoriesView from '../components/home/AllStoriesView';
 
 const { width } = Dimensions.get('window');
 
 // Local Data Definitions for the Editorial Showcase
-const FEATURED_STORIES = [
-  {
-    id: 'story_1',
-    title: 'Wildflower Vows',
-    subtitle: 'A Golden Hour Forest Union',
-    location: 'Himalayan Forest',
-    date: 'October 2023',
-    coverImage: require('@/assets/images/portfolio/sunset_couple.jpg'),
-    description: 'Set against the rugged peaks of the Himalayas, Kabir and Aisha celebrated their love surrounded by towering pines and wildflowers. Under the soft glow of a setting sun, they exchanged vows in an intimate, emotional ceremony that felt suspended in time.',
-    images: [
-      require('@/assets/images/portfolio/sunset_couple.jpg'),
-      require('@/assets/images/portfolio/indian_bride.jpg'),
-      require('@/assets/images/portfolio/palace_wedding.jpg'),
-    ]
-  },
-  {
-    id: 'story_2',
-    title: 'Laughter & Lights',
-    subtitle: 'A Traditional Modern Wedding',
-    location: 'Delhi, India',
-    date: 'December 2023',
-    coverImage: require('@/assets/images/portfolio/indian_bride.jpg'),
-    description: "Riya and Aman's wedding was a beautiful dance of century-old traditions and modern vibrancy. From the bright marigolds of the haldi to the emotional pheras, every single second was illuminated by authentic joy, radiant smiles, and a deep love that warmed the entire room.",
-    images: [
-      require('@/assets/images/portfolio/indian_bride.jpg'),
-      require('@/assets/images/portfolio/sunset_couple.jpg'),
-      require('@/assets/images/portfolio/palace_wedding.jpg'),
-    ]
-  },
-  {
-    id: 'story_3',
-    title: 'Lakefront Royalty',
-    subtitle: 'A Royal Destination Affair',
-    location: 'Udaipur, India',
-    date: 'November 2023',
-    coverImage: require('@/assets/images/portfolio/palace_wedding.jpg'),
-    description: "Set on the majestic shores of Lake Pichola, Meera and Vikram's Udaipur wedding was a visual masterpiece. With Rajput architecture reflecting in the calm waters and royal grandeur echoing in every corridor, the celebration was nothing short of a cinematic fairy tale.",
-    images: [
-      require('@/assets/images/portfolio/palace_wedding.jpg'),
-      require('@/assets/images/portfolio/indian_bride.jpg'),
-      require('@/assets/images/portfolio/sunset_couple.jpg'),
-    ]
-  }
-];
-
-const ARTICLES = [
-  {
-    id: 'article_1',
-    title: "How to survive your best friend's wedding 😂",
-    category: 'Lifestyle',
-    date: 'Nov 12, 2023',
-    readTime: '4 min read',
-    coverImage: require('@/assets/images/portfolio/sunset_couple.jpg'),
-    content: [
-      "So, your best friend is getting married. Congratulations! You've officially been promoted from partner-in-crime to full-time wedding emotional support coordinator, emergency safety pin holder, and chief dance floor instigator.",
-      "While it is one of the most beautiful moments of your life to see them find 'the one', it is also a marathon of events. Between the sangeet practice, holding the heavy lehenga, making sure the groom's shoes don't actually get stolen, and delivering a toast that is emotional but not too embarrassing, it's easy to get overwhelmed.",
-      "Our number one tip: Keep a small survival kit in your pocket. Mints, safety pins, wet wipes, and double-sided tape are worth their weight in gold. And most importantly, remember to step back and look at your friend during the ceremony. The chaos fades, but the memory of seeing them happy will last forever."
-    ]
-  },
-  {
-    id: 'article_2',
-    title: 'Why Indian weddings are becoming more intimate',
-    category: 'Trends',
-    date: 'Dec 05, 2023',
-    readTime: '6 min read',
-    coverImage: require('@/assets/images/portfolio/palace_wedding.jpg'),
-    content: [
-      "For decades, the standard Indian wedding was defined by its guest list—often running into the thousands. But in recent years, a quiet revolution has been taking place. More and more couples are opting to scale down their celebrations, focusing instead on intimate, highly personalized weddings.",
-      "An intimate wedding (typically under 150 guests) changes the entire energy of the day. Instead of spending hours standing on a stage greeting hundreds of distant relatives, couples are actually sitting down, sharing meals, and dancing alongside their closest friends and family.",
-      "From a photography perspective, intimate weddings are a dream. We get to capture real, unposed interactions. The emotions are raw, the atmosphere is relaxed, and the couple gets to truly live their wedding day instead of just hosting it."
-    ]
-  },
-  {
-    id: 'article_3',
-    title: 'The story behind this royal Udaipur balcony shot',
-    category: 'Behind the Lens',
-    date: 'Oct 28, 2023',
-    readTime: '3 min read',
-    coverImage: require('@/assets/images/portfolio/palace_wedding.jpg'),
-    content: [
-      "Behind every iconic photograph is a story of planning, timing, and sometimes a little bit of magic. This particular image, captured on the balcony of a heritage palace in Udaipur, was months in the making.",
-      "The challenge with grand heritage properties is that they are popular. Finding a moment where the light is perfect, the wind is calm, and there are no other people in the frame is incredibly difficult. We had a window of exactly seven minutes during golden hour.",
-      "We positioned the couple just as the sun dipped behind the Aravali hills. The golden reflection on Lake Pichola created a natural studio light, highlighting the intricate gold embroidery of their traditional attire. It stands as one of our favorite examples of fine-art editorial framing."
-    ]
-  }
-];
-
 const VIBES = ['All', 'Luxury', 'Destination', 'Intimate', 'Traditional'];
 
 export default function HomeScreen() {
@@ -121,42 +39,116 @@ export default function HomeScreen() {
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [selectedVibe, setSelectedVibe] = useState('All');
 
-  // Modals for full articles / portfolios
+  // Modals for full articles / portfolios / moodboards
   const [selectedStory, setSelectedStory] = useState<any | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<any | null>(null);
+  const [playingFilmId, setPlayingFilmId] = useState<string | null>(null);
+  const [isMoodboardsOpen, setIsMoodboardsOpen] = useState(false);
+  const [selectedMoodboardId, setSelectedMoodboardId] = useState<string | null>(null);
+  const [isAllStoriesOpen, setIsAllStoriesOpen] = useState(false);
 
   const [websiteStories, setWebsiteStories] = useState<any[]>([]);
+  const [websiteFilms, setWebsiteFilms] = useState<any[]>([]);
+  const [likedPhotos, setLikedPhotos] = useState<any[]>([]);
 
   // Stored matched counts for detecting new photos
   const [lastMatchedCounts, setLastMatchedCounts] = useState<Record<string, number>>({});
   const [countsLoaded, setCountsLoaded] = useState(false);
 
-  // Fetch featured stories from website API
+  // Load liked photos from storage
   useEffect(() => {
-    const fetchWebsiteStories = async () => {
+    AsyncStorage.getItem('@mycircle_liked_photos')
+      .then((stored) => {
+        if (stored) setLikedPhotos(JSON.parse(stored));
+      })
+      .catch(() => {});
+  }, []);
+
+  // Filter featured films ONLY (curated website featured films)
+  const featuredFilmsOnly = React.useMemo(() => {
+    return websiteFilms.filter((f: any) => f.is_featured || f.isFeatured || websiteFilms.every(item => !item.is_featured));
+  }, [websiteFilms]);
+
+  // Helper to extract YouTube 11-char video ID
+  const extractYouTubeId = (film: any): string | null => {
+    if (!film) return null;
+    if (film.youtube_video_id) return film.youtube_video_id;
+    const targetUrl = film.youtube_url || film.video_url || '';
+    const match = targetUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+    return match ? match[1] : null;
+  };
+
+  // Load cached stories, films, matchedCounts & events from AsyncStorage on mount for instant Frame 1 rendering
+  useEffect(() => {
+    AsyncStorage.multiGet([
+      '@mycircle_matched_counts',
+      '@mycircle_user_events_cache',
+      '@mycircle_cached_website_stories',
+      '@mycircle_cached_website_films',
+    ])
+      .then(([countsItem, eventsItem, storiesItem, filmsItem]) => {
+        if (countsItem[1]) {
+          try { setLastMatchedCounts(JSON.parse(countsItem[1])); } catch (_) {}
+        }
+        if (eventsItem[1]) {
+          try {
+            const cachedEvents = JSON.parse(eventsItem[1]);
+            if (Array.isArray(cachedEvents) && cachedEvents.length > 0) {
+              setEvents(cachedEvents);
+            }
+          } catch (_) {}
+        }
+        if (storiesItem[1]) {
+          try {
+            const cachedStories = JSON.parse(storiesItem[1]);
+            if (Array.isArray(cachedStories) && cachedStories.length > 0) {
+              setWebsiteStories(cachedStories);
+            }
+          } catch (_) {}
+        }
+        if (filmsItem[1]) {
+          try {
+            const cachedFilms = JSON.parse(filmsItem[1]);
+            if (Array.isArray(cachedFilms) && cachedFilms.length > 0) {
+              setWebsiteFilms(cachedFilms);
+            }
+          } catch (_) {}
+        }
+      })
+      .catch(() => {})
+      .finally(() => setCountsLoaded(true));
+  }, []);
+
+  // Fetch featured stories & films from website API in background
+  useEffect(() => {
+    const fetchWebsiteData = async () => {
       try {
-        const res = await fetch('https://www.mistyvisuals.com/api/website/stories');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            setWebsiteStories(data);
+        const storiesRes = await fetch('https://www.mistyvisuals.com/api/website/stories');
+        if (storiesRes.ok) {
+          const storiesData = await storiesRes.json();
+          if (Array.isArray(storiesData) && storiesData.length > 0) {
+            setWebsiteStories(storiesData);
+            AsyncStorage.setItem('@mycircle_cached_website_stories', JSON.stringify(storiesData)).catch(() => {});
           }
         }
       } catch (e) {
         console.warn('Failed to fetch website stories:', e);
       }
-    };
-    fetchWebsiteStories();
-  }, []);
 
-  // Load previously stored matchedCounts from AsyncStorage on mount
-  useEffect(() => {
-    AsyncStorage.getItem('@mycircle_matched_counts')
-      .then(stored => {
-        if (stored) setLastMatchedCounts(JSON.parse(stored));
-      })
-      .catch(() => {})
-      .finally(() => setCountsLoaded(true));
+      try {
+        const filmsRes = await fetch('https://www.mistyvisuals.com/api/website/films');
+        if (filmsRes.ok) {
+          const filmsData = await filmsRes.json();
+          if (Array.isArray(filmsData) && filmsData.length > 0) {
+            setWebsiteFilms(filmsData);
+            AsyncStorage.setItem('@mycircle_cached_website_films', JSON.stringify(filmsData)).catch(() => {});
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to fetch website films:', e);
+      }
+    };
+    fetchWebsiteData();
   }, []);
 
   // Fetch joined wedding events if authenticated
@@ -164,12 +156,14 @@ export default function HomeScreen() {
     const fetchUserEvents = async () => {
       if (!token) {
         setEvents([]);
+        AsyncStorage.removeItem('@mycircle_user_events_cache').catch(() => {});
         return;
       }
       try {
-        setLoadingEvents(true);
         const res = await api.get('/api/gallery/family/events');
-        setEvents(res.data.events || []);
+        const rawEvents: any[] = res.data.events || [];
+        setEvents(rawEvents);
+        AsyncStorage.setItem('@mycircle_user_events_cache', JSON.stringify(rawEvents)).catch(() => {});
       } catch (err: any) {
         // 401 means the token is expired/invalid — the API interceptor handles
         // session cleanup. Swallow silently here to avoid a noisy console error.
@@ -199,9 +193,9 @@ export default function HomeScreen() {
             subtitle: fullStory.subtitle || fullStory.category || 'Portfolio Story',
             location: fullStory.location || 'Misty Visuals',
             date: fullStory.date || '',
-            coverImage: coverUri ? { uri: coverUri } : require('@/assets/images/portfolio/sunset_couple.jpg'),
+            coverImage: coverUri ? { uri: coverUri } : null,
             description: fullStory.subtitle || 'Unscripted moments and intentional design.',
-            images: galleryImages.length > 0 ? galleryImages : (coverUri ? [{ uri: coverUri }] : [require('@/assets/images/portfolio/sunset_couple.jpg')]),
+            images: galleryImages.length > 0 ? galleryImages : (coverUri ? [{ uri: coverUri }] : []),
           });
           return;
         }
@@ -261,22 +255,39 @@ export default function HomeScreen() {
 
     // Scalable Priority Registry (evaluated top-down in array order)
     const HERO_PRIORITY_EVALUATORS = [
-      // 1. NEW_MATCHES
+      // 1. NEW_MATCHES / MATCHES_FOUND (Supports Single & Multi-Wedding Aggregation)
       ({ events: evts, lastMatchedCounts: counts }: any) => {
-        for (const ev of evts) {
+        const eventsWithMatches = evts.filter((e: any) => (e.matchedCount || 0) > 0);
+
+        if (eventsWithMatches.length === 1) {
+          const ev = eventsWithMatches[0];
           const currentCount = ev.matchedCount || 0;
           const prevCount = counts[ev.slug] ?? null;
-          if (prevCount !== null && currentCount > prevCount) {
-            const diff = currentCount - prevCount;
-            return {
-              type: 'NEW_MATCHES',
-              icon: '✨',
-              headline: `We found ${diff} new memo${diff === 1 ? 'ry' : 'ries'} of you.`,
-              subtitle: `${ev.title} · Your gallery has been updated`,
-              cta: 'View Gallery →',
-              eventSlug: ev.slug,
-            };
-          }
+          const isNew = prevCount !== null && currentCount > prevCount;
+          const diff = isNew ? currentCount - prevCount : currentCount;
+
+          return {
+            type: 'NEW_MATCHES',
+            icon: '✨',
+            headline: isNew
+              ? `We found ${diff} new memo${diff === 1 ? 'ry' : 'ries'} of you.`
+              : `We found ${currentCount} memo${currentCount === 1 ? 'ry' : 'ries'} of you.`,
+            subtitle: `${ev.title} · Your private gallery is ready`,
+            cta: 'View Gallery →',
+            eventSlug: ev.slug,
+          };
+        } else if (eventsWithMatches.length > 1) {
+          const totalMatches = eventsWithMatches.reduce((sum: number, e: any) => sum + (e.matchedCount || 0), 0);
+          const topEvent = eventsWithMatches[0];
+
+          return {
+            type: 'NEW_MATCHES',
+            icon: '✨',
+            headline: `We found ${totalMatches} memories of you across ${eventsWithMatches.length} celebrations.`,
+            subtitle: `Latest: ${topEvent.title}`,
+            cta: 'View Gallery →',
+            eventSlug: topEvent.slug,
+          };
         }
         return null;
       },
@@ -401,7 +412,7 @@ export default function HomeScreen() {
       if (card) return card;
     }
     return null;
-  }, [events, lastMatchedCounts, profile?.name]);
+  }, [events, lastMatchedCounts, profile?.name, loadingEvents]);
 
   // Persist matched counts once events load
   useEffect(() => {
@@ -415,21 +426,24 @@ export default function HomeScreen() {
 
   const handleHeroPress = (card: any) => {
     if (card.eventSlug) {
-      setEventDetails(card.eventSlug, null);
+      const targetEvent = events.find((e) => e.slug === card.eventSlug);
+      const coverUrl = targetEvent?.coverPhotoMobileUrl || targetEvent?.coverPhotoUrl || null;
+      const title = targetEvent?.title || null;
+      setEventDetails(card.eventSlug, null, coverUrl, title);
       router.replace('/mycircle');
     }
   };
 
   const handleEventCardClick = (ev: any) => {
-    // If it's a ready event, go directly to the gallery inside mycircle tab
-    setEventDetails(ev.slug, null);
+    const coverUrl = ev.coverPhotoMobileUrl || ev.coverPhotoUrl || null;
+    setEventDetails(ev.slug, null, coverUrl, ev.title);
     router.replace('/mycircle');
   };
 
   // Dynamic Vibe filters from website story categories
   const vibeFilters = React.useMemo(() => {
     const categoriesSet = new Set<string>();
-    const sourceStories = websiteStories.length > 0 ? websiteStories : FEATURED_STORIES;
+    const sourceStories = websiteStories;
     sourceStories.forEach((s: any) => {
       const cats = (s.category || '').split(',').map((c: string) => c.trim()).filter(Boolean);
       cats.forEach((c: string) => categoriesSet.add(c));
@@ -440,7 +454,7 @@ export default function HomeScreen() {
 
   // Helper to filter website portfolio stories by selected Vibe
   const getFilteredVibeStories = () => {
-    const sourceStories = websiteStories.length > 0 ? websiteStories : FEATURED_STORIES;
+    const sourceStories = websiteStories;
 
     if (selectedVibe === 'All') {
       return sourceStories;
@@ -539,142 +553,304 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Layer 3: "Featured by Misty Visuals" (Netflix Carousel) */}
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>FEATURED BY MISTY VISUALS</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-            {(websiteStories.length > 0
-              ? websiteStories
-                  .filter((s) => s.is_featured || websiteStories.every(item => !item.is_featured))
-                  .map((s) => ({
-                    id: String(s.id),
-                    slug: s.slug,
-                    title: s.title,
-                    subtitle: s.subtitle || s.category || 'Featured Story',
-                    location: s.location || 'Misty Visuals',
-                    date: s.date || '',
-                    coverImage: (s.cover_image_mobile_url || s.cover_image_url || s.grid_image_url) 
-                      ? { uri: s.cover_image_mobile_url || s.cover_image_url || s.grid_image_url }
-                      : require('@/assets/images/portfolio/sunset_couple.jpg'),
-                    description: s.subtitle || 'Unscripted moments and intentional design.',
-                    images: []
-                  }))
-              : FEATURED_STORIES
-            ).map((story) => (
-              <Pressable 
-                key={story.id} 
-                style={styles.featuredCard}
-                onPress={() => handleStoryPress(story)}
-              >
-                <Image source={story.coverImage} style={styles.featuredImage} />
-                <LinearGradient 
-                  colors={['transparent', 'rgba(18, 16, 14, 0.15)', 'rgba(18, 16, 14, 0.85)']} 
-                  locations={[0, 0.45, 1]} 
-                  style={styles.featuredOverlay} 
-                />
-                <View style={styles.featuredContent}>
-                  <Text style={styles.featuredLocation}>{(story.location || 'MISTY VISUALS').toUpperCase()}</Text>
-                  <Text style={styles.featuredTitle}>{story.title}</Text>
-                  <Text style={styles.featuredReadMore}>View Collection →</Text>
-                </View>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Layer 4: "Circle Stories" (Editorial Journal) */}
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>CIRCLE JOURNAL</Text>
-          <View style={styles.articlesContainer}>
-            {ARTICLES.map((article) => (
-              <Pressable 
-                key={article.id} 
-                style={styles.articleCard}
-                onPress={() => setSelectedArticle(article)}
-              >
-                <Image source={article.coverImage} style={styles.articleImage} />
-                <View style={styles.articleInfo}>
-                  <Text style={styles.articleCategory}>{article.category.toUpperCase()}</Text>
-                  <Text style={styles.articleTitle} numberOfLines={2}>{article.title}</Text>
-                  <Text style={styles.articleMeta}>{article.date} • {article.readTime}</Text>
-                </View>
-              </Pressable>
-            ))}
+        {/* ── 3. My Likes (Conditional: ONLY rendered if user has liked photos) ── */}
+        {likedPhotos.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionHeader}>MY LIKES</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+              {likedPhotos.map((photo, idx) => (
+                <Pressable
+                  key={photo.id || idx}
+                  style={styles.likedCard}
+                  onPress={() => {
+                    // Open liked photo preview
+                  }}
+                >
+                  <Image source={{ uri: photo.r2Url || photo.url }} style={styles.likedImage} />
+                  <View style={styles.likedBadge}>
+                    <Text style={styles.likedBadgeText}>❤️</Text>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
-        </View>
+        )}
 
-        {/* Layer 5: "Browse by Vibe" (Interactive pills) */}
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>BROWSE BY VIBE</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibePillScroll}>
-            {vibeFilters.map((vibe) => (
-              <Pressable 
-                key={vibe} 
-                style={[styles.vibePill, selectedVibe === vibe && styles.vibePillActive]}
-                onPress={() => setSelectedVibe(vibe)}
-              >
-                <Text style={[styles.vibeText, selectedVibe === vibe && styles.vibeTextActive]}>{vibe}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+        {/* ── 4. Featured Stories ─────────────────────────────────────────── */}
+        {websiteStories.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionHeader}>FEATURED STORIES</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+              {websiteStories
+                .filter((s) => s.is_featured || websiteStories.every(item => !item.is_featured))
+                .map((s) => ({
+                  id: String(s.id),
+                  slug: s.slug,
+                  title: s.title,
+                  subtitle: s.subtitle || s.category || 'Featured Story',
+                  location: s.location || 'Misty Visuals',
+                  date: s.date || '',
+                  coverImage: (s.cover_image_mobile_url || s.cover_image_url || s.grid_image_url) 
+                    ? { uri: s.cover_image_mobile_url || s.cover_image_url || s.grid_image_url }
+                    : null,
+                  description: s.subtitle || 'Unscripted moments and intentional design.',
+                  images: []
+                }))
+                .map((story) => (
+                  <Pressable 
+                    key={story.id} 
+                    style={styles.featuredCard}
+                    onPress={() => handleStoryPress(story)}
+                  >
+                    {story.coverImage ? (
+                      <Image source={story.coverImage} style={styles.featuredImage} />
+                    ) : (
+                      <View style={[styles.featuredImage, { backgroundColor: '#18181b' }]} />
+                    )}
+                    <LinearGradient 
+                      colors={['transparent', 'rgba(18, 16, 14, 0.15)', 'rgba(18, 16, 14, 0.85)']} 
+                      locations={[0, 0.45, 1]} 
+                      style={styles.featuredOverlay} 
+                    />
+                    <View style={styles.featuredContent}>
+                      <Text style={styles.featuredLocation}>{(story.location || 'MISTY VISUALS').toUpperCase()}</Text>
+                      <Text style={styles.featuredTitle}>{story.title}</Text>
+                      <Text style={styles.featuredReadMore}>View Collection →</Text>
+                    </View>
+                  </Pressable>
+                ))}
+            </ScrollView>
+          </View>
+        )}
 
-          {/* Vibe mini gallery */}
-          <View style={styles.vibeGalleryGrid}>
-            {getFilteredVibeStories().length > 0 ? (
-              getFilteredVibeStories().map((item: any, index: number) => {
-                const coverSrc = item.img
-                  ? item.img
-                  : item.cover_image_mobile_url || item.cover_image_url || item.grid_image_url
-                  ? { uri: item.cover_image_mobile_url || item.cover_image_url || item.grid_image_url }
-                  : require('@/assets/images/portfolio/sunset_couple.jpg');
-                
-                const titleText = item.title || '';
-                const subText = item.subtitle || item.location || '';
+        {/* ── 5. Featured Films (16:9 In-Place YouTube Playback) ───────────── */}
+        {featuredFilmsOnly.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionHeader}>FEATURED FILMS</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+              {featuredFilmsOnly.map((film) => {
+                const isPlaying = playingFilmId === String(film.id);
+                const videoId = extractYouTubeId(film);
+                const rawUrl = film.youtube_url || film.video_url || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : '');
+
+                const coverSrc =
+                  typeof film.thumbnail_url === 'string'
+                    ? { uri: film.thumbnail_url }
+                    : film.thumbnail_url
+                    ? film.thumbnail_url
+                    : videoId
+                    ? { uri: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` }
+                    : null;
+
+                const filmCardWidth = width * 0.84;
+                const filmCardHeight = filmCardWidth * (9 / 16);
 
                 return (
-                  <Pressable 
-                    key={item.id || index} 
-                    style={styles.vibeGalleryItem}
-                    onPress={() => handleStoryPress(item)}
-                  >
-                    <Image source={coverSrc} style={styles.vibeGalleryImage} />
-                    {titleText ? (
-                      <Text style={styles.vibeGalleryLabel} numberOfLines={1}>
-                        {titleText}
-                      </Text>
-                    ) : null}
-                    {subText ? (
-                      <Text style={styles.vibeGallerySublabel} numberOfLines={1}>
-                        {subText}
-                      </Text>
-                    ) : null}
-                  </Pressable>
+                  <View key={film.id} style={styles.filmCard}>
+                    {isPlaying && videoId ? (
+                      <View style={{ flex: 1, position: 'relative', backgroundColor: '#000000' }}>
+                        <YoutubePlayer
+                          height={filmCardHeight}
+                          width={filmCardWidth}
+                          videoId={videoId}
+                          play={true}
+                          forceAndroidAutoplay={true}
+                          initialPlayerParams={{
+                            controls: false,
+                            modestbranding: true,
+                            rel: false,
+                            preventFullScreen: false,
+                          }}
+                          onChangeState={(state: string) => {
+                            if (state === 'ended') setPlayingFilmId(null);
+                          }}
+                          webViewProps={{
+                            allowsInlineMediaPlayback: true,
+                            allowsFullscreenVideo: true,
+                            mediaPlaybackRequiresUserAction: false,
+                          }}
+                        />
+                        {rawUrl ? (
+                          <Pressable
+                            style={styles.openYouTubeBadge}
+                            onPress={() => Linking.openURL(rawUrl).catch(() => {})}
+                          >
+                            <Text style={styles.openYouTubeBadgeText}>YouTube ↗</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    ) : (
+                      <Pressable
+                        style={{ flex: 1, position: 'relative' }}
+                        onPress={() => {
+                          if (videoId) {
+                            setPlayingFilmId(String(film.id));
+                          } else if (rawUrl) {
+                            Linking.openURL(rawUrl).catch(() => {});
+                          }
+                        }}
+                      >
+                        {coverSrc ? (
+                          <Image source={coverSrc} style={styles.filmImage} />
+                        ) : (
+                          <View style={[styles.filmImage, { backgroundColor: '#18181b' }]} />
+                        )}
+                        <LinearGradient
+                          colors={['transparent', 'rgba(18, 16, 14, 0.15)', 'rgba(18, 16, 14, 0.82)']}
+                          locations={[0, 0.5, 1]}
+                          style={styles.featuredOverlay}
+                        />
+                        
+                        {/* Dead-Center Glassmorphic Play Button matching Website */}
+                        <View style={styles.playCenterOverlay}>
+                          <View style={styles.websitePlayCircle}>
+                            <Text style={styles.websitePlayTriangle}>▶</Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.filmContent}>
+                          <Text style={styles.filmTitle}>{film.title}</Text>
+                          {film.location ? <Text style={styles.filmLocation}>📍 {film.location}</Text> : null}
+                        </View>
+                      </Pressable>
+                    )}
+                  </View>
                 );
-              })
-            ) : (
-              <View style={styles.emptyVibeContainer}>
-                <Text style={styles.emptyVibeText}>No stories found under "{selectedVibe}".</Text>
-              </View>
-            )}
+              })}
+            </ScrollView>
           </View>
+        )}
+
+        {/* ── 6. Moodboards (Preview section with View All) ───────────────── */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeader}>MOODBOARDS</Text>
+            <Pressable onPress={() => setIsMoodboardsOpen(true)}>
+              <Text style={styles.viewAllText}>View All →</Text>
+            </Pressable>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+            {CURATED_MOODBOARDS.slice(0, 4).map((board) => (
+              <Pressable
+                key={board.id}
+                style={styles.moodboardCard}
+                onPress={() => {
+                  setSelectedMoodboardId(board.id);
+                  setIsMoodboardsOpen(true);
+                }}
+              >
+                <Image source={board.coverImage} style={styles.moodboardImage} />
+                <LinearGradient
+                  colors={['transparent', 'rgba(18, 16, 14, 0.15)', 'rgba(18, 16, 14, 0.85)']}
+                  locations={[0, 0.45, 1]}
+                  style={styles.featuredOverlay}
+                />
+                <View style={styles.moodboardContent}>
+                  <Text style={styles.moodboardTitle}>{board.title}</Text>
+                  <Text style={styles.moodboardSub}>{board.subtitle}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
         </View>
 
-        {/* CTA: Join Celebration */}
-        <View style={styles.ctaCard}>
-          <Text style={styles.ctaTitle}>Attending a Wedding?</Text>
-          <Text style={styles.ctaSubtitle}>
-            Unlock private galleries, view shared memories, and find photos of yourself automatically.
+        {/* ── 7. Circle Journal ─────────────────────────────────────────────
+             Hidden until real blog posts are available via API.
+             To enable: fetch articles from your CMS/blog API and set websiteArticles state,
+             then render them here exactly like Featured Stories.
+        ────────────────────────────────────────────────────────────────────── */}
+
+        {/* ── 8. Browse by Vibe (First 4 stories + Continue Exploring card) ─ */}
+        {websiteStories.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionHeader}>BROWSE BY VIBE</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibePillScroll}>
+              {vibeFilters.map((vibe) => (
+                <Pressable 
+                  key={vibe} 
+                  style={[styles.vibePill, selectedVibe === vibe && styles.vibePillActive]}
+                  onPress={() => setSelectedVibe(vibe)}
+                >
+                  <Text style={[styles.vibeText, selectedVibe === vibe && styles.vibeTextActive]}>{vibe}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            {/* Horizontal Story Stream (Max 4 stories + Continue Exploring card) */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+              {getFilteredVibeStories().length > 0 ? (
+                <React.Fragment>
+                  {getFilteredVibeStories().slice(0, 4).map((item: any, index: number) => {
+                    const coverUri = item.cover_image_mobile_url || item.cover_image_url || item.grid_image_url;
+                    const coverSrc = coverUri ? { uri: coverUri } : typeof item.img === 'string' ? { uri: item.img } : item.img || null;
+                    
+                    const titleText = item.title || '';
+                    const subText = item.subtitle || item.location || '';
+
+                    return (
+                      <Pressable 
+                        key={item.id || index} 
+                        style={styles.vibeCardItem}
+                        onPress={() => handleStoryPress(item)}
+                      >
+                        {coverSrc ? (
+                          <Image source={coverSrc} style={styles.vibeCardImage} />
+                        ) : (
+                          <View style={[styles.vibeCardImage, { backgroundColor: '#18181b' }]} />
+                        )}
+                        <LinearGradient 
+                          colors={['transparent', 'rgba(18, 16, 14, 0.15)', 'rgba(18, 16, 14, 0.85)']} 
+                          locations={[0, 0.45, 1]} 
+                          style={styles.featuredOverlay} 
+                        />
+                        <View style={styles.vibeCardContent}>
+                          <Text style={styles.vibeCardTitle} numberOfLines={1}>{titleText}</Text>
+                          <Text style={styles.vibeCardSubtext} numberOfLines={1}>{subText}</Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                  {getFilteredVibeStories().length > 4 && (
+                    <Pressable
+                      style={styles.continueExploringCard}
+                      onPress={() => setIsAllStoriesOpen(true)}
+                    >
+                      <Text style={styles.continueExploringIcon}>✨</Text>
+                      <Text style={styles.continueExploringTitle}>Continue Exploring</Text>
+                      <Text style={styles.continueExploringSub}>
+                        +{getFilteredVibeStories().length - 4} more stories in {selectedVibe}
+                      </Text>
+                      <Text style={styles.continueExploringCta}>View All Stories →</Text>
+                    </Pressable>
+                  )}
+                </React.Fragment>
+              ) : (
+                <View style={styles.emptyVibeContainer}>
+                  <Text style={styles.emptyVibeText}>No stories found under "{selectedVibe}".</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ── 9. Join Celebration CTA (Closing Section at the Bottom) ─────── */}
+        <View style={styles.joinCtaSection}>
+          <View style={styles.joinCtaDivider} />
+          <Text style={styles.joinCtaHeader}>
+            {events.length === 0 ? 'Ready to relive a celebration?' : 'Join Another Celebration'}
           </Text>
-          <Pressable 
-            style={styles.ctaButton}
-            onPress={() => router.replace('/mycircle')}
-          >
-            <Text style={styles.ctaButtonText}>🔑 JOIN A CELEBRATION</Text>
+          <Text style={styles.joinCtaSubline}>
+            {events.length === 0
+              ? 'Join using your invitation code to unlock your private memories and AI face-matched photos.'
+              : 'Enter your invitation code or scan a QR code to unlock more private memories.'}
+          </Text>
+          <Pressable style={styles.joinCtaBtn} onPress={() => router.replace('/mycircle')}>
+            <Text style={styles.joinCtaBtnText}>JOIN CELEBRATION →</Text>
           </Pressable>
         </View>
       </ScrollView>
 
-      {/* Full screen Modals for viewing story details & articles */}
+      {/* Modals */}
       <FeaturedStoryView
         isOpen={selectedStory !== null}
         onClose={() => setSelectedStory(null)}
@@ -685,6 +861,20 @@ export default function HomeScreen() {
         isOpen={selectedArticle !== null}
         onClose={() => setSelectedArticle(null)}
         article={selectedArticle}
+      />
+
+      <MoodboardsView
+        isOpen={isMoodboardsOpen}
+        onClose={() => setIsMoodboardsOpen(false)}
+        selectedBoardId={selectedMoodboardId}
+      />
+
+      <AllStoriesView
+        isOpen={isAllStoriesOpen}
+        onClose={() => setIsAllStoriesOpen(false)}
+        stories={websiteStories}
+        initialVibe={selectedVibe}
+        onSelectStory={(story) => handleStoryPress(story)}
       />
     </View>
   );
@@ -967,41 +1157,283 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     color: '#8c867e',
   },
-  ctaCard: {
-    marginHorizontal: 24,
-    marginTop: 40,
-    padding: 24,
-    backgroundColor: '#1c1a18',
+  sectionHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 24,
+    marginBottom: 16,
   },
-  ctaTitle: {
+  viewAllText: {
     fontFamily: 'System',
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#ffffff',
-    marginBottom: 8,
-    letterSpacing: 1,
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    color: '#a07850',
   },
-  ctaSubtitle: {
-    fontFamily: 'serif',
-    fontSize: 12,
-    color: '#b5b0aa',
-    lineHeight: 18,
-    textAlign: 'center',
-    marginBottom: 20,
+  likedCard: {
+    width: 130,
+    height: 170,
+    marginRight: 14,
+    position: 'relative',
+    backgroundColor: '#f9fafb',
+    borderRadius: 2,
+    overflow: 'hidden',
   },
-  ctaButton: {
+  likedImage: {
     width: '100%',
-    paddingVertical: 14,
-    backgroundColor: '#ffffff',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  likedBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(28, 26, 24, 0.65)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ctaButtonText: {
+  likedBadgeText: {
+    fontSize: 11,
+  },
+  filmCard: {
+    width: width * 0.84,
+    aspectRatio: 16 / 9,
+    marginRight: 16,
+    backgroundColor: '#000000',
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 2,
+  },
+  openYouTubeBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(28, 26, 24, 0.85)',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    zIndex: 10,
+  },
+  openYouTubeBadgeText: {
+    fontFamily: 'System',
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: 0.5,
+  },
+  filmImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  playCenterOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3,
+  },
+  websitePlayCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  websitePlayTriangle: {
+    color: '#ffffff',
+    fontSize: 16,
+    paddingLeft: 3,
+  },
+  filmContent: {
+    position: 'absolute',
+    bottom: 16,
+    left: 16,
+    right: 16,
+  },
+  filmCategory: {
+    fontFamily: 'System',
+    fontSize: 8,
+    fontWeight: '700',
+    letterSpacing: 2,
+    color: '#a07850',
+    marginBottom: 4,
+  },
+  filmTitle: {
+    fontFamily: 'serif',
+    fontSize: 18,
+    fontWeight: '300',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  filmLocation: {
+    fontFamily: 'System',
+    fontSize: 10,
+    color: '#d0c8be',
+  },
+  moodboardCard: {
+    width: width * 0.6,
+    height: 180,
+    marginRight: 16,
+    backgroundColor: '#1c1a18',
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 2,
+  },
+  moodboardImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  moodboardContent: {
+    position: 'absolute',
+    bottom: 16,
+    left: 16,
+    right: 16,
+  },
+  moodboardTitle: {
+    fontFamily: 'serif',
+    fontSize: 20,
+    fontWeight: '300',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  moodboardSub: {
+    fontFamily: 'System',
+    fontSize: 10,
+    color: '#d0c8be',
+    letterSpacing: 0.5,
+  },
+  vibeCardItem: {
+    width: 170,
+    height: 230,
+    marginRight: 14,
+    backgroundColor: '#1c1a18',
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 2,
+  },
+  vibeCardImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  vibeCardContent: {
+    position: 'absolute',
+    bottom: 14,
+    left: 14,
+    right: 14,
+  },
+  vibeCardTitle: {
+    fontFamily: 'serif',
+    fontSize: 16,
+    fontWeight: '300',
+    color: '#ffffff',
+    marginBottom: 2,
+  },
+  vibeCardSubtext: {
+    fontFamily: 'System',
+    fontSize: 9,
+    color: '#d0c8be',
+    letterSpacing: 0.5,
+  },
+  continueExploringCard: {
+    width: 170,
+    height: 230,
+    marginRight: 16,
+    backgroundColor: '#fbfaf8',
+    borderWidth: 1,
+    borderColor: '#e5e0d8',
+    borderRadius: 2,
+    padding: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  continueExploringIcon: {
+    fontSize: 24,
+    marginBottom: 10,
+  },
+  continueExploringTitle: {
+    fontFamily: 'System',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1c1a18',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  continueExploringSub: {
+    fontFamily: 'serif',
+    fontSize: 11,
+    color: '#8c867e',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 15,
+  },
+  continueExploringCta: {
     fontFamily: 'System',
     fontSize: 10,
     fontWeight: '700',
+    letterSpacing: 1.5,
+    color: '#a07850',
+  },
+  joinCtaSection: {
+    marginHorizontal: 24,
+    marginTop: 48,
+    marginBottom: 20,
+    paddingVertical: 36,
+    paddingHorizontal: 24,
+    backgroundColor: '#fbfaf8',
+    borderWidth: 1,
+    borderColor: '#f0ede8',
+    alignItems: 'center',
+  },
+  joinCtaDivider: {
+    width: 40,
+    height: 1,
+    backgroundColor: '#a07850',
+    marginBottom: 20,
+  },
+  joinCtaHeader: {
+    fontFamily: 'serif',
+    fontSize: 22,
+    fontWeight: '300',
     color: '#1c1a18',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  joinCtaSubline: {
+    fontFamily: 'System',
+    fontSize: 12,
+    color: '#60646c',
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 280,
+    marginBottom: 24,
+  },
+  joinCtaBtn: {
+    backgroundColor: '#1c1a18',
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 2,
+  },
+  joinCtaBtnText: {
+    fontFamily: 'System',
+    fontSize: 11,
+    fontWeight: '700',
     letterSpacing: 2,
+    color: '#ffffff',
   },
 });
