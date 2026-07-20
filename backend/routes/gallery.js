@@ -2985,10 +2985,15 @@ module.exports = async function galleryRoutes(fastify, opts) {
         // 1. Primary Source of Truth: DB field `event.stage`
         let stage = event.stage;
 
-        // 2. Temporary Migration Fallback (only executed if event.stage is null/undefined)
+        // 2. Highlights check: HIGHLIGHTS stage is ONLY valid if at least 1 photo is published in Highlights
+        const hasHighlightsPhotos = highlightsPhotoCount > 0;
+        if (stage === 'HIGHLIGHTS' && !hasHighlightsPhotos) {
+          stage = null;
+        }
+
+        // 3. Temporary Migration Fallback (only executed if event.stage is null/undefined)
         if (!stage) {
-          const hasHighlightsTab = Array.isArray(event.tabs) && event.tabs.some(t => t && t.toLowerCase() === 'highlights');
-          if (event.highlightsReady || event.isHighlights || hasHighlightsTab) {
+          if ((event.highlightsReady || event.isHighlights) && hasHighlightsPhotos) {
             stage = 'HIGHLIGHTS';
           } else if (eventDate > today && !isSameDay) {
             stage = 'UPCOMING';

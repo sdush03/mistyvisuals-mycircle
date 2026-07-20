@@ -267,15 +267,15 @@ export default function HomeScreen() {
   // Lifecycle Stage Resolver:
   // 1. Primary Source of Truth: `ev.stage`
   // 2. Legacy Migration Fallback: executed ONLY if `ev.stage` is null/undefined
-  const resolveCanonicalStage = (ev: any, today: Date): 'UPCOMING' | 'LIVE' | 'READY' | 'HIGHLIGHTS' => {
-    // 1. Primary Source of Truth
-    if (ev.stage) {
-      return ev.stage;
-    }
+  const resolveCanonicalStage = (ev: any, today: Date): 'UPCOMING' | 'LIVE' | 'READY' | 'HIGHLIGHTS' | 'CURATING' => {
+    const hasHighlightsPhotos = (ev.highlightsPhotoCount || 0) > 0;
 
-    // 2. Temporary Migration Fallback (only executed if ev.stage is null/undefined)
-    if (ev.highlightsReady || ev.isHighlights) {
+    // 1. Primary Source of Truth (HIGHLIGHTS requires at least 1 highlight photo)
+    if ((ev.stage === 'HIGHLIGHTS' || ev.highlightsReady || ev.isHighlights) && hasHighlightsPhotos) {
       return 'HIGHLIGHTS';
+    }
+    if (ev.stage && ev.stage !== 'HIGHLIGHTS') {
+      return ev.stage;
     }
 
     const eventDate = new Date(ev.date);
@@ -287,6 +287,9 @@ export default function HomeScreen() {
     if (isToday) {
       return 'LIVE';
     }
+    if (eventDate < today && !isToday && (ev.matchedCount || 0) === 0) {
+      return 'CURATING';
+    }
 
     return 'READY';
   };
@@ -295,9 +298,10 @@ export default function HomeScreen() {
   const getMyCircleStatusCopy = (ev: any, today: Date): string => {
     const eventDate = new Date(ev.date);
     const isToday = isSameDay(eventDate, today);
+    const hasHighlightsPhotos = (ev.highlightsPhotoCount || 0) > 0;
 
-    // 1. HIGHLIGHTS
-    if (ev.stage === 'HIGHLIGHTS' || ev.highlightsReady || ev.isHighlights) {
+    // 1. HIGHLIGHTS (Requires at least 1 published highlight photo)
+    if ((ev.stage === 'HIGHLIGHTS' || ev.highlightsReady || ev.isHighlights) && hasHighlightsPhotos) {
       return 'Highlights are ready to relive';
     }
 

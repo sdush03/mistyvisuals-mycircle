@@ -86,7 +86,8 @@ export default function JoinEventView({ onSuccess }: JoinEventViewProps) {
       eventDate.getMonth() === today.getMonth() &&
       eventDate.getDate() === today.getDate();
 
-    if (ev.stage === 'HIGHLIGHTS' || ev.highlightsReady || ev.isHighlights) {
+    const hasHighlightsPhotos = (ev.highlightsPhotoCount || 0) > 0;
+    if ((ev.stage === 'HIGHLIGHTS' || ev.highlightsReady || ev.isHighlights) && hasHighlightsPhotos) {
       return 'Highlights ready';
     }
 
