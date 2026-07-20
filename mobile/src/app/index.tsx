@@ -726,7 +726,10 @@ export default function HomeScreen() {
                         <Text style={styles.myCircleCardLocation}>{locationText}</Text>
                       ) : null}
                       <Text style={styles.myCircleCardTitle}>{ev.title}</Text>
-                      <Text style={styles.myCircleCardStatus}>{statusMsg}</Text>
+                      <View style={styles.myCircleCardFooterRow}>
+                        <Text style={styles.myCircleCardStatus} numberOfLines={1}>{statusMsg}</Text>
+                        <Text style={styles.myCircleCardCta}>View Gallery →</Text>
+                      </View>
                     </View>
                   </Pressable>
                 );
@@ -1265,11 +1268,26 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     lineHeight: 25,
   },
+  myCircleCardFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
   myCircleCardStatus: {
     fontFamily: 'System',
     fontSize: 11,
     color: '#e5dfd5',
     letterSpacing: 0.3,
+    flex: 1,
+    marginRight: 12,
+  },
+  myCircleCardCta: {
+    fontFamily: 'System',
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    color: '#ffffff',
   },
   featuredCard: {
     width: width * 0.7,
