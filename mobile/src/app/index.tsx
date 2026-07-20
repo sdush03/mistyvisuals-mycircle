@@ -312,6 +312,13 @@ export default function HomeScreen() {
     return 'READY';
   };
 
+  // Calendar days difference helper (midnight-to-midnight)
+  const getCalendarDaysDifference = (targetDate: Date, currentDate: Date): number => {
+    const d1 = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+    const d2 = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+    return Math.round((d1.getTime() - d2.getTime()) / 86400000);
+  };
+
   // Helper for My Circle card status subtext (Editorial Lifecycle Presentation)
   const getMyCircleStatusCopy = (ev: any, today: Date): string => {
     const eventDate = new Date(ev.date);
@@ -325,7 +332,7 @@ export default function HomeScreen() {
 
     // 2. UPCOMING
     if (ev.stage === 'UPCOMING' || (eventDate > today && !isToday)) {
-      const days = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const days = getCalendarDaysDifference(eventDate, today);
       if (days <= 1) {
         return 'Wedding tomorrow';
       }

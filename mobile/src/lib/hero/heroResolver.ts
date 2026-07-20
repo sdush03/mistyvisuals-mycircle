@@ -55,6 +55,13 @@ const isSameDay = (d1: Date, d2: Date) =>
   d1.getMonth() === d2.getMonth() &&
   d1.getDate() === d2.getDate();
 
+// Calendar days difference helper (midnight-to-midnight)
+const getCalendarDaysDifference = (targetDate: Date, currentDate: Date): number => {
+  const d1 = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+  const d2 = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+  return Math.round((d1.getTime() - d2.getTime()) / 86400000);
+};
+
 /**
  * Primary Home Hero Resolver
  */
@@ -93,7 +100,7 @@ function evaluateTier1(params: HeroResolverParams): HeroCard | null {
   for (const ev of evts) {
     const eventDate = new Date(ev.date || Date.now());
     if (ev.stage === 'UPCOMING' || (eventDate > now && !isSameDay(eventDate, now))) {
-      const days = Math.ceil((eventDate.getTime() - now.getTime()) / 86400000);
+      const days = getCalendarDaysDifference(eventDate, now);
       if (days === 1) {
         return {
           type: HeroType.TOMORROW,
@@ -110,7 +117,7 @@ function evaluateTier1(params: HeroResolverParams): HeroCard | null {
   for (const ev of evts) {
     const eventDate = new Date(ev.date || Date.now());
     if (ev.stage === 'UPCOMING' || (eventDate > now && !isSameDay(eventDate, now))) {
-      const days = Math.ceil((eventDate.getTime() - now.getTime()) / 86400000);
+      const days = getCalendarDaysDifference(eventDate, now);
       if (days > 1 && days <= 7) {
         return {
           type: HeroType.UPCOMING,
@@ -288,7 +295,7 @@ function evalUpcomingLong(params: HeroResolverParams): HeroCard | null {
   for (const ev of evts) {
     const eventDate = new Date(ev.date || Date.now());
     if (ev.stage === 'UPCOMING' || (eventDate > now && !isSameDay(eventDate, now))) {
-      const days = Math.ceil((eventDate.getTime() - now.getTime()) / 86400000);
+      const days = getCalendarDaysDifference(eventDate, now);
       if (days > 7) {
         return {
           type: HeroType.UPCOMING,

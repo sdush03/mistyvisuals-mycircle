@@ -92,7 +92,9 @@ export default function JoinEventView({ onSuccess }: JoinEventViewProps) {
     }
 
     if (ev.stage === 'UPCOMING' || (eventDate > today && !isToday)) {
-      const days = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const d1 = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+      const d2 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const days = Math.round((d1.getTime() - d2.getTime()) / 86400000);
       if (days <= 1) return 'Wedding tomorrow';
       return `In ${days} days`;
     }
