@@ -198,8 +198,8 @@ interface CustomTabBarProps {
 }
 
 function CustomFloatingTabBar({ activeTab, isCollapsed, bottomInset, profile, onOpenProfile }: CustomTabBarProps) {
-  const targetWidth = isCollapsed ? 160 : 255;
-  const widthVal = useSharedValue(255);
+  const targetWidth = isCollapsed ? 150 : 285;
+  const widthVal = useSharedValue(285);
 
   useEffect(() => {
     widthVal.value = withSpring(targetWidth, {
@@ -352,9 +352,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     borderRadius: 20,
-    gap: 6,
+    gap: 5,
   },
   tabButtonActive: {
     backgroundColor: 'rgba(0, 0, 0, 0.05)',
