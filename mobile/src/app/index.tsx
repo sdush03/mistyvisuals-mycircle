@@ -519,20 +519,29 @@ export default function HomeScreen() {
       <StatusBar barStyle="dark-content" />
       
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* ── 1. Single Intelligent Hero Card ─────────────────────────────── */}
+        {/* ── 1. Single Intelligent Hero Card (Concept 2: Minimalist Architectural Gallery) ── */}
         {singleHeroCard && (
           <Pressable
             style={styles.heroSection}
             onPress={() => handleHeroPress(singleHeroCard)}
             disabled={!singleHeroCard.eventSlug}
           >
-            <View style={styles.heroCardContentContainer}>
-              <Text style={styles.heroIcon}>{singleHeroCard.icon}</Text>
-              <Text style={styles.greetingText}>{singleHeroCard.headline}</Text>
-              <Text style={styles.subtitleText}>{singleHeroCard.subtitle}</Text>
-              {singleHeroCard.cta ? (
-                <Text style={styles.heroCta}>{singleHeroCard.cta}</Text>
-              ) : null}
+            <View style={styles.heroContentRow}>
+              <View style={styles.heroGoldLine} />
+              <View style={styles.heroTextContainer}>
+                <View style={styles.heroBadge}>
+                  <Text style={styles.heroBadgeText}>
+                    {singleHeroCard.type === 'NEW_MATCHES' ? 'AI DISCOVERY' : 'FEATURED'}
+                  </Text>
+                </View>
+                <Text style={styles.greetingText}>{singleHeroCard.headline}</Text>
+                <Text style={styles.subtitleText}>{singleHeroCard.subtitle}</Text>
+                {singleHeroCard.cta ? (
+                  <View style={styles.heroCtaButton}>
+                    <Text style={styles.heroCtaText}>{singleHeroCard.cta}</Text>
+                  </View>
+                ) : null}
+              </View>
             </View>
           </Pressable>
         )}
@@ -931,40 +940,79 @@ const styles = StyleSheet.create({
     paddingBottom: 100, // Space for bottom custom navigation tab
   },
   heroSection: {
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: 26,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0ede8',
-    backgroundColor: '#fbfaf8',
-  },
-  heroCardContentContainer: {
-    width: '100%',
-  },
-  heroIcon: {
-    fontSize: 26,
+    marginHorizontal: 20,
+    marginTop: 18,
     marginBottom: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(197, 160, 89, 0.22)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  heroContentRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  heroGoldLine: {
+    width: 2,
+    backgroundColor: '#C5A059',
+    borderRadius: 2,
+    marginRight: 16,
+  },
+  heroTextContainer: {
+    flex: 1,
+  },
+  heroBadge: {
+    backgroundColor: 'rgba(197, 160, 89, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(197, 160, 89, 0.3)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 100,
+    alignSelf: 'flex-start',
+    marginBottom: 10,
+  },
+  heroBadgeText: {
+    fontFamily: 'System',
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#9E7A32',
+    letterSpacing: 1.5,
   },
   greetingText: {
-    fontFamily: 'System',
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1c1a18',
-    marginBottom: 6,
-    letterSpacing: -0.3,
+    fontFamily: 'serif',
+    fontSize: 21,
+    fontWeight: '600',
+    color: '#1c1917',
+    lineHeight: 28,
+    letterSpacing: -0.2,
+    marginBottom: 4,
   },
   subtitleText: {
-    fontFamily: 'serif',
+    fontFamily: 'System',
     fontSize: 13,
-    lineHeight: 20,
-    color: '#60646c',
+    lineHeight: 19,
+    color: '#605856',
   },
-  heroCta: {
-    marginTop: 12,
+  heroCtaButton: {
+    marginTop: 16,
+    backgroundColor: '#1c1917',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 100,
+    alignSelf: 'flex-start',
+  },
+  heroCtaText: {
     fontFamily: 'System',
     fontSize: 12,
     fontWeight: '600',
-    color: '#a07850',
+    color: '#DFB76C',
     letterSpacing: 0.4,
   },
   section: {
