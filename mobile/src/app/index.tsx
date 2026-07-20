@@ -694,7 +694,7 @@ export default function HomeScreen() {
               horizontal 
               showsHorizontalScrollIndicator={false} 
               contentContainerStyle={styles.horizontalScroll}
-              snapToInterval={width * 0.82 + 16}
+              snapToInterval={width * 0.85 + 16}
               decelerationRate="fast"
             >
               {events.map((ev) => {
@@ -1217,8 +1217,8 @@ const styles = StyleSheet.create({
     color: '#8c867e',
   },
   myCircleCard: {
-    width: width * 0.82,
-    height: 380,
+    width: width * 0.85,
+    aspectRatio: 3 / 2,
     marginRight: 16,
     backgroundColor: '#1c1a18',
     position: 'relative',
@@ -1242,30 +1242,30 @@ const styles = StyleSheet.create({
   },
   myCircleCardContent: {
     position: 'absolute',
-    bottom: 24,
-    left: 20,
-    right: 20,
+    bottom: 18,
+    left: 18,
+    right: 18,
   },
   myCircleCardLocation: {
     fontFamily: 'System',
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '700',
     letterSpacing: 2,
     color: '#d0c8be',
-    marginBottom: 6,
+    marginBottom: 4,
     opacity: 0.85,
   },
   myCircleCardTitle: {
     fontFamily: 'serif',
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '300',
     color: '#ffffff',
-    marginBottom: 6,
-    lineHeight: 30,
+    marginBottom: 4,
+    lineHeight: 25,
   },
   myCircleCardStatus: {
     fontFamily: 'System',
-    fontSize: 12,
+    fontSize: 11,
     color: '#e5dfd5',
     letterSpacing: 0.3,
   },
