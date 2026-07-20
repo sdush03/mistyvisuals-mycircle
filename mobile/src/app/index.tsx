@@ -1321,6 +1321,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     color: '#ffffff',
     opacity: 0.9,
+    alignSelf: 'flex-end',
+    textAlign: 'right',
   },
   articlesContainer: {
     paddingHorizontal: 24,
