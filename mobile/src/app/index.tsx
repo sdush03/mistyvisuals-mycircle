@@ -21,6 +21,26 @@ import api from '../services/api';
 
 import { Linking } from 'react-native';
 import YoutubePlayer from 'react-native-youtube-iframe';
+import {
+  HeroType,
+  type HeroCard,
+  HERO_EXPIRY_MS,
+  HERO_TRANSITION,
+  HERO_STORAGE_KEYS,
+  pickWelcomeEditorial,
+  pickLiveMessage,
+  buildWelcomeHeadline,
+  buildFaceMatchHeadlineSingle,
+  buildFaceMatchHeadlineMulti,
+  buildFaceMatchSubtitleSingle,
+  buildFaceMatchSubtitleMulti,
+  HIGHLIGHTS_COPY,
+  ANNIVERSARY_COPY,
+  TOMORROW_COPY,
+  TWO_DAYS_COPY,
+  UPCOMING_COPY,
+  HERO_CTA,
+} from '../lib/hero';
 
 // Sub-components for reading/exploring
 import FeaturedStoryView from '../components/home/FeaturedStoryView';
@@ -55,43 +75,19 @@ export default function HomeScreen() {
   // Used for B+D combined expiry: show 7 days from first discovery OR on new photos
   const [heroSeenData, setHeroSeenData] = useState<Record<string, { lastSeenCount: number; firstSeenAt: number }>>({});
   const [countsLoaded, setCountsLoaded] = useState(false);
-  const HERO_MATCH_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
   // Highlights Hero visibility: { firstShownAt, lastSeenCount } per slug
   // firstShownAt starts the 21-day window; resets when highlightsPhotoCount increases
   const [highlightsHeroData, setHighlightsHeroData] = useState<Record<string, { firstShownAt: number; lastSeenCount: number }>>({});
-  const HERO_HIGHLIGHTS_EXPIRY_MS = 21 * 24 * 60 * 60 * 1000; // 21 days
 
   // Welcome Hero editorial rotation — pick once per session, session-stable via ref
-  const WELCOME_EDITORIALS = [
-    'Discover beautiful celebrations captured by Misty Visuals.',
-    'Every celebration has a story waiting to be explored.',
-    'Explore our latest stories, films and moodboards.',
-    'Relive beautiful moments and discover new ones.',
-    'Love deserves to be remembered beautifully.',
-    'Find inspiration through real celebrations.',
-    'The finest moments are often the simplest.',
-    'Some stories deserve another look.',
-  ];
-  const welcomeEditorialRef = React.useRef<string>(
-    WELCOME_EDITORIALS[Math.floor(Math.random() * WELCOME_EDITORIALS.length)]
-  );
+  const welcomeEditorialRef = React.useRef<string>(pickWelcomeEditorial());
 
-  // Live Hero message stability — keyed by event slug so the same message shows
-  // throughout the entire LIVE period. Only picks a new variant when a different
-  // event goes LIVE (or on next app launch).
-  const LIVE_MESSAGES: Array<(title: string) => { h: string; s: string }> = [
-    (t) => ({ h: `Today, ${t} celebrate their love.`, s: 'Wishing them a lifetime of happiness.' }),
-    (_) => ({ h: "What a beautiful day to celebrate together.", s: 'Celebrating beautiful beginnings.' }),
-    (_) => ({ h: "Here's to love, laughter and a lifetime of memories.", s: 'May every moment become a cherished memory.' }),
-    (_) => ({ h: 'May today be filled with unforgettable moments.', s: 'Celebrating beautiful beginnings.' }),
-  ];
-  // { slug: { h, s } } — persists for the component lifetime
+  // Live Hero message stability — keyed by slug, picks once per LIVE period
   const liveMessageRef = React.useRef<Record<string, { h: string; s: string }>>({});
   const getStableLiveMessage = (slug: string, title: string): { h: string; s: string } => {
     if (!liveMessageRef.current[slug]) {
-      const pick = LIVE_MESSAGES[Math.floor(Math.random() * LIVE_MESSAGES.length)](title);
-      liveMessageRef.current[slug] = pick;
+      liveMessageRef.current[slug] = pickLiveMessage(title);
     }
     return liveMessageRef.current[slug];
   };
@@ -126,8 +122,8 @@ export default function HomeScreen() {
   // Load cached stories, films, heroSeenData & events from AsyncStorage on mount for instant Frame 1 rendering
   useEffect(() => {
     AsyncStorage.multiGet([
-      '@mycircle_hero_seen_data',
-      '@mycircle_highlights_hero_data',
+      HERO_STORAGE_KEYS.FACE_MATCHES,
+      HERO_STORAGE_KEYS.HIGHLIGHTS,
       '@mycircle_user_events_cache',
       '@mycircle_cached_website_stories',
       '@mycircle_cached_website_films',
@@ -293,9 +289,8 @@ export default function HomeScreen() {
   };
 
   // ─── Scalable Hero Priority Engine ──────────────────────────────────────────
-  const singleHeroCard = React.useMemo(() => {
+  const singleHeroCard = React.useMemo((): HeroCard | null => {
     const today = new Date();
-    const now = today.getTime();
     const params = {
       events,
       heroSeenData,
@@ -308,14 +303,14 @@ export default function HomeScreen() {
     const HERO_PRIORITY_EVALUATORS = [
 
       // 1. FACE MATCHES — B+D: show 7 days from discovery, or on new photos
-      ({ events: evts, heroSeenData: seen }: any) => {
-        const now = Date.now();
+      ({ events: evts, heroSeenData: seen }: any): HeroCard | null => {
+        const nowMs = Date.now();
         const eventsWithMatches = evts.filter((e: any) => (e.matchedCount || 0) > 0);
         const visibleEvents = eventsWithMatches.filter((e: any) => {
           const seenEntry = seen[e.slug];
           if (!seenEntry) return true;
           const hasNewPhotos = (e.matchedCount || 0) > seenEntry.lastSeenCount;
-          const withinWindow = (now - seenEntry.firstSeenAt) < HERO_MATCH_EXPIRY_MS;
+          const withinWindow = (nowMs - seenEntry.firstSeenAt) < HERO_EXPIRY_MS.FACE_MATCHES;
           return hasNewPhotos || withinWindow;
         });
         if (visibleEvents.length === 0) return null;
@@ -324,50 +319,44 @@ export default function HomeScreen() {
           const currentCount = ev.matchedCount || 0;
           const seenEntry = seen[ev.slug];
           const prevCount = seenEntry?.lastSeenCount ?? 0;
-          const isNew = seenEntry && currentCount > prevCount;
+          const isNew = !!(seenEntry && currentCount > prevCount);
           const diff = isNew ? currentCount - prevCount : currentCount;
-          // Singular: "a memory" / Plural: "N memories"
-          const countLabel = (n: number, fresh: boolean) =>
-            n === 1
-              ? fresh ? 'a new memory' : 'a memory'
-              : fresh ? `${n} new memories` : `${n} memories`;
           return {
-            type: 'NEW_MATCHES',
-            headline: `We found ${countLabel(diff, !!isNew)} of you.`,
-            subtitle: `From ${ev.title}'s celebration.`,
-            cta: 'View Gallery →',
+            type: HeroType.FACE_MATCHES,
+            headline: buildFaceMatchHeadlineSingle(diff, isNew),
+            subtitle: buildFaceMatchSubtitleSingle(ev.title),
+            cta: HERO_CTA.VIEW_GALLERY,
             eventSlug: ev.slug,
           };
         } else {
           const total = visibleEvents.reduce((s: number, e: any) => s + (e.matchedCount || 0), 0);
           const top = visibleEvents[0];
-          const totalLabel = total === 1 ? 'a memory' : `${total} memories`;
           return {
-            type: 'NEW_MATCHES',
-            headline: `We found ${totalLabel} of you.`,
-            subtitle: `Across ${visibleEvents.length} celebrations.`,
-            cta: 'View Gallery →',
+            type: HeroType.FACE_MATCHES,
+            headline: buildFaceMatchHeadlineMulti(total),
+            subtitle: buildFaceMatchSubtitleMulti(visibleEvents.length),
+            cta: HERO_CTA.VIEW_GALLERY,
             eventSlug: top.slug,
           };
         }
       },
 
-      // 2. NEW HIGHLIGHTS — 21-day visibility window from first discovery, resets on new highlights
-      ({ events: evts, today: now, highlightsHeroData: hlData }: any) => {
+      // 2. NEW HIGHLIGHTS — 21-day visibility window, resets on new highlights
+      ({ events: evts, today: now, highlightsHeroData: hlData }: any): HeroCard | null => {
         const nowMs = Date.now();
         for (const ev of evts) {
           if (resolveCanonicalStage(ev, now) === 'HIGHLIGHTS') {
             const entry = hlData[ev.slug];
-            if (!entry) return null; // Initialised async by useEffect below — skip until ready
+            if (!entry) return null;
             const currentCount = ev.highlightsPhotoCount || 0;
             const hasNewHighlights = currentCount > entry.lastSeenCount;
-            const withinWindow = (nowMs - entry.firstShownAt) < HERO_HIGHLIGHTS_EXPIRY_MS;
-            if (!hasNewHighlights && !withinWindow) return null; // 21-day window expired, no new content
+            const withinWindow = (nowMs - entry.firstShownAt) < HERO_EXPIRY_MS.HIGHLIGHTS;
+            if (!hasNewHighlights && !withinWindow) return null;
             return {
-              type: 'NEW_HIGHLIGHTS',
-              headline: `${ev.title}'s highlights are ready.`,
-              subtitle: 'Relive the most beautiful moments from their celebration.',
-              cta: 'View Highlights →',
+              type: HeroType.HIGHLIGHTS,
+              headline: HIGHLIGHTS_COPY.headline(ev.title),
+              subtitle: HIGHLIGHTS_COPY.subtitle,
+              cta: HERO_CTA.VIEW_HIGHLIGHTS,
               eventSlug: ev.slug,
             };
           }
@@ -375,8 +364,8 @@ export default function HomeScreen() {
         return null;
       },
 
-      // 3. ANNIVERSARY — today, or 14-day countdown
-      ({ events: evts, today: now }: any) => {
+      // 3. ANNIVERSARY — today or within 14-day countdown
+      ({ events: evts, today: now }: any): HeroCard | null => {
         for (const ev of evts) {
           const eventDate = new Date(ev.date);
           if (eventDate < now && !isSameDay(eventDate, now)) {
@@ -392,18 +381,18 @@ export default function HomeScreen() {
               const daysUntil = Math.ceil((nextAnniv.getTime() - now.getTime()) / 86400000);
               if (isToday) {
                 return {
-                  type: 'ANNIVERSARY',
-                  headline: 'One year ago today...',
-                  subtitle: `Relive ${ev.title}'s celebration.`,
-                  cta: 'Relive Gallery →',
+                  type: HeroType.ANNIVERSARY,
+                  headline: ANNIVERSARY_COPY.todayHeadline,
+                  subtitle: ANNIVERSARY_COPY.todaySubtitle(ev.title),
+                  cta: HERO_CTA.RELIVE_GALLERY,
                   eventSlug: ev.slug,
                 };
-              } else if (daysUntil <= 14 && daysUntil > 0) {
+              } else if (daysUntil <= HERO_EXPIRY_MS.ANNIVERSARY / 86400000 && daysUntil > 0) {
                 return {
-                  type: 'ANNIVERSARY',
-                  headline: `${ev.title} celebrate their anniversary in ${daysUntil} ${daysUntil === 1 ? 'day' : 'days'}.`,
-                  subtitle: 'Relive the memories before the big day.',
-                  cta: 'Relive Gallery →',
+                  type: HeroType.ANNIVERSARY,
+                  headline: ANNIVERSARY_COPY.countdownHeadline(ev.title, daysUntil),
+                  subtitle: ANNIVERSARY_COPY.countdownSubtitle,
+                  cta: HERO_CTA.RELIVE_GALLERY,
                   eventSlug: ev.slug,
                 };
               }
@@ -414,12 +403,12 @@ export default function HomeScreen() {
       },
 
       // 4. LIVE CELEBRATION — warm, joyful, no CTA, stable message per slug
-      ({ events: evts, today: now }: any) => {
+      ({ events: evts, today: now }: any): HeroCard | null => {
         for (const ev of evts) {
           if (resolveCanonicalStage(ev, now) === 'LIVE') {
             const pick = getStableLiveMessage(ev.slug, ev.title);
             return {
-              type: 'LIVE',
+              type: HeroType.LIVE,
               headline: pick.h,
               subtitle: pick.s,
               cta: '',
@@ -431,15 +420,15 @@ export default function HomeScreen() {
       },
 
       // 5. WEDDING TOMORROW
-      ({ events: evts, today: now }: any) => {
+      ({ events: evts, today: now }: any): HeroCard | null => {
         for (const ev of evts) {
           if (resolveCanonicalStage(ev, now) === 'UPCOMING') {
             const days = Math.ceil((new Date(ev.date).getTime() - now.getTime()) / 86400000);
             if (days === 1) {
               return {
-                type: 'TOMORROW',
-                headline: 'Tomorrow is the big day.',
-                subtitle: 'We can\'t wait to capture every beautiful moment.',
+                type: HeroType.TOMORROW,
+                headline: TOMORROW_COPY.headline,
+                subtitle: TOMORROW_COPY.subtitle,
                 cta: '',
                 eventSlug: ev.slug,
               };
@@ -450,15 +439,15 @@ export default function HomeScreen() {
       },
 
       // 6. WEDDING IN TWO DAYS
-      ({ events: evts, today: now }: any) => {
+      ({ events: evts, today: now }: any): HeroCard | null => {
         for (const ev of evts) {
           if (resolveCanonicalStage(ev, now) === 'UPCOMING') {
             const days = Math.ceil((new Date(ev.date).getTime() - now.getTime()) / 86400000);
             if (days === 2) {
               return {
-                type: 'TWO_DAYS',
-                headline: 'Just 2 days to go.',
-                subtitle: 'The celebrations begin very soon.',
+                type: HeroType.TWO_DAYS,
+                headline: TWO_DAYS_COPY.headline,
+                subtitle: TWO_DAYS_COPY.subtitle,
                 cta: '',
                 eventSlug: ev.slug,
               };
@@ -469,15 +458,15 @@ export default function HomeScreen() {
       },
 
       // 7. UPCOMING — all other future weddings, no CTA
-      ({ events: evts, today: now }: any) => {
+      ({ events: evts, today: now }: any): HeroCard | null => {
         for (const ev of evts) {
           if (resolveCanonicalStage(ev, now) === 'UPCOMING') {
             const days = Math.ceil((new Date(ev.date).getTime() - now.getTime()) / 86400000);
             if (days > 2) {
               return {
-                type: 'UPCOMING',
-                headline: `${ev.title} celebrate in ${days} days.`,
-                subtitle: 'Looking forward to celebrating together.',
+                type: HeroType.UPCOMING,
+                headline: UPCOMING_COPY.headline(ev.title, days),
+                subtitle: UPCOMING_COPY.subtitle,
                 cta: '',
                 eventSlug: ev.slug,
               };
@@ -488,13 +477,11 @@ export default function HomeScreen() {
       },
 
       // 8. WELCOME — session-stable editorial rotation, time-aware, no CTA
-      ({ profileName, today: now }: any) => {
+      ({ profileName, today: now }: any): HeroCard => {
         const firstName = profileName ? profileName.split(' ')[0] : '';
-        const hrs = now.getHours();
-        const greet = hrs < 12 ? 'Good Morning' : hrs < 17 ? 'Good Afternoon' : 'Good Evening';
         return {
-          type: 'WELCOME',
-          headline: firstName ? `${greet}, ${firstName}.` : `${greet}.`,
+          type: HeroType.WELCOME,
+          headline: buildWelcomeHeadline(firstName, now.getHours()),
           subtitle: welcomeEditorialRef.current,
           cta: '',
           eventSlug: null,
@@ -515,8 +502,8 @@ export default function HomeScreen() {
     if (prevHeroTypeRef.current !== null && prevHeroTypeRef.current !== currentType) {
       // Type changed: fade out → new content renders → fade in
       Animated.sequence([
-        Animated.timing(heroFadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
-        Animated.timing(heroFadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.timing(heroFadeAnim, { toValue: 0, duration: HERO_TRANSITION.FADE_OUT_MS, useNativeDriver: true }),
+        Animated.timing(heroFadeAnim, { toValue: 1, duration: HERO_TRANSITION.FADE_IN_MS, useNativeDriver: true }),
       ]).start();
     }
     prevHeroTypeRef.current = currentType;
@@ -547,7 +534,7 @@ export default function HomeScreen() {
         }
       });
       if (changed) {
-        AsyncStorage.setItem('@mycircle_highlights_hero_data', JSON.stringify(next)).catch(() => {});
+        AsyncStorage.setItem(HERO_STORAGE_KEYS.HIGHLIGHTS, JSON.stringify(next)).catch(() => {});
       }
       return changed ? next : prev;
     });
@@ -569,7 +556,7 @@ export default function HomeScreen() {
         }
       });
       if (changed) {
-        AsyncStorage.setItem('@mycircle_hero_seen_data', JSON.stringify(next)).catch(() => {});
+        AsyncStorage.setItem(HERO_STORAGE_KEYS.FACE_MATCHES, JSON.stringify(next)).catch(() => {});
       }
       return changed ? next : prev;
     });
@@ -588,7 +575,7 @@ export default function HomeScreen() {
               firstSeenAt: prev[card.eventSlug]?.firstSeenAt ?? Date.now(),
             },
           };
-          AsyncStorage.setItem('@mycircle_hero_seen_data', JSON.stringify(next)).catch(() => {});
+          AsyncStorage.setItem(HERO_STORAGE_KEYS.FACE_MATCHES, JSON.stringify(next)).catch(() => {});
           return next;
         });
       }
