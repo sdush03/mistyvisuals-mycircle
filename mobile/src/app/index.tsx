@@ -28,6 +28,7 @@ import {
   HERO_EXPIRY_MS,
   HERO_TRANSITION,
   HERO_STORAGE_KEYS,
+  resolveHomeHero,
   pickWelcomeEditorial,
   pickLiveMessage,
   buildWelcomeHeadline,
@@ -36,6 +37,7 @@ import {
   buildFaceMatchSubtitleSingle,
   buildFaceMatchSubtitleMulti,
   HIGHLIGHTS_COPY,
+  GALLERY_READY_COPY,
   ANNIVERSARY_COPY,
   TOMORROW_COPY,
   TWO_DAYS_COPY,
@@ -82,8 +84,16 @@ export default function HomeScreen() {
   const [countsLoaded, setCountsLoaded] = useState(false);
 
   // Highlights Hero visibility: { firstShownAt, lastSeenCount } per slug
-  // firstShownAt starts the 21-day window; resets when highlightsPhotoCount increases
   const [highlightsHeroData, setHighlightsHeroData] = useState<Record<string, { firstShownAt: number; lastSeenCount: number }>>({});
+
+  // Gallery Ready Hero visibility: { firstShownAt, lastSeenCount } per slug
+  const [galleryReadyHeroData, setGalleryReadyHeroData] = useState<Record<string, { firstShownAt: number; lastSeenCount: number }>>({});
+
+  // Tier 2 Editorial Rotation History: tracks lastShownAt per hero type
+  const [tier2History, setTier2History] = useState<Record<string, { lastShownAt: number }>>({});
+
+  // Session-locked Tier 2 Hero ref — persists selected Tier 2 hero for current app session
+  const sessionTier2HeroRef = React.useRef<HeroCard | null>(null);
 
   // Welcome Hero editorial rotation — pick once per session, session-stable via ref
   const welcomeEditorialRef = React.useRef<string>(pickWelcomeEditorial());
@@ -124,21 +134,29 @@ export default function HomeScreen() {
     return match ? match[1] : null;
   };
 
-  // Load cached stories, films, heroSeenData & events from AsyncStorage on mount for instant Frame 1 rendering
+  // Load cached stories, films, hero data & events from AsyncStorage on mount
   useEffect(() => {
     AsyncStorage.multiGet([
       HERO_STORAGE_KEYS.FACE_MATCHES,
       HERO_STORAGE_KEYS.HIGHLIGHTS,
+      HERO_STORAGE_KEYS.GALLERY_READY,
+      HERO_STORAGE_KEYS.TIER2_HISTORY,
       '@mycircle_user_events_cache',
       '@mycircle_cached_website_stories',
       '@mycircle_cached_website_films',
     ])
-      .then(([seenDataItem, highlightsItem, eventsItem, storiesItem, filmsItem]) => {
+      .then(([seenDataItem, highlightsItem, galleryReadyItem, historyItem, eventsItem, storiesItem, filmsItem]) => {
         if (seenDataItem[1]) {
           try { setHeroSeenData(JSON.parse(seenDataItem[1])); } catch (_) {}
         }
         if (highlightsItem[1]) {
           try { setHighlightsHeroData(JSON.parse(highlightsItem[1])); } catch (_) {}
+        }
+        if (galleryReadyItem[1]) {
+          try { setGalleryReadyHeroData(JSON.parse(galleryReadyItem[1])); } catch (_) {}
+        }
+        if (historyItem[1]) {
+          try { setTier2History(JSON.parse(historyItem[1])); } catch (_) {}
         }
         if (eventsItem[1]) {
           try {
@@ -328,213 +346,34 @@ export default function HomeScreen() {
     return 'Your gallery is ready to explore';
   };
 
-  // ─── Scalable Hero Priority Engine ──────────────────────────────────────────
+  // ─── Scalable Two-Tier Hero Resolver Engine ────────────────────────────────
   const singleHeroCard = React.useMemo((): HeroCard | null => {
-    const today = new Date();
-    const params = {
+    return resolveHomeHero({
       events,
       heroSeenData,
       highlightsHeroData,
+      galleryReadyHeroData,
+      tier2History,
       profileName: profile?.name,
-      today,
-    };
+      today: new Date(),
+      welcomeEditorial: welcomeEditorialRef.current,
+      getStableLiveMessage,
+      sessionTier2Ref: sessionTier2HeroRef,
+    });
+  }, [events, heroSeenData, highlightsHeroData, galleryReadyHeroData, tier2History, profile?.name, loadingEvents]);
 
-    // ── Hero Priority Registry (8 states, highest → lowest) ──────────────────
-    const HERO_PRIORITY_EVALUATORS = [
-
-      // 1. FACE MATCHES — B+D: show 7 days from discovery, or on new photos
-      ({ events: evts, heroSeenData: seen }: any): HeroCard | null => {
-        const nowMs = Date.now();
-        const eventsWithMatches = evts.filter((e: any) => (e.matchedCount || 0) > 0);
-        const visibleEvents = eventsWithMatches.filter((e: any) => {
-          const seenEntry = seen[e.slug];
-          if (!seenEntry) return true;
-          const hasNewPhotos = (e.matchedCount || 0) > seenEntry.lastSeenCount;
-          const withinWindow = (nowMs - seenEntry.firstSeenAt) < HERO_EXPIRY_MS.FACE_MATCHES;
-          return hasNewPhotos || withinWindow;
-        });
-        if (visibleEvents.length === 0) return null;
-        if (visibleEvents.length === 1) {
-          const ev = visibleEvents[0];
-          const currentCount = ev.matchedCount || 0;
-          const seenEntry = seen[ev.slug];
-          const prevCount = seenEntry?.lastSeenCount ?? 0;
-          const isNew = !!(seenEntry && currentCount > prevCount);
-          const diff = isNew ? currentCount - prevCount : currentCount;
-          return {
-            type: HeroType.FACE_MATCHES,
-            headline: buildFaceMatchHeadlineSingle(diff, isNew),
-            subtitle: buildFaceMatchSubtitleSingle(ev.title),
-            cta: HERO_CTA.VIEW_GALLERY,
-            eventSlug: ev.slug,
-          };
-        } else {
-          const total = visibleEvents.reduce((s: number, e: any) => s + (e.matchedCount || 0), 0);
-          const top = visibleEvents[0];
-          return {
-            type: HeroType.FACE_MATCHES,
-            headline: buildFaceMatchHeadlineMulti(total),
-            subtitle: buildFaceMatchSubtitleMulti(visibleEvents.length),
-            cta: HERO_CTA.VIEW_GALLERY,
-            eventSlug: top.slug,
-          };
-        }
-      },
-
-      // 2. NEW HIGHLIGHTS — 21-day visibility window, resets on new highlights
-      ({ events: evts, today: now, highlightsHeroData: hlData }: any): HeroCard | null => {
-        const nowMs = Date.now();
-        for (const ev of evts) {
-          if (resolveCanonicalStage(ev, now) === 'HIGHLIGHTS') {
-            const entry = hlData[ev.slug];
-            if (!entry) return null;
-            const currentCount = ev.highlightsPhotoCount || 0;
-            const hasNewHighlights = currentCount > entry.lastSeenCount;
-            const withinWindow = (nowMs - entry.firstShownAt) < HERO_EXPIRY_MS.HIGHLIGHTS;
-            if (!hasNewHighlights && !withinWindow) return null;
-            return {
-              type: HeroType.HIGHLIGHTS,
-              headline: HIGHLIGHTS_COPY.headline(ev.title),
-              subtitle: HIGHLIGHTS_COPY.subtitle,
-              cta: HERO_CTA.VIEW_HIGHLIGHTS,
-              eventSlug: ev.slug,
-            };
-          }
-        }
-        return null;
-      },
-
-      // 3. ANNIVERSARY — today or within 14-day countdown
-      ({ events: evts, today: now }: any): HeroCard | null => {
-        for (const ev of evts) {
-          const eventDate = new Date(ev.date);
-          if (eventDate < now && !isSameDay(eventDate, now)) {
-            const yr = eventDate.getFullYear();
-            const mo = eventDate.getMonth();
-            const dy = eventDate.getDate();
-            if (yr < now.getFullYear()) {
-              let nextAnniv = new Date(now.getFullYear(), mo, dy);
-              if (nextAnniv < now && !isSameDay(nextAnniv, now)) {
-                nextAnniv = new Date(now.getFullYear() + 1, mo, dy);
-              }
-              const isToday = isSameDay(nextAnniv, now);
-              const daysUntil = Math.ceil((nextAnniv.getTime() - now.getTime()) / 86400000);
-              if (isToday) {
-                return {
-                  type: HeroType.ANNIVERSARY,
-                  headline: ANNIVERSARY_COPY.todayHeadline,
-                  subtitle: ANNIVERSARY_COPY.todaySubtitle(ev.title),
-                  cta: HERO_CTA.RELIVE_GALLERY,
-                  eventSlug: ev.slug,
-                };
-              } else if (daysUntil <= HERO_EXPIRY_MS.ANNIVERSARY / 86400000 && daysUntil > 0) {
-                return {
-                  type: HeroType.ANNIVERSARY,
-                  headline: ANNIVERSARY_COPY.countdownHeadline(ev.title, daysUntil),
-                  subtitle: ANNIVERSARY_COPY.countdownSubtitle,
-                  cta: HERO_CTA.RELIVE_GALLERY,
-                  eventSlug: ev.slug,
-                };
-              }
-            }
-          }
-        }
-        return null;
-      },
-
-      // 4. LIVE CELEBRATION — warm, joyful, no CTA, stable message per slug
-      ({ events: evts, today: now }: any): HeroCard | null => {
-        for (const ev of evts) {
-          if (resolveCanonicalStage(ev, now) === 'LIVE') {
-            const pick = getStableLiveMessage(ev.slug, ev.title);
-            return {
-              type: HeroType.LIVE,
-              headline: pick.h,
-              subtitle: pick.s,
-              cta: '',
-              eventSlug: ev.slug,
-            };
-          }
-        }
-        return null;
-      },
-
-      // 5. WEDDING TOMORROW
-      ({ events: evts, today: now }: any): HeroCard | null => {
-        for (const ev of evts) {
-          if (resolveCanonicalStage(ev, now) === 'UPCOMING') {
-            const days = Math.ceil((new Date(ev.date).getTime() - now.getTime()) / 86400000);
-            if (days === 1) {
-              return {
-                type: HeroType.TOMORROW,
-                headline: TOMORROW_COPY.headline,
-                subtitle: TOMORROW_COPY.subtitle,
-                cta: '',
-                eventSlug: ev.slug,
-              };
-            }
-          }
-        }
-        return null;
-      },
-
-      // 6. WEDDING IN TWO DAYS
-      ({ events: evts, today: now }: any): HeroCard | null => {
-        for (const ev of evts) {
-          if (resolveCanonicalStage(ev, now) === 'UPCOMING') {
-            const days = Math.ceil((new Date(ev.date).getTime() - now.getTime()) / 86400000);
-            if (days === 2) {
-              return {
-                type: HeroType.TWO_DAYS,
-                headline: TWO_DAYS_COPY.headline,
-                subtitle: TWO_DAYS_COPY.subtitle,
-                cta: '',
-                eventSlug: ev.slug,
-              };
-            }
-          }
-        }
-        return null;
-      },
-
-      // 7. UPCOMING — all other future weddings, no CTA
-      ({ events: evts, today: now }: any): HeroCard | null => {
-        for (const ev of evts) {
-          if (resolveCanonicalStage(ev, now) === 'UPCOMING') {
-            const days = Math.ceil((new Date(ev.date).getTime() - now.getTime()) / 86400000);
-            if (days > 2) {
-              return {
-                type: HeroType.UPCOMING,
-                headline: UPCOMING_COPY.headline(ev.title, days),
-                subtitle: UPCOMING_COPY.subtitle,
-                cta: '',
-                eventSlug: ev.slug,
-              };
-            }
-          }
-        }
-        return null;
-      },
-
-      // 8. WELCOME — session-stable editorial rotation, time-aware, no CTA
-      ({ profileName, today: now }: any): HeroCard => {
-        const firstName = profileName ? profileName.split(' ')[0] : '';
-        return {
-          type: HeroType.WELCOME,
-          headline: buildWelcomeHeadline(firstName, now.getHours()),
-          subtitle: welcomeEditorialRef.current,
-          cta: '',
-          eventSlug: null,
-        };
-      },
-    ];
-
-    for (const evaluator of HERO_PRIORITY_EVALUATORS) {
-      const card = evaluator(params);
-      if (card) return card;
-    }
-    return null;
-  }, [events, heroSeenData, highlightsHeroData, profile?.name, loadingEvents]);
+  // Track lastShownAt timestamp for selected Tier 2 hero
+  useEffect(() => {
+    if (!singleHeroCard) return;
+    const type = singleHeroCard.type;
+    setTier2History((prev) => {
+      const lastShown = prev[type]?.lastShownAt || 0;
+      if (Date.now() - lastShown < 10000) return prev; // Avoid redundant saves within 10s
+      const next = { ...prev, [type]: { lastShownAt: Date.now() } };
+      AsyncStorage.setItem(HERO_STORAGE_KEYS.TIER2_HISTORY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, [singleHeroCard]);
 
   // Hero fade transition — triggers only when the hero TYPE changes (not on content updates)
   useEffect(() => {
@@ -549,32 +388,29 @@ export default function HomeScreen() {
     prevHeroTypeRef.current = currentType;
   }, [singleHeroCard?.type]);
 
-  // When events arrive: initialise / reset highlightsHeroData for any event in HIGHLIGHTS stage.
-  // - First detection: set firstShownAt=now, lastSeenCount=current (starts 21-day window)
-  // - New highlights added (count increased): reset firstShownAt=now to restart the 21-day window
+  // Initialise / reset galleryReadyHeroData for any event in READY stage or with published gallery photos
   useEffect(() => {
     if (!countsLoaded || events.length === 0) return;
-    const today = new Date();
     const now = Date.now();
-    setHighlightsHeroData(prev => {
+    setGalleryReadyHeroData((prev) => {
       let changed = false;
       const next = { ...prev };
       events.forEach((e: any) => {
-        if (resolveCanonicalStage(e, today) !== 'HIGHLIGHTS') return;
-        const currentCount = e.highlightsPhotoCount || 0;
-        const entry = next[e.slug];
-        if (!entry) {
-          // First time seeing this event in HIGHLIGHTS — start the 21-day window
-          next[e.slug] = { firstShownAt: now, lastSeenCount: currentCount };
-          changed = true;
-        } else if (currentCount > entry.lastSeenCount) {
-          // New highlights published — reset the window to give full 21 more days
-          next[e.slug] = { firstShownAt: now, lastSeenCount: currentCount };
-          changed = true;
+        const photoCount = e.totalPhotoCount || e.matchedCount || 0;
+        if (e.stage === 'READY' || (photoCount > 0 && e.stage !== 'HIGHLIGHTS')) {
+          const entry = next[e.slug];
+          if (!entry) {
+            next[e.slug] = { firstShownAt: now, lastSeenCount: photoCount };
+            changed = true;
+          } else if (photoCount > entry.lastSeenCount) {
+            // New photos published — reset the 21-day window
+            next[e.slug] = { firstShownAt: now, lastSeenCount: photoCount };
+            changed = true;
+          }
         }
       });
       if (changed) {
-        AsyncStorage.setItem(HERO_STORAGE_KEYS.HIGHLIGHTS, JSON.stringify(next)).catch(() => {});
+        AsyncStorage.setItem(HERO_STORAGE_KEYS.GALLERY_READY, JSON.stringify(next)).catch(() => {});
       }
       return changed ? next : prev;
     });

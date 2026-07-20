@@ -2,18 +2,20 @@
  * heroTypes.ts
  *
  * Single source of truth for all Hero type identifiers.
- * Import HeroType (or HeroTypeValue) everywhere a hero type string is needed
- * to avoid scattered literals and typos.
+ * Import HeroType (or HeroTypeValue) everywhere a hero type string is needed.
  */
 
 export const HeroType = {
-  FACE_MATCHES:   'NEW_MATCHES',
-  HIGHLIGHTS:     'NEW_HIGHLIGHTS',
-  ANNIVERSARY:    'ANNIVERSARY',
+  // Tier 1 — Time Sensitive
   LIVE:           'LIVE',
   TOMORROW:       'TOMORROW',
-  TWO_DAYS:       'TWO_DAYS',
   UPCOMING:       'UPCOMING',
+  ANNIVERSARY:    'ANNIVERSARY',
+
+  // Tier 2 — Editorial Rotation
+  FACE_MATCHES:   'NEW_MATCHES',
+  HIGHLIGHTS:     'NEW_HIGHLIGHTS',
+  GALLERY_READY:  'GALLERY_READY',
   WELCOME:        'WELCOME',
 } as const;
 

@@ -2967,6 +2967,15 @@ module.exports = async function galleryRoutes(fastify, opts) {
           req.log.warn(`highlightsPhotoCount failed for event ${event.id}:`, e.message);
         }
 
+        let totalPhotoCount = 0;
+        try {
+          totalPhotoCount = await prisma.photo.count({
+            where: { eventId: event.id }
+          });
+        } catch (e) {
+          req.log.warn(`totalPhotoCount failed for event ${event.id}:`, e.message);
+        }
+
         const eventToken = fastify.jwt.sign({
           guestId: g.id,
           userId: user.id,
@@ -3017,6 +3026,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
           coverPhotoSquareUrl: event.coverPhotoSquareUrl,
           matchedCount,
           highlightsPhotoCount,
+          totalPhotoCount,
           eventToken,
           galleryFacesComplete: event.galleryFacesComplete,
           guestInfo: {
