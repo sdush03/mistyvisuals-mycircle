@@ -288,6 +288,39 @@ export default function HomeScreen() {
     return 'READY';
   };
 
+  // Helper for My Circle card status subtext (Editorial Lifecycle Presentation)
+  const getMyCircleStatusCopy = (ev: any, today: Date): string => {
+    const eventDate = new Date(ev.date);
+    const isToday = isSameDay(eventDate, today);
+
+    // 1. HIGHLIGHTS
+    if (ev.stage === 'HIGHLIGHTS' || ev.highlightsReady || ev.isHighlights) {
+      return 'Highlights are ready to relive';
+    }
+
+    // 2. UPCOMING
+    if (ev.stage === 'UPCOMING' || (eventDate > today && !isToday)) {
+      const days = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (days <= 1) {
+        return 'Wedding tomorrow';
+      }
+      return `Wedding in ${days} days`;
+    }
+
+    // 3. LIVE
+    if (ev.stage === 'LIVE' || isToday) {
+      return 'Celebration is happening today';
+    }
+
+    // 4. CURATING (Begins AFTER wedding day, continues until first gallery is available)
+    if (ev.stage === 'CURATING' || (eventDate < today && !isToday && (ev.matchedCount || 0) === 0 && ev.stage !== 'READY')) {
+      return 'Currently curating your memories';
+    }
+
+    // 5. READY
+    return 'Your gallery is ready to explore';
+  };
+
   // ─── Scalable Hero Priority Engine ──────────────────────────────────────────
   const singleHeroCard = React.useMemo((): HeroCard | null => {
     const today = new Date();
@@ -653,34 +686,14 @@ export default function HomeScreen() {
           </Animated.View>
         )}
 
-        {/* ── 2. What's Happening (Only for users with joined celebrations) ── */}
+        {/* ── 2. My Circle (Only for users with joined celebrations) ── */}
         {token && events.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>WHAT'S HAPPENING</Text>
+            <Text style={styles.sectionHeader}>MY CIRCLE</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
               {events.map((ev) => {
                 const today = new Date();
-                const eventDate = new Date(ev.date);
-                const stage = resolveCanonicalStage(ev, today);
-
-                let badgeColor = '#60646c';
-                let statusMsg = `${ev.matchedCount || 0} photo${ev.matchedCount === 1 ? '' : 's'} matched`;
-
-                if (stage === 'UPCOMING') {
-                  const days = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                  badgeColor = '#8c867e';
-                  statusMsg = `Wedding in ${days} day${days === 1 ? '' : 's'}`;
-                } else if (stage === 'LIVE') {
-                  badgeColor = '#a07850';
-                  statusMsg = 'Happening today! 🎊';
-                } else if (stage === 'HIGHLIGHTS') {
-                  badgeColor = '#a07850';
-                  statusMsg = 'Curated highlights ready';
-                } else {
-                  // READY
-                  badgeColor = '#60646c';
-                  statusMsg = `${ev.matchedCount || 0} photo${ev.matchedCount === 1 ? '' : 's'} matched`;
-                }
+                const statusMsg = getMyCircleStatusCopy(ev, today);
 
                 return (
                   <Pressable 
@@ -696,9 +709,6 @@ export default function HomeScreen() {
                           <Text style={{ fontSize: 24 }}>✨</Text>
                         </View>
                       )}
-                      <View style={[styles.badge, { backgroundColor: badgeColor }]}>
-                        <Text style={styles.badgeText}>{stage}</Text>
-                      </View>
                     </View>
                     <View style={styles.cardInfo}>
                       <Text style={styles.cardTitle} numberOfLines={1}>{ev.title}</Text>

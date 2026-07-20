@@ -2994,8 +2994,10 @@ module.exports = async function galleryRoutes(fastify, opts) {
             stage = 'UPCOMING';
           } else if (isSameDay) {
             stage = 'LIVE';
-          } else {
+          } else if (matchedCount > 0) {
             stage = 'READY';
+          } else {
+            stage = 'CURATING';
           }
         }
 
