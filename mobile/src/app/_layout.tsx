@@ -103,33 +103,13 @@ function RootLayoutContent() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
-        {/* Global Header — Logo Left, Profile Avatar Right (Matching Desktop) */}
+        {/* Global Header — Centered Logo */}
         <View style={[styles.globalHeader, { height: headerHeight, paddingTop: topInset }]}>
           <Image
             source={require('@/assets/images/logo-black.png')}
             style={styles.headerLogo}
             resizeMode="contain"
           />
-
-          {token && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.profileHeaderBtn,
-                pressed && { opacity: 0.7 },
-              ]}
-              onPress={() => setShowProfileModal(true)}
-            >
-              {profile?.selfieUrl ? (
-                <Image source={{ uri: profile.selfieUrl }} style={styles.avatarImage} />
-              ) : (
-                <View style={styles.avatarCircle}>
-                  <Text style={styles.avatarText}>
-                    {profile?.name ? profile.name.charAt(0).toUpperCase() : 'U'}
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          )}
         </View>
 
         <Tabs
@@ -142,11 +122,13 @@ function RootLayoutContent() {
           <Tabs.Screen name="mycircle" />
         </Tabs>
 
-        {/* Custom Animated Floating Tab Bar */}
+        {/* Custom Animated Floating Tab Bar (Instagram 3-Tab Style) */}
         <CustomFloatingTabBar
           activeTab={currentTab}
           isCollapsed={isCollapsed}
           bottomInset={insets.bottom}
+          profile={profile}
+          onOpenProfile={() => setShowProfileModal(true)}
         />
 
         {/* ── App-level Login Overlay ── */}
@@ -208,14 +190,16 @@ function RootLayoutContent() {
 }
 
 interface CustomTabBarProps {
-  activeTab: 'index' | 'mycircle';
+  activeTab: 'index' | 'mycircle' | 'profile';
   isCollapsed: boolean;
   bottomInset: number;
+  profile: any;
+  onOpenProfile: () => void;
 }
 
-function CustomFloatingTabBar({ activeTab, isCollapsed, bottomInset }: CustomTabBarProps) {
-  const targetWidth = isCollapsed ? 120 : 190;
-  const widthVal = useSharedValue(190);
+function CustomFloatingTabBar({ activeTab, isCollapsed, bottomInset, profile, onOpenProfile }: CustomTabBarProps) {
+  const targetWidth = isCollapsed ? 160 : 255;
+  const widthVal = useSharedValue(255);
 
   useEffect(() => {
     widthVal.value = withSpring(targetWidth, {
@@ -229,11 +213,13 @@ function CustomFloatingTabBar({ activeTab, isCollapsed, bottomInset }: CustomTab
     width: widthVal.value,
   }));
 
-  const handleTabPress = (tabName: 'index' | 'mycircle') => {
+  const handleTabPress = (tabName: 'index' | 'mycircle' | 'profile') => {
     if (tabName === 'index') {
       router.replace('/');
-    } else {
+    } else if (tabName === 'mycircle') {
       router.replace('/mycircle');
+    } else if (tabName === 'profile') {
+      onOpenProfile();
     }
   };
 
@@ -287,6 +273,43 @@ function CustomFloatingTabBar({ activeTab, isCollapsed, bottomInset }: CustomTab
             ]}
           >
             Circle
+          </Text>
+        )}
+      </Pressable>
+
+      {/* Profile Tab Button (Instagram Style) */}
+      <Pressable
+        style={[styles.tabButton, activeTab === 'profile' && styles.tabButtonActive]}
+        onPress={() => handleTabPress('profile')}
+      >
+        {profile?.selfieUrl ? (
+          <Image
+            source={{ uri: profile.selfieUrl }}
+            style={[
+              styles.tabAvatarImage,
+              activeTab === 'profile' && styles.tabAvatarImageActive,
+            ]}
+          />
+        ) : (
+          <View
+            style={[
+              styles.tabAvatarCircle,
+              activeTab === 'profile' && styles.tabAvatarCircleActive,
+            ]}
+          >
+            <Text style={styles.tabAvatarText}>
+              {profile?.name ? profile.name.charAt(0).toUpperCase() : 'U'}
+            </Text>
+          </View>
+        )}
+        {!isCollapsed && (
+          <Text
+            style={[
+              styles.tabLabel,
+              { color: activeTab === 'profile' ? '#000000' : 'rgba(0, 0, 0, 0.4)' },
+            ]}
+          >
+            Profile
           </Text>
         )}
       </Pressable>
@@ -349,17 +372,42 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingLeft: 20,
-    paddingRight: 20,
+    justifyContent: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
   headerLogo: {
     height: 38,
     width: 135,
-    marginLeft: -12,
     tintColor: '#000000',
+  },
+  tabAvatarImage: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  tabAvatarImageActive: {
+    borderColor: '#000000',
+  },
+  tabAvatarCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#111111',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  tabAvatarCircleActive: {
+    borderColor: '#000000',
+  },
+  tabAvatarText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   profileHeaderBtn: {
     justifyContent: 'center',
