@@ -57,6 +57,21 @@ export default function HomeScreen() {
   const [countsLoaded, setCountsLoaded] = useState(false);
   const HERO_MATCH_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+  // Welcome Hero editorial rotation — pick once per session, session-stable via ref
+  const WELCOME_EDITORIALS = [
+    'Discover beautiful celebrations captured by Misty Visuals.',
+    'Every celebration has a story waiting to be explored.',
+    'Explore our latest stories, films and moodboards.',
+    'Relive beautiful moments and discover new ones.',
+    'Love deserves to be remembered beautifully.',
+    'Find inspiration through real celebrations.',
+    'The finest moments are often the simplest.',
+    'Some stories deserve another look.',
+  ];
+  const welcomeEditorialRef = React.useRef<string>(
+    WELCOME_EDITORIALS[Math.floor(Math.random() * WELCOME_EDITORIALS.length)]
+  );
+
   // Load liked photos from storage
   useEffect(() => {
     AsyncStorage.getItem('@mycircle_liked_photos')
@@ -256,25 +271,21 @@ export default function HomeScreen() {
       today,
     };
 
-    // Scalable Priority Registry (evaluated top-down in array order)
+    // ── Hero Priority Registry (8 states, highest → lowest) ──────────────────
     const HERO_PRIORITY_EVALUATORS = [
-      // 1. NEW_MATCHES / MATCHES_FOUND — B+D combined expiry:
-      //    Show if (new photos since last view) OR (within 7 days of first discovery)
+
+      // 1. FACE MATCHES — B+D: show 7 days from discovery, or on new photos
       ({ events: evts, heroSeenData: seen }: any) => {
         const now = Date.now();
         const eventsWithMatches = evts.filter((e: any) => (e.matchedCount || 0) > 0);
-        // Filter to only events that still pass the B+D gate
         const visibleEvents = eventsWithMatches.filter((e: any) => {
-          const currentCount = e.matchedCount || 0;
           const seenEntry = seen[e.slug];
-          if (!seenEntry) return true; // Never seen → always show (starts 7-day window)
-          const hasNewPhotos = currentCount > seenEntry.lastSeenCount;
+          if (!seenEntry) return true;
+          const hasNewPhotos = (e.matchedCount || 0) > seenEntry.lastSeenCount;
           const withinWindow = (now - seenEntry.firstSeenAt) < HERO_MATCH_EXPIRY_MS;
           return hasNewPhotos || withinWindow;
         });
-
         if (visibleEvents.length === 0) return null;
-
         if (visibleEvents.length === 1) {
           const ev = visibleEvents[0];
           const currentCount = ev.matchedCount || 0;
@@ -282,42 +293,36 @@ export default function HomeScreen() {
           const prevCount = seenEntry?.lastSeenCount ?? 0;
           const isNew = seenEntry && currentCount > prevCount;
           const diff = isNew ? currentCount - prevCount : currentCount;
-
           return {
             type: 'NEW_MATCHES',
-            icon: '✨',
             headline: isNew
-              ? `We found ${diff} new memo${diff === 1 ? 'ry' : 'ries'} of you.`
-              : `We found ${currentCount} memo${currentCount === 1 ? 'ry' : 'ries'} of you.`,
-            subtitle: `${ev.title} · Your private gallery is ready`,
+              ? `We found ${diff} new ${diff === 1 ? 'memory' : 'memories'} of you.`
+              : `We found ${currentCount} ${currentCount === 1 ? 'memory' : 'memories'} of you.`,
+            subtitle: `From ${ev.title}'s celebration.`,
             cta: 'View Gallery →',
             eventSlug: ev.slug,
           };
         } else {
-          const totalMatches = visibleEvents.reduce((sum: number, e: any) => sum + (e.matchedCount || 0), 0);
-          const topEvent = visibleEvents[0];
-
+          const total = visibleEvents.reduce((s: number, e: any) => s + (e.matchedCount || 0), 0);
+          const top = visibleEvents[0];
           return {
             type: 'NEW_MATCHES',
-            icon: '✨',
-            headline: `We found ${totalMatches} memories of you across ${visibleEvents.length} celebrations.`,
-            subtitle: `Latest: ${topEvent.title}`,
+            headline: `We found ${total} ${total === 1 ? 'memory' : 'memories'} of you.`,
+            subtitle: `Across ${visibleEvents.length} celebrations, including ${top.title}.`,
             cta: 'View Gallery →',
-            eventSlug: topEvent.slug,
+            eventSlug: top.slug,
           };
         }
       },
 
-      // 2. NEW_HIGHLIGHTS
+      // 2. NEW HIGHLIGHTS — stage-driven
       ({ events: evts, today: now }: any) => {
         for (const ev of evts) {
-          const stage = resolveCanonicalStage(ev, now);
-          if (stage === 'HIGHLIGHTS') {
+          if (resolveCanonicalStage(ev, now) === 'HIGHLIGHTS') {
             return {
               type: 'NEW_HIGHLIGHTS',
-              icon: '✨',
-              headline: `Highlights from ${ev.title} are now available.`,
-              subtitle: 'View curated highlights & top moments',
+              headline: `${ev.title}'s highlights are ready.`,
+              subtitle: 'Relive the most beautiful moments from their celebration.',
               cta: 'View Highlights →',
               eventSlug: ev.slug,
             };
@@ -326,39 +331,34 @@ export default function HomeScreen() {
         return null;
       },
 
-      // 3. ANNIVERSARY
+      // 3. ANNIVERSARY — today, or 14-day countdown
       ({ events: evts, today: now }: any) => {
         for (const ev of evts) {
           const eventDate = new Date(ev.date);
           if (eventDate < now && !isSameDay(eventDate, now)) {
-            const weddingYear = eventDate.getFullYear();
-            const weddingMonth = eventDate.getMonth();
-            const weddingDay = eventDate.getDate();
-
-            if (weddingYear < now.getFullYear()) {
-              let nextAnniv = new Date(now.getFullYear(), weddingMonth, weddingDay);
+            const yr = eventDate.getFullYear();
+            const mo = eventDate.getMonth();
+            const dy = eventDate.getDate();
+            if (yr < now.getFullYear()) {
+              let nextAnniv = new Date(now.getFullYear(), mo, dy);
               if (nextAnniv < now && !isSameDay(nextAnniv, now)) {
-                nextAnniv = new Date(now.getFullYear() + 1, weddingMonth, weddingDay);
+                nextAnniv = new Date(now.getFullYear() + 1, mo, dy);
               }
-
-              const isAnnivToday = isSameDay(nextAnniv, now);
-              const daysUntil = Math.ceil((nextAnniv.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-              if (isAnnivToday) {
+              const isToday = isSameDay(nextAnniv, now);
+              const daysUntil = Math.ceil((nextAnniv.getTime() - now.getTime()) / 86400000);
+              if (isToday) {
                 return {
                   type: 'ANNIVERSARY',
-                  icon: '❤️',
                   headline: 'One year ago today...',
-                  subtitle: `Relive ${ev.title}'s celebration`,
+                  subtitle: `Relive ${ev.title}'s celebration.`,
                   cta: 'Relive Gallery →',
                   eventSlug: ev.slug,
                 };
               } else if (daysUntil <= 14 && daysUntil > 0) {
                 return {
                   type: 'ANNIVERSARY',
-                  icon: '❤️',
-                  headline: `${ev.title}'s anniversary in ${daysUntil} day${daysUntil === 1 ? '' : 's'}`,
-                  subtitle: `Relive ${ev.title}'s celebration`,
+                  headline: `${ev.title} celebrate their anniversary in ${daysUntil} ${daysUntil === 1 ? 'day' : 'days'}.`,
+                  subtitle: 'Relive the memories before the big day.',
                   cta: 'Relive Gallery →',
                   eventSlug: ev.slug,
                 };
@@ -369,37 +369,22 @@ export default function HomeScreen() {
         return null;
       },
 
-      // 4. UPCOMING
+      // 4. LIVE CELEBRATION — warm, joyful, no CTA
       ({ events: evts, today: now }: any) => {
+        const liveMessages = [
+          (title: string) => ({ h: `Today, ${title} celebrate their love.`, s: 'Wishing them a lifetime of happiness.' }),
+          (_: string) => ({ h: 'What a beautiful day to celebrate together.', s: 'Celebrating beautiful beginnings.' }),
+          (_: string) => ({ h: 'Here\'s to love, laughter and a lifetime of memories.', s: 'May every moment become a cherished memory.' }),
+          (_: string) => ({ h: 'May today be filled with unforgettable moments.', s: 'Celebrating beautiful beginnings.' }),
+        ];
         for (const ev of evts) {
-          const stage = resolveCanonicalStage(ev, now);
-          if (stage === 'UPCOMING') {
-            const eventDate = new Date(ev.date);
-            const days = Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-            return {
-              type: 'UPCOMING',
-              icon: '📅',
-              headline: `${ev.title} celebrate in ${days} day${days === 1 ? '' : 's'}.`,
-              subtitle: 'See venue, schedule & updates',
-              cta: 'View Event →',
-              eventSlug: ev.slug,
-            };
-          }
-        }
-        return null;
-      },
-
-      // 5. LIVE
-      ({ events: evts, today: now }: any) => {
-        for (const ev of evts) {
-          const stage = resolveCanonicalStage(ev, now);
-          if (stage === 'LIVE') {
+          if (resolveCanonicalStage(ev, now) === 'LIVE') {
+            const pick = liveMessages[Math.floor(Math.random() * liveMessages.length)](ev.title);
             return {
               type: 'LIVE',
-              icon: '🎉',
-              headline: `Today is ${ev.title}'s wedding day!`,
-              subtitle: 'Celebration is live · Access updates & shared photos',
-              cta: 'Open Celebration →',
+              headline: pick.h,
+              subtitle: pick.s,
+              cta: '',
               eventSlug: ev.slug,
             };
           }
@@ -407,16 +392,72 @@ export default function HomeScreen() {
         return null;
       },
 
-      // 6. WELCOME (Fallback)
+      // 5. WEDDING TOMORROW
+      ({ events: evts, today: now }: any) => {
+        for (const ev of evts) {
+          if (resolveCanonicalStage(ev, now) === 'UPCOMING') {
+            const days = Math.ceil((new Date(ev.date).getTime() - now.getTime()) / 86400000);
+            if (days === 1) {
+              return {
+                type: 'TOMORROW',
+                headline: 'Tomorrow is the big day.',
+                subtitle: 'We can\'t wait to capture every beautiful moment.',
+                cta: '',
+                eventSlug: ev.slug,
+              };
+            }
+          }
+        }
+        return null;
+      },
+
+      // 6. WEDDING IN TWO DAYS
+      ({ events: evts, today: now }: any) => {
+        for (const ev of evts) {
+          if (resolveCanonicalStage(ev, now) === 'UPCOMING') {
+            const days = Math.ceil((new Date(ev.date).getTime() - now.getTime()) / 86400000);
+            if (days === 2) {
+              return {
+                type: 'TWO_DAYS',
+                headline: 'Just 2 days to go.',
+                subtitle: 'The celebrations begin very soon.',
+                cta: '',
+                eventSlug: ev.slug,
+              };
+            }
+          }
+        }
+        return null;
+      },
+
+      // 7. UPCOMING — all other future weddings, no CTA
+      ({ events: evts, today: now }: any) => {
+        for (const ev of evts) {
+          if (resolveCanonicalStage(ev, now) === 'UPCOMING') {
+            const days = Math.ceil((new Date(ev.date).getTime() - now.getTime()) / 86400000);
+            if (days > 2) {
+              return {
+                type: 'UPCOMING',
+                headline: `${ev.title} celebrate in ${days} days.`,
+                subtitle: 'Looking forward to celebrating together.',
+                cta: '',
+                eventSlug: ev.slug,
+              };
+            }
+          }
+        }
+        return null;
+      },
+
+      // 8. WELCOME — session-stable editorial rotation, time-aware, no CTA
       ({ profileName, today: now }: any) => {
         const firstName = profileName ? profileName.split(' ')[0] : '';
         const hrs = now.getHours();
         const greet = hrs < 12 ? 'Good Morning' : hrs < 17 ? 'Good Afternoon' : 'Good Evening';
         return {
           type: 'WELCOME',
-          icon: '👋',
-          headline: firstName ? `Welcome back, ${firstName}` : 'Welcome to My Circle',
-          subtitle: 'Every celebration. Every memory. One place.',
+          headline: firstName ? `${greet}, ${firstName}.` : `${greet}.`,
+          subtitle: welcomeEditorialRef.current,
           cta: '',
           eventSlug: null,
         };
@@ -519,26 +560,21 @@ export default function HomeScreen() {
       <StatusBar barStyle="dark-content" />
       
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* ── 1. Single Intelligent Hero (Minimalist Architectural Layout - Unboxed) ── */}
+        {/* ── 1. Hero Card (Minimalist Architectural — Editorial Copy) ── */}
         {singleHeroCard && (
           <Pressable
             style={styles.heroSection}
             onPress={() => handleHeroPress(singleHeroCard)}
-            disabled={!singleHeroCard.eventSlug}
+            disabled={!singleHeroCard.eventSlug || !singleHeroCard.cta}
           >
             <View style={styles.heroContentRow}>
               <View style={styles.heroGoldLine} />
               <View style={styles.heroTextContainer}>
-                <Text style={styles.greetingText}>
-                  Welcome back,{'\n'}
-                  {profile?.name || 'Guest'}
-                </Text>
-
-                <Text style={styles.subtitleText}>{singleHeroCard.headline}</Text>
-
+                <Text style={styles.greetingText}>{singleHeroCard.headline}</Text>
+                <Text style={styles.subtitleText}>{singleHeroCard.subtitle}</Text>
                 {singleHeroCard.cta ? (
                   <View style={styles.heroCtaButton}>
-                    <Text style={styles.heroCtaText}>View Memories →</Text>
+                    <Text style={styles.heroCtaText}>{singleHeroCard.cta}</Text>
                   </View>
                 ) : null}
               </View>
