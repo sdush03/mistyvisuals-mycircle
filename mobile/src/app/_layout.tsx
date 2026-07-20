@@ -350,8 +350,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingLeft: 12,
-    paddingRight: 16,
+    paddingLeft: 20,
+    paddingRight: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
@@ -361,7 +361,6 @@ const styles = StyleSheet.create({
     tintColor: '#000000',
   },
   profileHeaderBtn: {
-    padding: 4,
     justifyContent: 'center',
     alignItems: 'center',
   },
