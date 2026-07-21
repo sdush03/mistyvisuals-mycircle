@@ -78,7 +78,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const profile = profileStr ? JSON.parse(profileStr) : null;
       set({ token, profile, isLoading: false });
     } catch (e) {
-      console.error('Error loading stored auth state', e);
+      // SecureStore may fail on simulator builds without keychain entitlements — this is expected.
+      console.warn('SecureStore unavailable, starting with no stored session:', e);
       set({ isLoading: false });
     }
   },

@@ -50,9 +50,11 @@ function RootLayoutContent() {
     initialize();
   }, []);
 
-  const onLayoutRootView = React.useCallback(async () => {
+  // Hide the native splash screen as soon as auth is resolved.
+  // Using useEffect (not onLayout) so it fires on state changes, not just mount.
+  useEffect(() => {
     if (isReady && !isLoading) {
-      await SplashScreen.hideAsync().catch(() => {});
+      SplashScreen.hideAsync().catch(() => {});
     }
   }, [isReady, isLoading]);
 
@@ -124,14 +126,9 @@ function RootLayoutContent() {
   const topInset = insets.top;
   const headerHeight = 52 + topInset;
 
-  // While auth is being restored from SecureStore, keep native splash screen visible
-  if (isLoading) {
-    return null;
-  }
-
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <View style={{ flex: 1, backgroundColor: '#ffffff' }} onLayout={onLayoutRootView}>
+      <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
         {/* Global Header — Centered Logo */}
         <View style={[styles.globalHeader, { height: headerHeight, paddingTop: topInset }]}>
@@ -164,7 +161,7 @@ function RootLayoutContent() {
         {/* ── App-level Login Overlay ── */}
         <Modal
           visible={!token}
-          animationType="fade"
+          animationType="none"
           presentationStyle="fullScreen"
           statusBarTranslucent
           onRequestClose={() => {

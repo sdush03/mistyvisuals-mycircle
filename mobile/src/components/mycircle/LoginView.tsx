@@ -7,8 +7,11 @@ import {
   Alert, 
   Platform, 
   Image, 
-  Pressable 
+  Pressable,
+  Dimensions
 } from 'react-native';
+
+const SCREEN = Dimensions.get('screen');
 import { LinearGradient } from 'expo-linear-gradient';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useAuthStore } from '../../store/authStore';
@@ -192,10 +195,10 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
 
   return (
     <View style={styles.container}>
-      {/* Full-Screen Background Image (as-is from Login Screen.jpg) */}
+      {/* Full-Screen Background Image — uses screen dimensions to cover status bar area too */}
       <Image
         source={require('@/assets/images/login-bg.jpg')}
-        style={StyleSheet.absoluteFillObject}
+        style={styles.bgImage}
         resizeMode="cover"
       />
 
@@ -272,6 +275,13 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
 }
 
 const styles = StyleSheet.create({
+  bgImage: {
+    position: 'absolute',
+    width: SCREEN.width,
+    height: SCREEN.height,
+    top: 0,
+    left: 0,
+  },
   container: {
     flex: 1,
     backgroundColor: '#0c0a08',
