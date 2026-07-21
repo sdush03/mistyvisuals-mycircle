@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  ActivityIndicator, 
-  Alert, 
-  Platform, 
-  Image, 
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  Image,
   Pressable,
-  Dimensions
+  Dimensions,
+  Animated,
 } from 'react-native';
 
 const SCREEN = Dimensions.get('screen');
@@ -41,6 +42,25 @@ interface LoginViewProps {
 export default function LoginView({ onSuccess }: LoginViewProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
+  // Fade-in animation on mount
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(40)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 900,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
   const setAuth = useAuthStore((state) => state.setAuth);
   const updateProfile = useAuthStore((state) => state.updateProfile);
   const eventSlug = useAuthStore((state) => state.eventSlug);
@@ -61,13 +81,13 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
   }, []);
 
   const handleAuthSuccess = async (
-    oauthToken: string, 
+    oauthToken: string,
     provider: 'google' | 'apple',
     extraFields?: { name?: string; email?: string }
   ) => {
     try {
       setIsLoggingIn(true);
-      
+
       const authUrl = eventSlug
         ? `/api/gallery/public/events/${eventSlug}/auth`
         : `/api/gallery/family/auth`;
@@ -124,21 +144,17 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
       const userInfo = await NativeGoogleSignin.signIn();
       let idToken = userInfo.data?.idToken || userInfo.idToken || (userInfo as any)?.idToken;
 
-      // Fallback: fetch tokens via getTokens() if idToken is not in initial response
       if (!idToken && typeof NativeGoogleSignin.getTokens === 'function') {
         try {
           const tokens = await NativeGoogleSignin.getTokens();
           idToken = tokens?.idToken || tokens?.accessToken;
-        } catch (_tokenErr) {
-          // ignore
-        }
+        } catch (_tokenErr) {}
       }
 
-      // Fallback to serverAuthCode if present
       if (!idToken) {
         idToken = userInfo.data?.serverAuthCode || userInfo.serverAuthCode || (userInfo as any)?.serverAuthCode;
       }
-      
+
       const userEmail = userInfo.data?.user?.email || userInfo.user?.email || (userInfo as any)?.user?.email;
 
       if (idToken) {
@@ -172,7 +188,7 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       });
-      
+
       if (credential.identityToken) {
         const name = credential.fullName?.givenName
           ? `${credential.fullName.givenName} ${credential.fullName.familyName || ''}`.trim()
@@ -196,86 +212,105 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
 
   return (
     <View style={styles.container}>
-      {/* Full-Screen Background Image — uses screen dimensions to cover status bar area too */}
+
+      {/* ── Full-Bleed Background Image ── */}
       <Image
         source={require('@/assets/images/login-bg.jpg')}
         style={styles.bgImage}
         resizeMode="cover"
       />
 
-      {/* Soft Dark Gradient Overlay */}
+      {/* ── Netflix-style multi-stop cinematic gradient ── */}
+      {/* Top fade: keeps logo readable */}
       <LinearGradient
-        colors={['rgba(0, 0, 0, 0.40)', 'rgba(18, 16, 14, 0.65)', 'rgba(12, 10, 8, 0.92)']}
-        locations={[0, 0.5, 1]}
-        style={StyleSheet.absoluteFillObject}
+        colors={['rgba(0,0,0,0.55)', 'transparent']}
+        locations={[0, 1]}
+        style={styles.topGradient}
+      />
+      {/* Bottom fade: strong dark for buttons */}
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.60)', 'rgba(0,0,0,0.92)', '#000000']}
+        locations={[0, 0.35, 0.7, 1]}
+        style={styles.bottomGradient}
       />
 
-      {/* Center Section */}
-      <View style={styles.centerSection}>
-        {/* White Misty Visuals Logo */}
+      {/* ── Top Bar: Logo ── */}
+      <Animated.View style={[styles.topBar, { opacity: fadeAnim }]}>
         <Image
           source={require('@/assets/images/logo-white.png')}
           style={styles.logo}
           resizeMode="contain"
         />
+      </Animated.View>
 
-        {/* MY CIRCLE */}
-        <Text style={styles.appName}>MY CIRCLE</Text>
+      {/* ── Center: Headline ── */}
+      <Animated.View
+        style={[
+          styles.centerSection,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+        ]}
+      >
+        <Text style={styles.headline}>MY CIRCLE</Text>
+        <Text style={styles.tagline}>Relive the celebrations{'\n'}that matter most.</Text>
+      </Animated.View>
 
-        {/* Tagline */}
-        <Text style={styles.subtextLine}>Relive the celebrations</Text>
-        <Text style={styles.subtextLine}>that matter most.</Text>
-      </View>
-
-      {/* Bottom Action Section */}
-      <View style={styles.bottomSection}>
+      {/* ── Bottom: Sign-In Buttons ── */}
+      <Animated.View
+        style={[
+          styles.bottomSection,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+        ]}
+      >
         {isLoggingIn ? (
           <ActivityIndicator size="large" color="#ffffff" style={styles.loader} />
         ) : (
-          <View style={styles.buttonContainer}>
-
-            {/* 1. Google Sign-In Button */}
+          <>
+            {/* Google Button — solid white fill like Netflix primary CTA */}
             <Pressable
-              style={({ pressed }) => [styles.googleBtn, pressed && styles.btnPressed]}
+              style={({ pressed }) => [styles.primaryBtn, pressed && styles.btnPressed]}
               onPress={signInWithGoogle}
             >
-              <View style={styles.googleBadge}>
-                <Image
-                  source={require('@/assets/images/google-icon.png')}
-                  style={styles.googleIcon}
-                  resizeMode="contain"
-                />
-              </View>
-              <View style={styles.labelWrapper}>
-                <Text style={styles.googleBtnLabel}>CONTINUE WITH GOOGLE</Text>
-              </View>
-              <View style={styles.badgeSpacer} />
+              <Image
+                source={require('@/assets/images/google-icon.png')}
+                style={styles.btnIcon}
+                resizeMode="contain"
+              />
+              <Text style={styles.primaryBtnLabel}>Continue with Google</Text>
             </Pressable>
 
-            {/* 2. Apple Sign-In Button */}
+            {/* Apple Button — outline ghost style */}
             <Pressable
-              style={({ pressed }) => [styles.appleBtn, pressed && styles.btnPressed]}
+              style={({ pressed }) => [styles.secondaryBtn, pressed && styles.btnPressed]}
               onPress={signInWithApple}
             >
               <Image
                 source={require('@/assets/images/apple-logo-icon.png')}
-                style={styles.appleIcon}
+                style={[styles.btnIcon, styles.appleIconTint]}
                 resizeMode="contain"
               />
-              <View style={styles.labelWrapper}>
-                <Text style={styles.appleBtnLabel}>CONTINUE WITH APPLE</Text>
-              </View>
-              <View style={styles.appleIconSpacer} />
+              <Text style={styles.secondaryBtnLabel}>Continue with Apple</Text>
             </Pressable>
 
-          </View>
+            <Text style={styles.disclaimer}>
+              By signing in, you agree to our{' '}
+              <Text style={styles.disclaimerLink}>Terms</Text> &{' '}
+              <Text style={styles.disclaimerLink}>Privacy Policy</Text>
+            </Text>
+          </>
         )}
-      </View>
+      </Animated.View>
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+
+  /* ── Background ── */
   bgImage: {
     position: 'absolute',
     width: SCREEN.width,
@@ -283,121 +318,135 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
   },
-  container: {
-    flex: 1,
-    backgroundColor: '#0c0a08',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 28,
-    paddingTop: 80,
-    paddingBottom: 110,
+  topGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: SCREEN.height * 0.35,
   },
-  centerSection: {
-    flex: 1,
-    justifyContent: 'center',
+  bottomGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: SCREEN.height * 0.65,
+  },
+
+  /* ── Top Bar ── */
+  topBar: {
+    position: 'absolute',
+    top: 60,
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    width: '100%',
   },
   logo: {
-    height: 85,
-    width: 330,
-    marginBottom: 10,
+    height: 36,
+    width: 160,
   },
-  appName: {
+
+  /* ── Center Headline ── */
+  centerSection: {
+    position: 'absolute',
+    left: 28,
+    right: 28,
+    bottom: SCREEN.height * 0.38,
+    alignItems: 'flex-start',
+  },
+  headline: {
     fontFamily: FONT_FUTURA,
-    fontSize: 13,
-    fontWeight: '500',
-    letterSpacing: 5,
+    fontSize: 42,
+    fontWeight: '700',
     color: '#ffffff',
-    marginBottom: 18,
+    letterSpacing: 6,
+    marginBottom: 12,
+    lineHeight: 48,
   },
-  subtextLine: {
-    fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.80)',
-    fontWeight: '300',
-    textAlign: 'center',
-    letterSpacing: 0.2,
-    lineHeight: 23,
+  tagline: {
+    fontFamily: FONT_FUTURA,
+    fontSize: 16,
+    fontWeight: '400',
+    color: 'rgba(255,255,255,0.75)',
+    letterSpacing: 0.3,
+    lineHeight: 24,
   },
+
+  /* ── Bottom Buttons ── */
   bottomSection: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  loader: {
-    marginVertical: 24,
-  },
-  buttonContainer: {
-    width: '100%',
+    position: 'absolute',
+    bottom: 48,
+    left: 24,
+    right: 24,
     alignItems: 'center',
     gap: 12,
   },
-  btnPressed: {
-    opacity: 0.8,
+  loader: {
+    marginVertical: 32,
   },
 
-  /* ── 1. Google Button ── */
-  googleBtn: {
-    width: 280,
-    height: 44,
-    backgroundColor: '#1f1f20',
-    borderRadius: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 3,
-  },
-  googleBadge: {
-    width: 38,
-    height: 38,
+  /* Primary: solid white */
+  primaryBtn: {
+    width: '100%',
+    height: 52,
     backgroundColor: '#ffffff',
     borderRadius: 4,
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
   },
-  googleIcon: {
+  primaryBtnLabel: {
+    fontFamily: FONT_FUTURA,
+    color: '#000000',
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+
+  /* Secondary: glass outline */
+  secondaryBtn: {
+    width: '100%',
+    height: 52,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  secondaryBtnLabel: {
+    fontFamily: FONT_FUTURA,
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: 0.3,
+  },
+
+  btnIcon: {
     width: 20,
     height: 20,
   },
-  labelWrapper: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  googleBtnLabel: {
-    fontFamily: FONT_FUTURA,
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '500',
-    letterSpacing: 1.5,
-  },
-  badgeSpacer: {
-    width: 38,
-  },
-
-  /* ── 2. Apple Button ── */
-  appleBtn: {
-    width: 280,
-    height: 44,
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.40)',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-  },
-  appleIcon: {
-    width: 15,
-    height: 18,
+  appleIconTint: {
     tintColor: '#ffffff',
   },
-  appleIconSpacer: {
-    width: 15,
+  btnPressed: {
+    opacity: 0.75,
   },
-  appleBtnLabel: {
-    fontFamily: FONT_FUTURA,
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '500',
-    letterSpacing: 1.5,
+
+  /* Disclaimer */
+  disclaimer: {
+    marginTop: 8,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.45)',
+    textAlign: 'center',
+    lineHeight: 18,
+    letterSpacing: 0.2,
+  },
+  disclaimerLink: {
+    color: 'rgba(255,255,255,0.70)',
+    textDecorationLine: 'underline',
   },
 });
