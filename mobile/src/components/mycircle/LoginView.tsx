@@ -48,6 +48,14 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [webModal, setWebModal] = useState<{ url: string; title: string } | null>(null);
 
+  const signInWithFacebook = () => {
+    Alert.alert(
+      'Facebook Sign-In',
+      'Facebook Sign-In is coming soon! Please sign in with Google in the meantime.',
+      [{ text: 'OK', style: 'default' }]
+    );
+  };
+
   const openTerms = () => {
     setWebModal({
       url: 'https://mycircle.mistyvisuals.com/terms',
@@ -403,6 +411,29 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
                     resizeMode="contain"
                   />
                   <Text style={styles.secondaryBtnLabel}>Continue with Apple</Text>
+                </Pressable>
+              </Animated.View>
+            )}
+
+            {/* Facebook Button — outline ghost style with medium slide-fade (Android only) */}
+            {Platform.OS === 'android' && (
+              <Animated.View
+                style={{
+                  width: '100%',
+                  opacity: appleAnim,
+                  transform: [{ translateY: appleSlide }],
+                }}
+              >
+                <Pressable
+                  style={({ pressed }) => [styles.secondaryBtn, pressed && styles.btnPressed]}
+                  onPress={signInWithFacebook}
+                >
+                  <Image
+                    source={require('@/assets/images/facebook-icon.png')}
+                    style={styles.btnIcon}
+                    resizeMode="contain"
+                  />
+                  <Text style={styles.secondaryBtnLabel}>Continue with Facebook</Text>
                 </Pressable>
               </Animated.View>
             )}
