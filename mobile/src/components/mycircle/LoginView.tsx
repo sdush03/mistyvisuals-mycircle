@@ -18,7 +18,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const SCREEN = Dimensions.get('screen');
 import { LinearGradient } from 'expo-linear-gradient';
+import { Image as ExpoImage } from 'expo-image';
 import * as AppleAuthentication from 'expo-apple-authentication';
+
+const AnimatedExpoImage = Animated.createAnimatedComponent(ExpoImage);
 import { WebView } from 'react-native-webview';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
@@ -305,10 +308,10 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
     <View style={styles.container}>
 
       {/* ── Full-Bleed Background Image ── */}
-      <Animated.Image
+      <AnimatedExpoImage
         source={require('@/assets/images/login-bg.jpg')}
         style={[styles.bgImage, { transform: [{ scale: bgScale }] }]}
-        resizeMode="cover"
+        contentFit="cover"
       />
 
       {/* ── Netflix-style multi-stop cinematic gradient (Fades in deep darkness as logo docks at top) ── */}
