@@ -63,6 +63,17 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
     outputRange: [1.55, 1],
   });
 
+  // Dark overlay gradient opacity: soft during splash center, deepens as logo slides up to header
+  const gradientOpacity = logoPosAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.35, 1.0],
+  });
+
+  const bgScale = logoPosAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1.06, 1.0],
+  });
+
   const googleSlide = googleAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [30, 0],
@@ -288,25 +299,29 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
     <View style={styles.container}>
 
       {/* ── Full-Bleed Background Image ── */}
-      <Image
+      <Animated.Image
         source={require('@/assets/images/login-bg.jpg')}
-        style={styles.bgImage}
+        style={[styles.bgImage, { transform: [{ scale: bgScale }] }]}
         resizeMode="cover"
       />
 
-      {/* ── Netflix-style multi-stop cinematic gradient ── */}
+      {/* ── Netflix-style multi-stop cinematic gradient (Fades in deep darkness as logo docks at top) ── */}
       {/* Top fade: keeps logo readable */}
-      <LinearGradient
-        colors={['rgba(0,0,0,0.55)', 'transparent']}
-        locations={[0, 1]}
-        style={styles.topGradient}
-      />
+      <Animated.View style={[styles.topGradient, { opacity: gradientOpacity }]}>
+        <LinearGradient
+          colors={['rgba(0,0,0,0.55)', 'transparent']}
+          locations={[0, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
       {/* Bottom fade: strong dark for buttons */}
-      <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.60)', 'rgba(0,0,0,0.92)', '#000000']}
-        locations={[0, 0.35, 0.7, 1]}
-        style={styles.bottomGradient}
-      />
+      <Animated.View style={[styles.bottomGradient, { opacity: gradientOpacity }]}>
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.60)', 'rgba(0,0,0,0.92)', '#000000']}
+          locations={[0, 0.35, 0.7, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
 
       {/* ── Top Bar: Logo (Starts in center, slides up to top header) ── */}
       <Animated.View
