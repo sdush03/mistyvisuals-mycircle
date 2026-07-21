@@ -347,18 +347,21 @@ export default function HomeScreen() {
       return 'Highlights are ready to relive';
     }
 
-    // 2. UPCOMING
-    if (ev.stage === 'UPCOMING' || (eventDate > today && !isToday)) {
+    // 2. LIVE / TODAY (Takes precedence if event is today)
+    if (ev.stage === 'LIVE' || isToday) {
+      return 'Celebration is happening today';
+    }
+
+    // 3. UPCOMING
+    if (ev.stage === 'UPCOMING' || eventDate > today) {
       const days = getCalendarDaysDifference(eventDate, today);
-      if (days <= 1) {
+      if (days <= 0) {
+        return 'Celebration is happening today';
+      }
+      if (days === 1) {
         return 'Wedding tomorrow';
       }
       return `Wedding in ${days} days`;
-    }
-
-    // 3. LIVE
-    if (ev.stage === 'LIVE' || isToday) {
-      return 'Celebration is happening today';
     }
 
     // 4. CURATING (Begins AFTER wedding day, continues until first gallery is available)

@@ -91,16 +91,17 @@ export default function JoinEventView({ onSuccess }: JoinEventViewProps) {
       return 'Highlights ready';
     }
 
-    if (ev.stage === 'UPCOMING' || (eventDate > today && !isToday)) {
+    if (ev.stage === 'LIVE' || isToday) {
+      return 'Happening today';
+    }
+
+    if (ev.stage === 'UPCOMING' || eventDate > today) {
       const d1 = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
       const d2 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const days = Math.round((d1.getTime() - d2.getTime()) / 86400000);
-      if (days <= 1) return 'Wedding tomorrow';
+      if (days <= 0) return 'Happening today';
+      if (days === 1) return 'Wedding tomorrow';
       return `In ${days} days`;
-    }
-
-    if (ev.stage === 'LIVE' || isToday) {
-      return 'Happening today';
     }
 
     if (ev.stage === 'CURATING' || (eventDate < today && !isToday && (ev.matchedCount || 0) === 0 && ev.stage !== 'READY')) {
