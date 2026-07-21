@@ -28,7 +28,7 @@ import api from '../../services/api';
 import { FONT_FUTURA, FONT_FUTURA_BOLD } from '../../constants/fonts';
 
 // Web & iOS Client IDs from Google Cloud Console
-const GOOGLE_WEB_CLIENT_ID = '813548862884-nisdjmc8avi1p5c5joj7pp6o6lg7j6as.apps.googleusercontent.com';
+const GOOGLE_WEB_CLIENT_ID = '1051090030242-du725l33veu6vl637lo1jpgpka1ilujj.apps.googleusercontent.com';
 const GOOGLE_IOS_CLIENT_ID = '813548862884-m06a6t1mbo7v71qipthtao91bg105lqt.apps.googleusercontent.com';
 
 // Safe dynamic imports for Google Sign-In to prevent crashes in Expo Go

@@ -144,7 +144,7 @@ export function GuestLoginFlow({
       setGoogleLoaded(true)
       if (!(window as any).__google_initialized) {
         google.accounts.id.initialize({
-          client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '813548862884-nisdjmc8avi1p5c5joj7pp6o6lg7j6as.apps.googleusercontent.com',
+          client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '1051090030242-du725l33veu6vl637lo1jpgpka1ilujj.apps.googleusercontent.com',
           callback: (response: any) => {
             if (latestCallbackRef.current) {
               latestCallbackRef.current(response)
