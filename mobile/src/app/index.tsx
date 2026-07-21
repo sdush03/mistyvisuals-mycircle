@@ -59,8 +59,7 @@ const { width } = Dimensions.get('window');
 const VIBES = ['All', 'Luxury', 'Destination', 'Intimate', 'Traditional'];
 
 export default function HomeScreen() {
-  const { token, profile, setEventDetails } = useAuthStore();
-  const [events, setEvents] = useState<any[]>([]);
+  const { token, profile, setEventDetails, userEvents: events, setUserEvents: setEvents } = useAuthStore();
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [selectedVibe, setSelectedVibe] = useState('All');
 
@@ -179,7 +178,7 @@ export default function HomeScreen() {
         if (eventsItem[1]) {
           try {
             const cachedEvents = JSON.parse(eventsItem[1]);
-            if (Array.isArray(cachedEvents) && cachedEvents.length > 0) {
+            if (Array.isArray(cachedEvents) && cachedEvents.length > 0 && events.length === 0) {
               setEvents(cachedEvents);
             }
           } catch (_) {}

@@ -196,26 +196,24 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
       const res = await api.post(authUrl, payload);
       const { token, profile } = res.data;
 
-      await setAuth(token, profile);
-
-      // Fetch full profile (selfieUrl) in background
+      // Pre-fetch joined events & selfie before updating auth state to prevent post-mount layout shift
+      let userEvents: any[] = [];
       try {
         const eventsRes = await api.get('/api/gallery/family/events', {
           headers: { Authorization: `Bearer ${token}` }
         });
+        userEvents = eventsRes.data?.events || [];
         if (eventsRes.data?.profile || eventsRes.data?.selfieUrl) {
           const selfieUrl = eventsRes.data.selfieUrl
             ? `https://mycircle.mistyvisuals.com${eventsRes.data.selfieUrl}`
             : null;
-          await updateProfile({
-            ...eventsRes.data.profile,
-            selfieUrl,
-          });
+          profile.selfieUrl = selfieUrl;
         }
       } catch (e) {
         // Non-critical background fetch failure
       }
 
+      await setAuth(token, profile, userEvents);
       onSuccess();
     } catch (err: any) {
       console.error(err);

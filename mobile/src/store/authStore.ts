@@ -16,6 +16,7 @@ export interface GuestProfile {
 interface AuthState {
   token: string | null;
   profile: GuestProfile | null;
+  userEvents: any[];
   isLoading: boolean;
   eventSlug: string | null;
   passcode: string | null;
@@ -23,8 +24,9 @@ interface AuthState {
   eventTitle: string | null;
   isTabBarCollapsed: boolean;
   setTabBarCollapsed: (collapsed: boolean) => void;
+  setUserEvents: (events: any[]) => void;
   
-  setAuth: (token: string, profile: GuestProfile) => Promise<void>;
+  setAuth: (token: string, profile: GuestProfile, userEvents?: any[]) => Promise<void>;
   updateProfile: (profile: Partial<GuestProfile>) => Promise<void>;
   setEventDetails: (slug: string | null, passcode: string | null, coverUrl?: string | null, title?: string | null) => void;
   loadStoredAuth: () => Promise<void>;
@@ -34,6 +36,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
   profile: null,
+  userEvents: [],
   isLoading: true,
   eventSlug: null,
   passcode: null,
@@ -42,13 +45,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isTabBarCollapsed: false,
   
   setTabBarCollapsed: (collapsed) => set({ isTabBarCollapsed: collapsed }),
+  setUserEvents: (events) => set({ userEvents: events }),
 
-  setAuth: async (token, profile) => {
+  setAuth: async (token, profile, userEvents = []) => {
     try {
       const { selfieUrl, ...persistentProfile } = profile;
       await SecureStore.setItemAsync(TOKEN_KEY, token);
       await SecureStore.setItemAsync(PROFILE_KEY, JSON.stringify(persistentProfile));
-      set({ token, profile, isLoading: false });
+      set({ token, profile, userEvents, isLoading: false });
     } catch (e) {
       console.error('Error saving auth state', e);
     }
