@@ -430,7 +430,7 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
                 >
                   <Image
                     source={require('@/assets/images/facebook-icon.png')}
-                    style={styles.btnIcon}
+                    style={styles.fbIcon}
                     resizeMode="contain"
                   />
                   <Text style={styles.secondaryBtnLabel}>Continue with Facebook</Text>
@@ -628,6 +628,10 @@ const styles = StyleSheet.create({
   btnIcon: {
     width: 20,
     height: 20,
+  },
+  fbIcon: {
+    width: 20,
+    height: 22,
   },
   appleIconTint: {
     tintColor: '#ffffff',
