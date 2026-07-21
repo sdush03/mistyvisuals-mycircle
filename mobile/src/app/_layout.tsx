@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Image, useColorScheme, StyleSheet, Platform, View, Pressable, Text, Modal, ActivityIndicator, StatusBar, BackHandler } from 'react-native';
+import { Image, useColorScheme, StyleSheet, Platform, View, Pressable, Text, Modal, ActivityIndicator, StatusBar, BackHandler, LogBox } from 'react-native';
 import { Tabs, router, useSegments } from 'expo-router';
 import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import * as SplashScreen from 'expo-splash-screen';
@@ -13,8 +13,12 @@ import LoginView from '../components/mycircle/LoginView';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-export const FONT_FUTURA = Platform.OS === 'ios' ? 'Futura-Medium' : 'Jost_500Medium';
-export const FONT_FUTURA_BOLD = Platform.OS === 'ios' ? 'Futura-CondensedMedium' : 'Jost_600SemiBold';
+LogBox.ignoreLogs([
+  'SafeAreaView has been deprecated',
+  'Unable to activate keep awake',
+]);
+
+export { FONT_FUTURA, FONT_FUTURA_BOLD } from '../constants/fonts';
 
 export default function RootLayout() {
   return (
@@ -33,6 +37,8 @@ function RootLayoutContent() {
     Jost_400Regular,
     Jost_500Medium,
     Jost_600SemiBold,
+    'Futura-Medium': require('../../assets/fonts/Futura-Medium.ttf'),
+    'Futura-Bold': require('../../assets/fonts/Futura-Bold.ttf'),
   });
 
   const [showProfileModal, setShowProfileModal] = useState(false);

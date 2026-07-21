@@ -12,9 +12,9 @@ import {
   Animated,
   Linking,
   Modal,
-  SafeAreaView,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const SCREEN = Dimensions.get('screen');
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,7 +22,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { WebView } from 'react-native-webview';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
-import { FONT_FUTURA, FONT_FUTURA_BOLD } from '../../app/_layout';
+import { FONT_FUTURA, FONT_FUTURA_BOLD } from '../../constants/fonts';
 
 // Web & iOS Client IDs from Google Cloud Console
 const GOOGLE_WEB_CLIENT_ID = '813548862884-nisdjmc8avi1p5c5joj7pp6o6lg7j6as.apps.googleusercontent.com';
@@ -87,7 +87,7 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
 
   const logoScale = logoPosAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [1.15, 1],
+    outputRange: [1.2, 1],
   });
 
   // Dark overlay gradient opacity: soft during splash center, deepens as logo slides up to header
@@ -526,8 +526,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    height: 44,
-    width: 180,
+    height: 52,
+    width: 210,
   },
 
   /* ── Center Headline ── */
@@ -548,7 +548,7 @@ const styles = StyleSheet.create({
     lineHeight: 46,
   },
   subBrand: {
-    fontFamily: FONT_FUTURA_BOLD,
+    fontFamily: FONT_FUTURA,
     fontSize: 13,
     color: 'rgba(255,255,255,0.80)',
     letterSpacing: 4,
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   primaryBtnLabel: {
-    fontFamily: FONT_FUTURA_BOLD,
+    fontFamily: FONT_FUTURA,
     color: '#000000',
     fontSize: 15,
     letterSpacing: 0.3,
@@ -662,8 +662,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   webModalTitle: {
-    fontFamily: FONT_FUTURA_BOLD,
-    fontSize: 16,
+    fontSize: 17,
+    fontWeight: '600',
     color: '#000000',
   },
   webModalCloseBtn: {
@@ -671,8 +671,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   webModalCloseText: {
-    fontFamily: FONT_FUTURA_BOLD,
-    fontSize: 16,
+    fontSize: 17,
+    fontWeight: '600',
     color: '#007AFF',
   },
   webView: {
