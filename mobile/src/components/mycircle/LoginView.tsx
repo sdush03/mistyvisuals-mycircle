@@ -297,18 +297,20 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
               <Text style={styles.primaryBtnLabel}>Continue with Google</Text>
             </Pressable>
 
-            {/* Apple Button — outline ghost style */}
-            <Pressable
-              style={({ pressed }) => [styles.secondaryBtn, pressed && styles.btnPressed]}
-              onPress={signInWithApple}
-            >
-              <Image
-                source={require('@/assets/images/apple-logo-icon.png')}
-                style={[styles.btnIcon, styles.appleIconTint]}
-                resizeMode="contain"
-              />
-              <Text style={styles.secondaryBtnLabel}>Continue with Apple</Text>
-            </Pressable>
+            {/* Apple Button — outline ghost style (iOS only) */}
+            {Platform.OS === 'ios' && (
+              <Pressable
+                style={({ pressed }) => [styles.secondaryBtn, pressed && styles.btnPressed]}
+                onPress={signInWithApple}
+              >
+                <Image
+                  source={require('@/assets/images/apple-logo-icon.png')}
+                  style={[styles.btnIcon, styles.appleIconTint]}
+                  resizeMode="contain"
+                />
+                <Text style={styles.secondaryBtnLabel}>Continue with Apple</Text>
+              </Pressable>
+            )}
 
             <Text style={styles.disclaimer}>
               By signing in, you agree to our{' '}
