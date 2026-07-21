@@ -512,9 +512,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headline: {
-    fontFamily: FONT_FUTURA_BOLD,
+    fontFamily: FONT_FUTURA,
     fontSize: 40,
-    fontWeight: '700',
+    fontWeight: '500',
     color: '#ffffff',
     letterSpacing: 6,
     marginBottom: 6,
@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
   subBrand: {
     fontFamily: FONT_FUTURA_BOLD,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
     color: 'rgba(255,255,255,0.80)',
     letterSpacing: 4,
     marginBottom: 20,
