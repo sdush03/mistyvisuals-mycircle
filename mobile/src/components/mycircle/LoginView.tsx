@@ -44,20 +44,50 @@ interface LoginViewProps {
 export default function LoginView({ onSuccess }: LoginViewProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Fade-in animation on mount
+  // Staggered animation speeds on mount
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(40)).current;
+  const googleAnim = useRef(new Animated.Value(0)).current;
+  const appleAnim = useRef(new Animated.Value(0)).current;
+  const termsAnim = useRef(new Animated.Value(0)).current;
+
+  const googleSlide = googleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [30, 0],
+  });
+
+  const appleSlide = appleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [35, 0],
+  });
+
+  const termsSlide = termsAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [20, 0],
+  });
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
+    // 1. Top bar logo & center text fade in
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+
+    // 2. Staggered distinct animation speeds: Google (500ms) -> Apple (750ms) -> Terms (1000ms)
+    Animated.stagger(140, [
+      Animated.timing(googleAnim, {
         toValue: 1,
-        duration: 900,
+        duration: 500,
         useNativeDriver: true,
       }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 800,
+      Animated.timing(appleAnim, {
+        toValue: 1,
+        duration: 750,
+        useNativeDriver: true,
+      }),
+      Animated.timing(termsAnim, {
+        toValue: 1,
+        duration: 1000,
         useNativeDriver: true,
       }),
     ]).start();
@@ -274,57 +304,76 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
       </Animated.View>
 
       {/* ── Bottom: Sign-In Buttons ── */}
-      <Animated.View
-        style={[
-          styles.bottomSection,
-          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-        ]}
-      >
+      <View style={styles.bottomSection}>
         {isLoggingIn ? (
           <ActivityIndicator size="large" color="#ffffff" style={styles.loader} />
         ) : (
           <>
-            {/* Google Button — solid white fill like Netflix primary CTA */}
-            <Pressable
-              style={({ pressed }) => [styles.primaryBtn, pressed && styles.btnPressed]}
-              onPress={signInWithGoogle}
+            {/* Google Button — solid white fill with fast slide-fade */}
+            <Animated.View
+              style={{
+                width: '100%',
+                opacity: googleAnim,
+                transform: [{ translateY: googleSlide }],
+              }}
             >
-              <Image
-                source={require('@/assets/images/google-icon.png')}
-                style={styles.btnIcon}
-                resizeMode="contain"
-              />
-              <Text style={styles.primaryBtnLabel}>Continue with Google</Text>
-            </Pressable>
-
-            {/* Apple Button — outline ghost style (iOS only) */}
-            {Platform.OS === 'ios' && (
               <Pressable
-                style={({ pressed }) => [styles.secondaryBtn, pressed && styles.btnPressed]}
-                onPress={signInWithApple}
+                style={({ pressed }) => [styles.primaryBtn, pressed && styles.btnPressed]}
+                onPress={signInWithGoogle}
               >
                 <Image
-                  source={require('@/assets/images/apple-logo-icon.png')}
-                  style={[styles.btnIcon, styles.appleIconTint]}
+                  source={require('@/assets/images/google-icon.png')}
+                  style={styles.btnIcon}
                   resizeMode="contain"
                 />
-                <Text style={styles.secondaryBtnLabel}>Continue with Apple</Text>
+                <Text style={styles.primaryBtnLabel}>Continue with Google</Text>
               </Pressable>
+            </Animated.View>
+
+            {/* Apple Button — outline ghost style with medium slide-fade (iOS only) */}
+            {Platform.OS === 'ios' && (
+              <Animated.View
+                style={{
+                  width: '100%',
+                  opacity: appleAnim,
+                  transform: [{ translateY: appleSlide }],
+                }}
+              >
+                <Pressable
+                  style={({ pressed }) => [styles.secondaryBtn, pressed && styles.btnPressed]}
+                  onPress={signInWithApple}
+                >
+                  <Image
+                    source={require('@/assets/images/apple-logo-icon.png')}
+                    style={[styles.btnIcon, styles.appleIconTint]}
+                    resizeMode="contain"
+                  />
+                  <Text style={styles.secondaryBtnLabel}>Continue with Apple</Text>
+                </Pressable>
+              </Animated.View>
             )}
 
-            <Text style={styles.disclaimer}>
-              By signing in, you agree to our{' '}
-              <Text style={styles.disclaimerLink} onPress={openTerms}>
-                Terms
-              </Text>{' '}
-              &{' '}
-              <Text style={styles.disclaimerLink} onPress={openPrivacy}>
-                Privacy Policy
+            {/* Disclaimer line — smooth slow fade-in */}
+            <Animated.View
+              style={{
+                opacity: termsAnim,
+                transform: [{ translateY: termsSlide }],
+              }}
+            >
+              <Text style={styles.disclaimer}>
+                By signing in, you agree to our{' '}
+                <Text style={styles.disclaimerLink} onPress={openTerms}>
+                  Terms
+                </Text>{' '}
+                &{' '}
+                <Text style={styles.disclaimerLink} onPress={openPrivacy}>
+                  Privacy Policy
+                </Text>
               </Text>
-            </Text>
+            </Animated.View>
           </>
         )}
-      </Animated.View>
+      </View>
 
     </View>
   );
