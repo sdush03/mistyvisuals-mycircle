@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
   subBrand: {
     fontFamily: FONT_FUTURA_BOLD,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     color: 'rgba(255,255,255,0.80)',
     letterSpacing: 4,
     marginBottom: 20,
