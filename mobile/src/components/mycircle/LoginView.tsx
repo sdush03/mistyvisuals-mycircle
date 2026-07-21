@@ -60,7 +60,7 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
 
   const logoScale = logoPosAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [1.15, 1],
+    outputRange: [1.55, 1],
   });
 
   const googleSlide = googleAnim.interpolate({
