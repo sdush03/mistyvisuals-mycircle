@@ -44,11 +44,24 @@ interface LoginViewProps {
 export default function LoginView({ onSuccess }: LoginViewProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Staggered animation speeds on mount
+  // Splash-to-login animation sequence on mount
+  const logoPosAnim = useRef(new Animated.Value(0)).current; // 0 = centered, 1 = top bar
+  const logoFadeAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const googleAnim = useRef(new Animated.Value(0)).current;
   const appleAnim = useRef(new Animated.Value(0)).current;
   const termsAnim = useRef(new Animated.Value(0)).current;
+
+  // Interpolate logo movement from center down to top header
+  const logoTranslateY = logoPosAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [SCREEN.height * 0.32, 0],
+  });
+
+  const logoScale = logoPosAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1.15, 1],
+  });
 
   const googleSlide = googleAnim.interpolate({
     inputRange: [0, 1],
@@ -66,31 +79,44 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
   });
 
   useEffect(() => {
-    // 1. Top bar logo & center text fade in
-    Animated.timing(fadeAnim, {
+    // 1. Logo fades in at screen center
+    Animated.timing(logoFadeAnim, {
       toValue: 1,
-      duration: 800,
+      duration: 500,
       useNativeDriver: true,
-    }).start();
-
-    // 2. Staggered distinct animation speeds: Google (500ms) -> Apple (750ms) -> Terms (1000ms)
-    Animated.stagger(140, [
-      Animated.timing(googleAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(appleAnim, {
+    }).start(() => {
+      // 2. Logo holds for 250ms then smoothly slides UP to top header
+      Animated.timing(logoPosAnim, {
         toValue: 1,
         duration: 750,
         useNativeDriver: true,
-      }),
-      Animated.timing(termsAnim, {
-        toValue: 1,
-        duration: 1000,
-        useNativeDriver: true,
-      }),
-    ]).start();
+      }).start(() => {
+        // 3. Reveal center text and staggered bottom controls
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }).start();
+
+        Animated.stagger(140, [
+          Animated.timing(googleAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(appleAnim, {
+            toValue: 1,
+            duration: 750,
+            useNativeDriver: true,
+          }),
+          Animated.timing(termsAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      });
+    });
   }, []);
 
   const setAuth = useAuthStore((state) => state.setAuth);
@@ -282,8 +308,19 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
         style={styles.bottomGradient}
       />
 
-      {/* ── Top Bar: Logo ── */}
-      <Animated.View style={[styles.topBar, { opacity: fadeAnim }]}>
+      {/* ── Top Bar: Logo (Starts in center, slides up to top header) ── */}
+      <Animated.View
+        style={[
+          styles.topBar,
+          {
+            opacity: logoFadeAnim,
+            transform: [
+              { translateY: logoTranslateY },
+              { scale: logoScale },
+            ],
+          },
+        ]}
+      >
         <Image
           source={require('@/assets/images/logo-white.png')}
           style={styles.logo}
