@@ -17,6 +17,14 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as SecureStore from 'expo-secure-store';
 import { useAuthStore } from '../store/authStore';
 import api from '../services/api';
+import {
+  FONT_FUTURA,
+  FONT_FUTURA_BOLD,
+  FONT_MONTSERRAT_REGULAR,
+  FONT_JOST_REGULAR,
+  FONT_JOST_MEDIUM,
+  FONT_JOST_SEMIBOLD,
+} from '../constants/fonts';
 
 const JOINED_EVENTS_KEY = 'joined_events_list';
 const { width, height } = Dimensions.get('window');
@@ -301,17 +309,15 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f0ede8',
   },
   modalCategory: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 9,
-    fontWeight: '700',
     letterSpacing: 2,
     color: '#a07850',
     marginBottom: 4,
   },
   modalTitle: {
-    fontFamily: 'serif',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 22,
-    fontWeight: '300',
     color: '#1c1a18',
   },
   closeBtn: {
@@ -325,13 +331,13 @@ const styles = StyleSheet.create({
   closeBtnText: {
     fontSize: 14,
     color: '#60646c',
-    fontWeight: '600',
+    fontFamily: FONT_JOST_SEMIBOLD,
   },
   formBody: {
     paddingBottom: 20,
   },
   inputLabel: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 13,
     color: '#60646c',
     lineHeight: 19,
@@ -347,6 +353,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1c1a18',
     marginBottom: 16,
+    fontFamily: FONT_JOST_REGULAR,
   },
   buttonRow: {
     flexDirection: 'row',
@@ -363,9 +370,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   secondaryBtnText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 12,
-    fontWeight: '700',
     letterSpacing: 1,
     color: '#1c1a18',
     textTransform: 'uppercase',
@@ -379,9 +385,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryBtnText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 12,
-    fontWeight: '700',
     letterSpacing: 1,
     color: '#ffffff',
     textTransform: 'uppercase',
@@ -397,7 +402,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   scannerSubtitle: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 13,
     color: '#60646c',
     marginBottom: 20,
@@ -420,7 +425,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   permText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 13,
     color: '#60646c',
     textAlign: 'center',
@@ -433,9 +438,8 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   recentHeader: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 9,
-    fontWeight: '700',
     letterSpacing: 2,
     color: '#8c867e',
     marginBottom: 12,
@@ -456,19 +460,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f0ea',
   },
   recentItemTitle: {
-    fontFamily: 'serif',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 15,
-    fontWeight: '300',
     color: '#1c1a18',
   },
   recentItemSlug: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 10,
     color: '#8c867e',
     marginTop: 2,
   },
   recentItemArrow: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_MEDIUM,
     fontSize: 14,
     color: '#a07850',
   },

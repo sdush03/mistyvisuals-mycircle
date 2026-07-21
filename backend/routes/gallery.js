@@ -3085,6 +3085,13 @@ module.exports = async function galleryRoutes(fastify, opts) {
         });
       }
 
+      // Sort events by event date in descending order (latest first)
+      eventsList.sort((a, b) => {
+        const timeA = a.date ? new Date(a.date).getTime() : 0;
+        const timeB = b.date ? new Date(b.date).getTime() : 0;
+        return timeB - timeA;
+      });
+
       return {
         events: eventsList,
         selfieUrl: checkUserSelfie(user.id) ? `/api/gallery/family/selfie/${user.id}` : null,

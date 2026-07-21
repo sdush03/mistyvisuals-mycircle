@@ -17,6 +17,14 @@ import { useAuthStore } from '../../store/authStore';
 import { useScrollTabBarCollapse } from '../../hooks/useScrollTabBarCollapse';
 import api from '../../services/api';
 import JoinCelebrationModal from '../JoinCelebrationModal';
+import {
+  FONT_FUTURA,
+  FONT_FUTURA_BOLD,
+  FONT_MONTSERRAT_REGULAR,
+  FONT_JOST_REGULAR,
+  FONT_JOST_MEDIUM,
+  FONT_JOST_SEMIBOLD,
+} from '../../constants/fonts';
 
 const JOINED_EVENTS_KEY = 'joined_events_list';
 const { width } = Dimensions.get('window');
@@ -52,7 +60,12 @@ export default function JoinEventView({ onSuccess }: JoinEventViewProps) {
       // 1. Fetch live events list from family endpoint
       const res = await api.get('/api/gallery/family/events');
       if (res.data?.events && Array.isArray(res.data.events)) {
-        setEvents(res.data.events);
+        const sorted = [...res.data.events].sort((a, b) => {
+          const timeA = a.date ? new Date(a.date).getTime() : 0;
+          const timeB = b.date ? new Date(b.date).getTime() : 0;
+          return timeB - timeA;
+        });
+        setEvents(sorted);
       } else {
         // Fallback to recent events from SecureStore
         loadRecentEvents();
@@ -70,7 +83,14 @@ export default function JoinEventView({ onSuccess }: JoinEventViewProps) {
       const storedStr = await SecureStore.getItemAsync(JOINED_EVENTS_KEY);
       if (storedStr) {
         const parsed = JSON.parse(storedStr);
-        setEvents(parsed);
+        if (Array.isArray(parsed)) {
+          const sorted = [...parsed].sort((a, b) => {
+            const timeA = a.date ? new Date(a.date).getTime() : 0;
+            const timeB = b.date ? new Date(b.date).getTime() : 0;
+            return timeB - timeA;
+          });
+          setEvents(sorted);
+        }
       }
     } catch (e) {
       console.error('Failed to load recent events from storage:', e);
@@ -244,17 +264,15 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   headerCategory: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 9,
-    fontWeight: '700',
     letterSpacing: 2,
     color: '#a07850',
     marginBottom: 4,
   },
   headerTitle: {
-    fontFamily: 'serif',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 26,
-    fontWeight: '300',
     color: '#1c1a18',
   },
   addBtn: {
@@ -265,14 +283,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   addBtnText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 0.5,
     color: '#ffffff',
   },
   headerSubtitle: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 12,
     color: '#60646c',
     lineHeight: 18,
@@ -325,18 +342,16 @@ const styles = StyleSheet.create({
     right: 12,
   },
   cardTag: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 7,
-    fontWeight: '700',
     letterSpacing: 1.5,
     color: '#d0c8be',
     marginBottom: 3,
     opacity: 0.85,
   },
   cardTitle: {
-    fontFamily: 'serif',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 16,
-    fontWeight: '300',
     color: '#ffffff',
     marginBottom: 4,
   },
@@ -346,16 +361,15 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
   },
   cardStatus: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 9,
     color: '#e5dfd5',
     flex: 1,
     marginRight: 6,
   },
   cardCta: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 9,
-    fontWeight: '600',
     letterSpacing: 0.8,
     color: '#ffffff',
     opacity: 0.9,
@@ -392,15 +406,14 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   joinCardTitle: {
-    fontFamily: 'serif',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 16,
-    fontWeight: '300',
     color: '#1c1a18',
     marginBottom: 4,
     textAlign: 'center',
   },
   joinCardSubtext: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 10,
     color: '#8c867e',
     textAlign: 'center',

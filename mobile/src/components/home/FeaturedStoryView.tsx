@@ -11,6 +11,14 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import {
+  FONT_FUTURA,
+  FONT_FUTURA_BOLD,
+  FONT_MONTSERRAT_REGULAR,
+  FONT_JOST_REGULAR,
+  FONT_JOST_MEDIUM,
+  FONT_JOST_SEMIBOLD,
+} from '../../constants/fonts';
 
 const { width } = Dimensions.get('window');
 
@@ -174,16 +182,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   closeText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 11,
-    fontWeight: '600',
     letterSpacing: 2,
     color: '#8c867e',
   },
   headerTitle: {
-    fontFamily: 'System',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 3,
     color: '#1c1a18',
     textAlign: 'center',
@@ -212,25 +218,22 @@ const styles = StyleSheet.create({
     right: 24,
   },
   storyLocation: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 10,
-    fontWeight: '600',
     letterSpacing: 3,
     color: '#ffffff',
     marginBottom: 8,
     opacity: 0.9,
   },
   storyTitle: {
-    fontFamily: 'serif',
-    fontSize: 32,
-    fontWeight: '300',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 30,
     color: '#ffffff',
     marginBottom: 8,
   },
   storyDate: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 12,
-    fontWeight: '400',
     letterSpacing: 1,
     color: '#ffffff',
     opacity: 0.8,
@@ -242,9 +245,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fbfaf8',
   },
   editorialSubtitle: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 10,
-    fontWeight: '600',
     letterSpacing: 3,
     color: '#8c867e',
     textAlign: 'center',
@@ -257,9 +259,9 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   descriptionText: {
-    fontFamily: 'serif',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 15,
-    lineHeight: 26,
+    lineHeight: 25,
     color: '#4a4540',
     textAlign: 'center',
   },
@@ -268,9 +270,8 @@ const styles = StyleSheet.create({
     paddingTop: 32,
   },
   galleryHeader: {
-    fontFamily: 'System',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 3,
     color: '#1c1a18',
     marginBottom: 20,
@@ -310,8 +311,8 @@ const styles = StyleSheet.create({
   },
   lightboxCloseText: {
     color: '#ffffff',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 12,
-    fontWeight: '600',
     letterSpacing: 1,
   },
   lightboxImageContainer: {
@@ -335,13 +336,13 @@ const styles = StyleSheet.create({
   },
   lightboxNavText: {
     color: '#ffffff',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 2,
   },
   lightboxIndex: {
     color: '#8c867e',
     fontSize: 12,
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
   },
 });

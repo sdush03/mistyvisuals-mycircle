@@ -52,6 +52,14 @@ import ArticleView from '../components/home/ArticleView';
 import MoodboardsView, { CURATED_MOODBOARDS } from '../components/home/MoodboardsView';
 import AllStoriesView from '../components/home/AllStoriesView';
 import JoinCelebrationModal from '../components/JoinCelebrationModal';
+import {
+  FONT_FUTURA,
+  FONT_FUTURA_BOLD,
+  FONT_MONTSERRAT_REGULAR,
+  FONT_JOST_REGULAR,
+  FONT_JOST_MEDIUM,
+  FONT_JOST_SEMIBOLD,
+} from '../constants/fonts';
 
 const { width } = Dimensions.get('window');
 
@@ -179,7 +187,12 @@ export default function HomeScreen() {
           try {
             const cachedEvents = JSON.parse(eventsItem[1]);
             if (Array.isArray(cachedEvents) && cachedEvents.length > 0 && events.length === 0) {
-              setEvents(cachedEvents);
+              const sorted = [...cachedEvents].sort((a, b) => {
+                const timeA = a.date ? new Date(a.date).getTime() : 0;
+                const timeB = b.date ? new Date(b.date).getTime() : 0;
+                return timeB - timeA;
+              });
+              setEvents(sorted);
             }
           } catch (_) {}
         }
@@ -246,8 +259,13 @@ export default function HomeScreen() {
     try {
       const res = await api.get('/api/gallery/family/events');
       const rawEvents: any[] = res.data.events || [];
-      setEvents(rawEvents);
-      AsyncStorage.setItem('@mycircle_user_events_cache', JSON.stringify(rawEvents)).catch(() => {});
+      const sortedEvents = [...rawEvents].sort((a, b) => {
+        const timeA = a.date ? new Date(a.date).getTime() : 0;
+        const timeB = b.date ? new Date(b.date).getTime() : 0;
+        return timeB - timeA;
+      });
+      setEvents(sortedEvents);
+      AsyncStorage.setItem('@mycircle_user_events_cache', JSON.stringify(sortedEvents)).catch(() => {});
     } catch (err: any) {
       if (err?.response?.status !== 401) {
         console.warn('fetchUserEvents failed:', err?.message);
@@ -977,12 +995,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   greetingText: {
-    fontFamily: 'serif',
-    fontSize: 26,
-    fontWeight: '500',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 24,
     color: '#1c1917',
-    lineHeight: 32,
-    letterSpacing: -0.3,
+    lineHeight: 30,
+    letterSpacing: -0.2,
   },
   heroBadgeInline: {
     backgroundColor: 'rgba(197, 160, 89, 0.22)',
@@ -1001,16 +1018,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   heroBadgeText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 9.5,
-    fontWeight: '700',
     color: '#8C6721',
     letterSpacing: 1.5,
   },
   subtitleText: {
-    fontFamily: 'System',
-    fontSize: 15,
-    lineHeight: 22,
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 14,
+    lineHeight: 21,
     color: '#403d39',
     marginTop: 6,
   },
@@ -1023,19 +1039,17 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   heroCtaText: {
-    fontFamily: 'System',
-    fontSize: 13,
-    fontWeight: '600',
+    fontFamily: FONT_JOST_SEMIBOLD,
+    fontSize: 12,
     color: '#ffffff',
-    letterSpacing: 0.3,
+    letterSpacing: 0.8,
   },
   section: {
     paddingTop: 32,
   },
   sectionHeader: {
-    fontFamily: 'System',
-    fontSize: 10,
-    fontWeight: '700',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 11,
     letterSpacing: 2,
     color: '#8c867e',
     marginHorizontal: 24,
@@ -1078,9 +1092,8 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   badgeText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 8,
-    fontWeight: '800',
     color: '#ffffff',
     letterSpacing: 1,
   },
@@ -1088,15 +1101,14 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   cardTitle: {
-    fontFamily: 'System',
-    fontSize: 12,
-    fontWeight: '700',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 13,
     color: '#1c1a18',
     marginBottom: 4,
   },
   cardSubtext: {
-    fontFamily: 'System',
-    fontSize: 10,
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 10.5,
     color: '#8c867e',
   },
   myCircleCard: {
@@ -1130,12 +1142,12 @@ const styles = StyleSheet.create({
     right: 18,
   },
   myCircleCardTitle: {
-    fontFamily: 'serif',
-    fontSize: 20,
-    fontWeight: '300',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 19,
     color: '#ffffff',
     marginBottom: 4,
-    lineHeight: 25,
+    lineHeight: 24,
+    letterSpacing: 0.2,
   },
   myCircleCardBottomRow: {
     flexDirection: 'row',
@@ -1143,7 +1155,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   myCircleCardStatus: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 11,
     color: '#e5dfd5',
     letterSpacing: 0.3,
@@ -1151,9 +1163,8 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   myCircleCardCta: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 10,
-    fontWeight: '600',
     letterSpacing: 1,
     color: '#ffffff',
     opacity: 0.9,
@@ -1181,25 +1192,22 @@ const styles = StyleSheet.create({
     right: 20,
   },
   featuredLocation: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 9,
-    fontWeight: '700',
     letterSpacing: 2,
     color: '#ffffff',
     marginBottom: 6,
     opacity: 0.8,
   },
   featuredTitle: {
-    fontFamily: 'serif',
-    fontSize: 22,
-    fontWeight: '300',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 21,
     color: '#ffffff',
     marginBottom: 12,
   },
   featuredReadMore: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 10,
-    fontWeight: '600',
     letterSpacing: 1,
     color: '#ffffff',
     opacity: 0.9,
@@ -1226,23 +1234,21 @@ const styles = StyleSheet.create({
     paddingLeft: 16,
   },
   articleCategory: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 8,
-    fontWeight: '700',
-    letterSpacing: 2,
+    letterSpacing: 1.8,
     color: '#8c867e',
     marginBottom: 6,
   },
   articleTitle: {
-    fontFamily: 'serif',
-    fontSize: 14,
-    fontWeight: '400',
-    lineHeight: 18,
+    fontFamily: FONT_FUTURA,
+    fontSize: 15,
+    lineHeight: 20,
     color: '#1c1a18',
     marginBottom: 6,
   },
   articleMeta: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 10,
     color: '#8c867e',
   },
@@ -1265,11 +1271,10 @@ const styles = StyleSheet.create({
     borderColor: '#1c1a18',
   },
   vibeText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_MEDIUM,
     fontSize: 11,
-    fontWeight: '600',
     color: '#8c867e',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   vibeTextActive: {
     color: '#ffffff',
@@ -1291,17 +1296,15 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   vibeGalleryLabel: {
-    fontFamily: 'serif',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 12,
-    fontWeight: '600',
     color: '#1c1a18',
     marginTop: 6,
     textAlign: 'center',
   },
   vibeGallerySublabel: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 9,
-    fontWeight: '500',
     color: '#8c867e',
     marginTop: 2,
     textAlign: 'center',
@@ -1315,7 +1318,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyVibeText: {
-    fontFamily: 'serif',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 12,
     fontStyle: 'italic',
     color: '#8c867e',
@@ -1328,9 +1331,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   viewAllText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 10,
-    fontWeight: '600',
     letterSpacing: 1.5,
     color: '#a07850',
   },
@@ -1384,9 +1386,8 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   openYouTubeBadgeText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 9,
-    fontWeight: '700',
     color: '#ffffff',
     letterSpacing: 0.5,
   },
@@ -1428,22 +1429,20 @@ const styles = StyleSheet.create({
     right: 16,
   },
   filmCategory: {
-    fontFamily: 'System',
-    fontSize: 8,
-    fontWeight: '700',
-    letterSpacing: 2,
+    fontFamily: FONT_JOST_SEMIBOLD,
+    fontSize: 8.5,
+    letterSpacing: 1.8,
     color: '#a07850',
     marginBottom: 4,
   },
   filmTitle: {
-    fontFamily: 'serif',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 18,
-    fontWeight: '300',
     color: '#ffffff',
     marginBottom: 4,
   },
   filmLocation: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 10,
     color: '#d0c8be',
   },
@@ -1468,14 +1467,13 @@ const styles = StyleSheet.create({
     right: 16,
   },
   moodboardTitle: {
-    fontFamily: 'serif',
-    fontSize: 20,
-    fontWeight: '300',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 19,
     color: '#ffffff',
     marginBottom: 4,
   },
   moodboardSub: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 10,
     color: '#d0c8be',
     letterSpacing: 0.5,
@@ -1501,15 +1499,14 @@ const styles = StyleSheet.create({
     right: 14,
   },
   vibeCardTitle: {
-    fontFamily: 'serif',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 16,
-    fontWeight: '300',
     color: '#ffffff',
     marginBottom: 2,
   },
   vibeCardSubtext: {
-    fontFamily: 'System',
-    fontSize: 9,
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 9.5,
     color: '#d0c8be',
     letterSpacing: 0.5,
   },
@@ -1530,15 +1527,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   continueExploringTitle: {
-    fontFamily: 'System',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 13,
-    fontWeight: '700',
     color: '#1c1a18',
     textAlign: 'center',
     marginBottom: 6,
   },
   continueExploringSub: {
-    fontFamily: 'serif',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 11,
     color: '#8c867e',
     textAlign: 'center',
@@ -1546,9 +1542,8 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   continueExploringCta: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 1.5,
     color: '#a07850',
   },
@@ -1570,15 +1565,14 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   joinCtaHeader: {
-    fontFamily: 'serif',
-    fontSize: 22,
-    fontWeight: '300',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 21,
     color: '#1c1a18',
     textAlign: 'center',
     marginBottom: 10,
   },
   joinCtaSubline: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 12,
     color: '#60646c',
     textAlign: 'center',
@@ -1593,9 +1587,8 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   joinCtaBtnText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 2,
     color: '#ffffff',
   },

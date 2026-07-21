@@ -5,6 +5,7 @@ import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { Jost_400Regular, Jost_500Medium, Jost_600SemiBold } from '@expo-google-fonts/jost';
+import { Montserrat_400Regular, Montserrat_300Light, Montserrat_500Medium, Montserrat_600SemiBold } from '@expo-google-fonts/montserrat';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, FadeIn } from 'react-native-reanimated';
 import { useAuthStore } from '../store/authStore';
@@ -18,7 +19,7 @@ LogBox.ignoreLogs([
   'Unable to activate keep awake',
 ]);
 
-export { FONT_FUTURA, FONT_FUTURA_BOLD } from '../constants/fonts';
+export { FONT_FUTURA, FONT_FUTURA_BOLD, FONT_MONTSERRAT_REGULAR } from '../constants/fonts';
 
 export default function RootLayout() {
   return (
@@ -37,6 +38,10 @@ function RootLayoutContent() {
     Jost_400Regular,
     Jost_500Medium,
     Jost_600SemiBold,
+    Montserrat_400Regular,
+    Montserrat_300Light,
+    Montserrat_500Medium,
+    Montserrat_600SemiBold,
     'Futura-Medium': require('../../assets/fonts/Futura-Medium.ttf'),
     'Futura-Bold': require('../../assets/fonts/Futura-Bold.ttf'),
   });
