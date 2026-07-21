@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Image, useColorScheme, StyleSheet, Platform, View, Pressable, Text, Modal, ActivityIndicator, StatusBar } from 'react-native';
+import { Image, useColorScheme, StyleSheet, Platform, View, Pressable, Text, Modal, ActivityIndicator, StatusBar, BackHandler } from 'react-native';
 import { Tabs, router, useSegments } from 'expo-router';
 import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import * as SplashScreen from 'expo-splash-screen';
@@ -8,6 +8,8 @@ import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-na
 import { useAuthStore } from '../store/authStore';
 import api, { API_BASE_URL } from '../services/api';
 import LoginView from '../components/mycircle/LoginView';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   return (
@@ -32,11 +34,49 @@ function RootLayoutContent() {
   const updateProfile = useAuthStore((state) => state.updateProfile);
   const logout = useAuthStore((state) => state.logout);
 
+  const [isReady, setIsReady] = useState(false);
+
   // Load persisted session once on mount
   useEffect(() => {
-    loadStoredAuth();
-    SplashScreen.hideAsync().catch(() => {});
+    async function initialize() {
+      try {
+        await loadStoredAuth();
+      } catch (e) {
+        console.warn('Auth initialization error:', e);
+      } finally {
+        setIsReady(true);
+      }
+    }
+    initialize();
   }, []);
+
+  const onLayoutRootView = React.useCallback(async () => {
+    if (isReady && !isLoading) {
+      await SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [isReady, isLoading]);
+
+  // Handle Android back button & swipe back gestures globally
+  useEffect(() => {
+    const onBackPress = () => {
+      if (showProfileModal) {
+        setShowProfileModal(false);
+        return true;
+      }
+      if (!token) {
+        BackHandler.exitApp();
+        return true;
+      }
+      if (segments[0] === 'mycircle') {
+        router.replace('/');
+        return true;
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [showProfileModal, token, segments]);
 
   // Fetch selfie once per session when authenticated.
   // Uses a ref flag so it never reruns due to profile state changes.
@@ -84,24 +124,14 @@ function RootLayoutContent() {
   const topInset = insets.top;
   const headerHeight = 52 + topInset;
 
-  // While auth is being restored from SecureStore, show a blank loading screen
+  // While auth is being restored from SecureStore, keep native splash screen visible
   if (isLoading) {
-    return (
-      <View style={styles.loadingScreen}>
-        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
-        <Image
-          source={require('@/assets/images/logo-black.png')}
-          style={styles.loadingLogo}
-          resizeMode="contain"
-        />
-        <ActivityIndicator size="small" color="#8c867e" style={{ marginTop: 32 }} />
-      </View>
-    );
+    return null;
   }
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+      <View style={{ flex: 1, backgroundColor: '#ffffff' }} onLayout={onLayoutRootView}>
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
         {/* Global Header — Centered Logo */}
         <View style={[styles.globalHeader, { height: headerHeight, paddingTop: topInset }]}>
@@ -137,6 +167,9 @@ function RootLayoutContent() {
           animationType="fade"
           presentationStyle="fullScreen"
           statusBarTranslucent
+          onRequestClose={() => {
+            BackHandler.exitApp();
+          }}
         >
           <LoginView onSuccess={() => {}} />
         </Modal>

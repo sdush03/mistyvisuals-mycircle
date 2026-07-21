@@ -9,10 +9,11 @@ import {
   Platform, 
   ActivityIndicator, 
   Dimensions, 
-  SafeAreaView, 
   StatusBar,
   Animated,
+  BackHandler,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -88,6 +89,23 @@ export default function HomeScreen() {
 
   // Gallery Ready Hero visibility: { firstShownAt, lastSeenCount } per slug
   const [galleryReadyHeroData, setGalleryReadyHeroData] = useState<Record<string, { firstShownAt: number; lastSeenCount: number }>>({});
+
+  // Handle Android system back gesture / back button to close any open modal
+  useEffect(() => {
+    const onBackPress = () => {
+      if (selectedStory) { setSelectedStory(null); return true; }
+      if (selectedArticle) { setSelectedArticle(null); return true; }
+      if (playingFilmId) { setPlayingFilmId(null); return true; }
+      if (selectedMoodboardId) { setSelectedMoodboardId(null); return true; }
+      if (isMoodboardsOpen) { setIsMoodboardsOpen(false); return true; }
+      if (isAllStoriesOpen) { setIsAllStoriesOpen(false); return true; }
+      if (isJoinCelebrationModalOpen) { setIsJoinCelebrationModalOpen(false); return true; }
+      return false; // Let default system back behavior happen (exit app if on home)
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [selectedStory, selectedArticle, playingFilmId, selectedMoodboardId, isMoodboardsOpen, isAllStoriesOpen, isJoinCelebrationModalOpen]);
 
   // Tier 2 Editorial Rotation History: tracks lastShownAt per hero type
   const [tier2History, setTier2History] = useState<Record<string, { lastShownAt: number }>>({});

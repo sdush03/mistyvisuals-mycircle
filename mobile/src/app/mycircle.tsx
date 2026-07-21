@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, ActivityIndicator, Alert, SafeAreaView } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, Alert, BackHandler } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
 
 import { useAuthStore } from '../store/authStore';
@@ -27,6 +28,20 @@ export default function MyCircleScreen() {
     setEventDetails,
     logout,
   } = useAuthStore();
+
+  // Handle Android system back swipe/button inside My Circle screens
+  useEffect(() => {
+    const onBackPress = () => {
+      if (eventSlug) {
+        setEventDetails(null, null);
+        return true;
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [eventSlug]);
   // Note: loadStoredAuth() is already called by _layout.tsx on mount — no need to duplicate here.
 
   // Parse deep link when it changes

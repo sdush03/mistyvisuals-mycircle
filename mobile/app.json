@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "My Circle",
+    "name": "Misty Visuals",
     "slug": "my-circle",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,6 +8,7 @@
     "scheme": "mycircle",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "icon": "./assets/images/ios-icon.png",
       "bundleIdentifier": "com.mistyvisuals.mycircle",
       "supportsTablet": true,
       "infoPlist": {
@@ -24,8 +25,9 @@
     },
     "android": {
       "package": "com.mistyvisuals.mycircle",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "backgroundColor": "#111111",
+        "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "navigationBar": {
@@ -42,9 +44,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#111111",
+          "backgroundColor": "#ffffff",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 200
         }
       ],
       "expo-secure-store",
@@ -61,7 +63,8 @@
         }
       ],
       "expo-asset",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,
