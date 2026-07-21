@@ -3,6 +3,8 @@ import { Image, useColorScheme, StyleSheet, Platform, View, Pressable, Text, Mod
 import { Tabs, router, useSegments } from 'expo-router';
 import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import * as SplashScreen from 'expo-splash-screen';
+import { useFonts } from 'expo-font';
+import { Jost_400Regular, Jost_500Medium, Jost_600SemiBold } from '@expo-google-fonts/jost';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { useAuthStore } from '../store/authStore';
@@ -10,6 +12,8 @@ import api, { API_BASE_URL } from '../services/api';
 import LoginView from '../components/mycircle/LoginView';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+export const FONT_FUTURA = 'Jost_500Medium';
 
 export default function RootLayout() {
   return (
@@ -23,6 +27,12 @@ function RootLayoutContent() {
   const colorScheme = useColorScheme();
   const segments = useSegments();
   const insets = useSafeAreaInsets();
+
+  const [fontsLoaded] = useFonts({
+    Jost_400Regular,
+    Jost_500Medium,
+    Jost_600SemiBold,
+  });
 
   const [showProfileModal, setShowProfileModal] = useState(false);
 
@@ -50,13 +60,13 @@ function RootLayoutContent() {
     initialize();
   }, []);
 
-  // Hide the native splash screen as soon as auth is resolved.
+  // Hide the native splash screen as soon as auth and fonts are both resolved.
   // Using useEffect (not onLayout) so it fires on state changes, not just mount.
   useEffect(() => {
-    if (isReady && !isLoading) {
+    if (isReady && !isLoading && fontsLoaded) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [isReady, isLoading]);
+  }, [isReady, isLoading, fontsLoaded]);
 
   // Handle Android back button & swipe back gestures globally
   useEffect(() => {

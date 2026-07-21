@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
+import { FONT_FUTURA } from '../../app/_layout';
 
 // Web & iOS Client IDs from Google Cloud Console
 const GOOGLE_WEB_CLIENT_ID = '813548862884-nisdjmc8avi1p5c5joj7pp6o6lg7j6as.apps.googleusercontent.com';
@@ -303,7 +304,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   appName: {
-    fontFamily: Platform.OS === 'ios' ? 'Futura' : 'sans-serif-medium',
+    fontFamily: FONT_FUTURA,
     fontSize: 13,
     fontWeight: '500',
     letterSpacing: 5,
@@ -362,7 +363,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   googleBtnLabel: {
-    fontFamily: Platform.OS === 'ios' ? 'Futura' : 'sans-serif-medium',
+    fontFamily: FONT_FUTURA,
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '500',
@@ -393,7 +394,7 @@ const styles = StyleSheet.create({
     width: 15,
   },
   appleBtnLabel: {
-    fontFamily: Platform.OS === 'ios' ? 'Futura' : 'sans-serif-medium',
+    fontFamily: FONT_FUTURA,
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '500',
