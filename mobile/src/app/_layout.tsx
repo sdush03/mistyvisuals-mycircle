@@ -136,6 +136,16 @@ function RootLayoutContent() {
   const topInset = insets.top;
   const headerHeight = 52 + topInset;
 
+  // 1. Keep screen solid black until fonts & stored auth are initialized (prevents flicker)
+  if (!isReady || isLoading || !fontsLoaded) {
+    return <View style={{ flex: 1, backgroundColor: '#000000' }} />;
+  }
+
+  // 2. Render LoginView directly when unauthenticated (prevents underlying Home screen from mounting/glimpsing)
+  if (!token) {
+    return <LoginView onSuccess={() => {}} />;
+  }
+
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
@@ -167,19 +177,6 @@ function RootLayoutContent() {
           profile={profile}
           onOpenProfile={() => setShowProfileModal(true)}
         />
-
-        {/* ── App-level Login Overlay ── */}
-        <Modal
-          visible={!token}
-          animationType="none"
-          presentationStyle="fullScreen"
-          statusBarTranslucent
-          onRequestClose={() => {
-            BackHandler.exitApp();
-          }}
-        >
-          <LoginView onSuccess={() => {}} />
-        </Modal>
 
         {/* ── Top Right Profile Details Modal ── */}
         <Modal
