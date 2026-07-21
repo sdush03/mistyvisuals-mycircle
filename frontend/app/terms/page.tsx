@@ -6,10 +6,6 @@ export default function TermsPage() {
   return (
     <div className="min-h-screen bg-white text-neutral-900 font-sans selection:bg-neutral-100 selection:text-neutral-900">
       <div className="max-w-3xl mx-auto px-6 py-20 md:py-32">
-        <a href="/login" className="text-xs uppercase tracking-[0.2em] text-neutral-400 hover:text-neutral-900 transition-colors mb-12 inline-block italic">
-          ← Back to Login
-        </a>
-        
         <header className="mb-16">
           <h1 className="text-3xl md:text-5xl font-light tracking-tight mb-4">Terms & Conditions</h1>
           <p className="text-neutral-500 italic">Last updated: April 09, 2026</p>

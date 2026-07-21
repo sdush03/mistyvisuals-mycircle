@@ -10,11 +10,13 @@ import {
   Pressable,
   Dimensions,
   Animated,
+  Linking,
 } from 'react-native';
 
 const SCREEN = Dimensions.get('screen');
 import { LinearGradient } from 'expo-linear-gradient';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import * as WebBrowser from 'expo-web-browser';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
 import { FONT_FUTURA } from '../../app/_layout';
@@ -210,6 +212,22 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
     }
   };
 
+  const openTerms = async () => {
+    try {
+      await WebBrowser.openBrowserAsync('https://mycircle.mistyvisuals.com/terms');
+    } catch (err) {
+      console.error('Failed to open Terms URL', err);
+    }
+  };
+
+  const openPrivacy = async () => {
+    try {
+      await WebBrowser.openBrowserAsync('https://mycircle.mistyvisuals.com/privacy');
+    } catch (err) {
+      console.error('Failed to open Privacy Policy URL', err);
+    }
+  };
+
   return (
     <View style={styles.container}>
 
@@ -251,6 +269,7 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
         ]}
       >
         <Text style={styles.headline}>MY CIRCLE</Text>
+        <Text style={styles.subBrand}>BY MISTY VISUALS</Text>
         <Text style={styles.tagline}>Relive the celebrations{'\n'}that matter most.</Text>
       </Animated.View>
 
@@ -293,8 +312,13 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
 
             <Text style={styles.disclaimer}>
               By signing in, you agree to our{' '}
-              <Text style={styles.disclaimerLink}>Terms</Text> &{' '}
-              <Text style={styles.disclaimerLink}>Privacy Policy</Text>
+              <Text style={styles.disclaimerLink} onPress={openTerms}>
+                Terms
+              </Text>{' '}
+              &{' '}
+              <Text style={styles.disclaimerLink} onPress={openPrivacy}>
+                Privacy Policy
+              </Text>
             </Text>
           </>
         )}
@@ -342,34 +366,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    height: 36,
-    width: 160,
+    height: 60,
+    width: 260,
   },
 
   /* ── Center Headline ── */
   centerSection: {
     position: 'absolute',
-    left: 28,
-    right: 28,
-    bottom: SCREEN.height * 0.38,
-    alignItems: 'flex-start',
+    left: 24,
+    right: 24,
+    bottom: SCREEN.height * 0.30,
+    alignItems: 'center',
   },
   headline: {
     fontFamily: FONT_FUTURA,
-    fontSize: 42,
+    fontSize: 40,
     fontWeight: '700',
     color: '#ffffff',
     letterSpacing: 6,
-    marginBottom: 12,
-    lineHeight: 48,
+    marginBottom: 6,
+    textAlign: 'center',
+    lineHeight: 46,
+  },
+  subBrand: {
+    fontFamily: FONT_FUTURA,
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.80)',
+    letterSpacing: 4,
+    marginBottom: 20,
+    textAlign: 'center',
+    textTransform: 'uppercase',
   },
   tagline: {
     fontFamily: FONT_FUTURA,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '400',
-    color: 'rgba(255,255,255,0.75)',
+    color: 'rgba(255,255,255,0.85)',
     letterSpacing: 0.3,
-    lineHeight: 24,
+    textAlign: 'center',
+    lineHeight: 25,
   },
 
   /* ── Bottom Buttons ── */
