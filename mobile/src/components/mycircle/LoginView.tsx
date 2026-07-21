@@ -11,12 +11,14 @@ import {
   Dimensions,
   Animated,
   Linking,
+  Modal,
+  SafeAreaView,
 } from 'react-native';
 
 const SCREEN = Dimensions.get('screen');
 import { LinearGradient } from 'expo-linear-gradient';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import * as WebBrowser from 'expo-web-browser';
+import { WebView } from 'react-native-webview';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
 import { FONT_FUTURA } from '../../app/_layout';
@@ -43,6 +45,21 @@ interface LoginViewProps {
 
 export default function LoginView({ onSuccess }: LoginViewProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [webModal, setWebModal] = useState<{ url: string; title: string } | null>(null);
+
+  const openTerms = () => {
+    setWebModal({
+      url: 'https://mycircle.mistyvisuals.com/terms',
+      title: 'Terms & Conditions',
+    });
+  };
+
+  const openPrivacy = () => {
+    setWebModal({
+      url: 'https://mycircle.mistyvisuals.com/privacy',
+      title: 'Privacy Policy',
+    });
+  };
 
   // Splash-to-login animation sequence on mount
   const logoPosAnim = useRef(new Animated.Value(0)).current; // 0 = centered, 1 = top bar
@@ -279,22 +296,6 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
     }
   };
 
-  const openTerms = async () => {
-    try {
-      await WebBrowser.openBrowserAsync('https://mycircle.mistyvisuals.com/terms');
-    } catch (err) {
-      console.error('Failed to open Terms URL', err);
-    }
-  };
-
-  const openPrivacy = async () => {
-    try {
-      await WebBrowser.openBrowserAsync('https://mycircle.mistyvisuals.com/privacy');
-    } catch (err) {
-      console.error('Failed to open Privacy Policy URL', err);
-    }
-  };
-
   return (
     <View style={styles.container}>
 
@@ -426,6 +427,33 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
           </>
         )}
       </View>
+
+      {/* ── In-App Web View Modal (100% In-App for iOS & Android) ── */}
+      <Modal
+        visible={!!webModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setWebModal(null)}
+      >
+        <SafeAreaView style={styles.webModalContainer}>
+          <View style={styles.webModalHeader}>
+            <Text style={styles.webModalTitle}>{webModal?.title}</Text>
+            <Pressable onPress={() => setWebModal(null)} style={styles.webModalCloseBtn}>
+              <Text style={styles.webModalCloseText}>Done</Text>
+            </Pressable>
+          </View>
+          {webModal && (
+            <WebView
+              source={{ uri: webModal.url }}
+              style={styles.webView}
+              startInLoadingState
+              renderLoading={() => (
+                <ActivityIndicator size="large" color="#000000" style={styles.webLoading} />
+              )}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
 
     </View>
   );
@@ -587,5 +615,49 @@ const styles = StyleSheet.create({
   disclaimerLink: {
     color: 'rgba(255,255,255,0.70)',
     textDecorationLine: 'underline',
+  },
+
+  /* In-App Web View Modal Styles */
+  webModalContainer: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  webModalHeader: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e5e5',
+    backgroundColor: '#ffffff',
+  },
+  webModalTitle: {
+    fontFamily: FONT_FUTURA,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000000',
+  },
+  webModalCloseBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  webModalCloseText: {
+    fontFamily: FONT_FUTURA,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  webView: {
+    flex: 1,
+  },
+  webLoading: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
