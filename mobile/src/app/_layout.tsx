@@ -13,7 +13,8 @@ import LoginView from '../components/mycircle/LoginView';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-export const FONT_FUTURA = Platform.OS === 'ios' ? 'Futura' : 'Jost_500Medium';
+export const FONT_FUTURA = Platform.OS === 'ios' ? 'Futura-Medium' : 'Jost_500Medium';
+export const FONT_FUTURA_BOLD = Platform.OS === 'ios' ? 'Futura-Bold' : 'Jost_600SemiBold';
 
 export default function RootLayout() {
   return (

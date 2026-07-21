@@ -22,7 +22,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { WebView } from 'react-native-webview';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
-import { FONT_FUTURA } from '../../app/_layout';
+import { FONT_FUTURA, FONT_FUTURA_BOLD } from '../../app/_layout';
 
 // Web & iOS Client IDs from Google Cloud Console
 const GOOGLE_WEB_CLIENT_ID = '813548862884-nisdjmc8avi1p5c5joj7pp6o6lg7j6as.apps.googleusercontent.com';
@@ -512,7 +512,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headline: {
-    fontFamily: FONT_FUTURA,
+    fontFamily: FONT_FUTURA_BOLD,
     fontSize: 40,
     fontWeight: '700',
     color: '#ffffff',
@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
     lineHeight: 46,
   },
   subBrand: {
-    fontFamily: FONT_FUTURA,
+    fontFamily: FONT_FUTURA_BOLD,
     fontSize: 13,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.80)',
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   primaryBtnLabel: {
-    fontFamily: FONT_FUTURA,
+    fontFamily: FONT_FUTURA_BOLD,
     color: '#000000',
     fontSize: 15,
     fontWeight: '600',
