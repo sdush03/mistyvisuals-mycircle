@@ -73,7 +73,19 @@ export default function MyCircleScreen() {
           return;
         }
       } catch (err: any) {
+        const status = err?.response?.status;
         const errorMsg = err?.response?.data?.error || '';
+
+        if (status === 404) {
+          Alert.alert(
+            'Celebration Not Found',
+            'This celebration is no longer available or the link is invalid.'
+          );
+          setEventDetails(null, null);
+          setEventRequiresPasscode(null);
+          return;
+        }
+
         if (errorMsg.toLowerCase().includes('passcode')) {
           setEventRequiresPasscode(true);
           return;
@@ -87,9 +99,19 @@ export default function MyCircleScreen() {
         const res = await api.get(`/api/gallery/public/events/${eventSlug}`);
         const eventData = res.data;
         setEventRequiresPasscode(!!eventData.hasPasscode);
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to validate event requirements', err);
-        setEventRequiresPasscode(false);
+        const status = err?.response?.status;
+        if (status === 404) {
+          Alert.alert(
+            'Celebration Not Found',
+            'This celebration is no longer available or the link is invalid.'
+          );
+          setEventDetails(null, null);
+          setEventRequiresPasscode(null);
+        } else {
+          setEventRequiresPasscode(false);
+        }
       } finally {
         setIsValidatingEvent(false);
       }

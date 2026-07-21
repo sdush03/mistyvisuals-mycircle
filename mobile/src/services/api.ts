@@ -39,7 +39,7 @@ api.interceptors.response.use(
       const url: string = error.config?.url || '';
       const isAuthEndpoint =
         url.includes('/api/gallery/family/auth') ||
-        url.includes('/api/gallery/public/events') && url.includes('/auth');
+        (url.includes('/api/gallery/public/events') && url.includes('/auth') && !url.includes('/auth-from-family'));
       if (isAuthEndpoint) {
         await useAuthStore.getState().logout();
       }

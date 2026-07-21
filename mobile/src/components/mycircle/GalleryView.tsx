@@ -74,7 +74,12 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         if (eventRes.data) {
           setEventDetailsData(eventRes.data);
         }
-      } catch (e) {
+      } catch (e: any) {
+        if (e?.response?.status === 404) {
+          Alert.alert('Celebration Not Found', 'This celebration is no longer available or the link is invalid.');
+          onChangeEvent();
+          return;
+        }
         console.warn('Failed to fetch event details:', e);
       }
 
@@ -86,13 +91,24 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         const ssoRes = await api.post(
           `/api/gallery/public/events/${eventSlug}/auth-from-family`,
           { code: currentPasscode || undefined },
-          { headers: { Authorization: `Bearer ${familyToken}` } }
+          { headers: familyToken ? { Authorization: `Bearer ${familyToken}` } : {} }
         );
         if (ssoRes.data?.token) {
           eventHeadersRef.current = { Authorization: `Bearer ${ssoRes.data.token}` };
+        } else if (familyToken) {
+          eventHeadersRef.current = { Authorization: `Bearer ${familyToken}` };
         }
       } catch (e: any) {
-        console.warn('SSO token exchange failed:', e?.response?.data || e?.message);
+        if (e?.response?.status === 404) {
+          Alert.alert('Celebration Not Found', 'This celebration is no longer available or the link is invalid.');
+          onChangeEvent();
+          return;
+        }
+        const errDetail = e?.response?.data?.error || (typeof e?.response?.data === 'string' ? e?.response?.data : JSON.stringify(e?.response?.data)) || e?.message;
+        console.warn('SSO token exchange failed:', errDetail);
+        if (familyToken) {
+          eventHeadersRef.current = { Authorization: `Bearer ${familyToken}` };
+        }
       }
 
       const eventHeaders = eventHeadersRef.current;

@@ -1966,7 +1966,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
         return reply.code(401).send({ error: 'Invalid or expired Circle session' });
       }
 
-      if (decoded.role !== 'family' || !decoded.email) {
+      if ((decoded.role !== 'family' && decoded.role !== 'guest') || !decoded.email) {
         return reply.code(403).send({ error: 'Access denied: Invalid session role' });
       }
 
@@ -1980,7 +1980,9 @@ module.exports = async function galleryRoutes(fastify, opts) {
       const user = await prisma.circleUser.findUnique({
         where: { email: decoded.email }
       });
-      if (!user) return reply.code(404).send({ error: 'User profile not found' });
+      if (!user && decoded.role === 'family') {
+        return reply.code(404).send({ error: 'User profile not found' });
+      }
 
       // Find or create guest for this wedding event
       let guest = await prisma.guest.findFirst({
@@ -2011,15 +2013,21 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       }
 
+      const userName = user ? user.name : (guest ? guest.name : 'Guest');
+      const userPhone = user ? user.phoneNumber : (guest ? guest.phoneNumber : null);
+      const userProvider = user ? user.provider : (guest ? guest.provider : 'circle');
+      const userProviderId = user ? user.providerId : (guest ? guest.providerId : 'circle');
+      const userId = user ? user.id : (decoded.userId || guest?.id || 0);
+
       if (!guest) {
         guest = await prisma.guest.create({
           data: {
             eventId: event.id,
             email: decoded.email,
-            name: user.name,
-            phoneNumber: user.phoneNumber,
-            provider: user.provider,
-            providerId: user.providerId,
+            name: userName,
+            phoneNumber: userPhone,
+            provider: userProvider,
+            providerId: userProviderId,
             hasFullAccess: isCodeValid
           }
         });
@@ -2033,13 +2041,15 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       }
 
-      await ensureUserSelfieMigrated(user.id, decoded.email);
-      const hasSelfie = checkUserSelfie(user.id);
+      if (user) {
+        await ensureUserSelfieMigrated(user.id, decoded.email);
+      }
+      const hasSelfie = user ? checkUserSelfie(user.id) : false;
 
       // Generate secure guest JWT session
       const sessionToken = fastify.jwt.sign({
         guestId: guest.id,
-        userId: user.id,
+        userId: userId,
         eventId: event.id,
         email: guest.email,
         role: 'guest',
@@ -2050,9 +2060,9 @@ module.exports = async function galleryRoutes(fastify, opts) {
         token: sessionToken,
         guest: {
           id: guest.id,
-          name: user.name || guest.name,
+          name: userName || guest.name,
           email: guest.email,
-          phoneNumber: user.phoneNumber,
+          phoneNumber: userPhone,
           hasFullAccess: guest.hasFullAccess,
           hasSelfie
         }
@@ -2954,7 +2964,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
       for (const g of guestProfiles) {
         const event = g.galleryEvent;
-        if (!event || event.slug === 'system-directory') continue;
+        if (!event || !event.active || event.slug === 'system-directory') continue;
 
         let matchedCount = 0;
 

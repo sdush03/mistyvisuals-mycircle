@@ -26,14 +26,22 @@ export default function PasscodeView({ onSuccess, onBack }: PasscodeViewProps) {
     try {
       setIsSubmitting(true);
 
-      // Verify the passcode by hitting the upgrade session endpoint
-      const res = await api.post(`/api/gallery/public/events/${eventSlug}/upgrade`, {
-        code: trimmed,
-      }, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      // Verify the passcode by authenticating with auth-from-family endpoint
+      let res;
+      try {
+        res = await api.post(
+          `/api/gallery/public/events/${eventSlug}/auth-from-family`,
+          { code: trimmed },
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+        );
+      } catch (authErr) {
+        // Fallback to upgrade endpoint if auth-from-family returns error
+        res = await api.post(
+          `/api/gallery/public/events/${eventSlug}/upgrade`,
+          { code: trimmed },
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+        );
+      }
       
       const { token: newToken } = res.data;
       

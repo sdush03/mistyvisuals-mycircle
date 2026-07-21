@@ -18,7 +18,7 @@ async function verifyGuestAuth(req, reply) {
     // Access fastify instance via req.server
     const decoded = req.server.jwt.verify(token);
     let isAdminPreview = false;
-    if (decoded.role !== 'guest') {
+    if (decoded.role !== 'guest' && decoded.role !== 'family') {
       if (decoded.isAdminPreview && req.params.slug && decoded.slug.toLowerCase().trim() === req.params.slug.toLowerCase().trim()) {
         isAdminPreview = true;
       } else {
@@ -35,7 +35,7 @@ async function verifyGuestAuth(req, reply) {
       if (!event) {
         return reply.code(404).send({ error: 'Event not found' });
       }
-      if (!isAdminPreview && event.id !== decoded.eventId) {
+      if (!isAdminPreview && decoded.role === 'guest' && decoded.eventId && event.id !== decoded.eventId) {
         return reply.code(403).send({ error: 'Token does not match this event' });
       }
       if (!event.active && !isAdminPreview) {
@@ -63,12 +63,31 @@ async function verifyGuestAuth(req, reply) {
         });
       }
       guestId = adminGuest.id;
+    } else if (decoded.role === 'family' && event && decoded.email) {
+      let familyGuest = await prisma.guest.findFirst({
+        where: { eventId: event.id, email: decoded.email }
+      });
+      if (!familyGuest) {
+        const user = await prisma.circleUser.findUnique({ where: { email: decoded.email } });
+        familyGuest = await prisma.guest.create({
+          data: {
+            eventId: event.id,
+            email: decoded.email,
+            name: user ? user.name : (decoded.name || 'Family Guest'),
+            phoneNumber: user ? user.phoneNumber : null,
+            provider: user ? user.provider : 'circle',
+            providerId: user ? user.providerId : 'circle',
+            hasFullAccess: !event.fullCode && !event.partialCode
+          }
+        });
+      }
+      guestId = familyGuest.id;
     }
 
     // Fetch guest status from database to get the real-time access level
-    const dbGuest = await prisma.guest.findUnique({
+    const dbGuest = guestId ? await prisma.guest.findUnique({
       where: { id: guestId }
-    });
+    }) : null;
 
     if (!isAdminPreview) {
       if (!dbGuest) {
@@ -82,6 +101,8 @@ async function verifyGuestAuth(req, reply) {
     req.guest = {
       ...decoded,
       guestId,
+      userId: decoded.userId || (dbGuest ? dbGuest.id : 0),
+      eventId: event ? event.id : decoded.eventId,
       role: 'guest',
       hasFullAccess: dbGuest ? dbGuest.hasFullAccess : decoded.hasFullAccess,
       isPreviewMode: isAdminPreview
