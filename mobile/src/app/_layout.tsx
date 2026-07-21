@@ -14,7 +14,7 @@ import LoginView from '../components/mycircle/LoginView';
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export const FONT_FUTURA = Platform.OS === 'ios' ? 'Futura-Medium' : 'Jost_500Medium';
-export const FONT_FUTURA_BOLD = Platform.OS === 'ios' ? 'Futura-Bold' : 'Jost_600SemiBold';
+export const FONT_FUTURA_BOLD = Platform.OS === 'ios' ? 'Futura-CondensedMedium' : 'Jost_600SemiBold';
 
 export default function RootLayout() {
   return (
@@ -61,13 +61,16 @@ function RootLayoutContent() {
     initialize();
   }, []);
 
+  const [isSplashHidden, setIsSplashHidden] = useState(false);
+
   // Hide the native splash screen as soon as auth and fonts are both resolved.
-  // Using useEffect (not onLayout) so it fires on state changes, not just mount.
   useEffect(() => {
-    if (isReady && !isLoading && fontsLoaded) {
-      SplashScreen.hideAsync().catch(() => {});
+    if (isReady && !isLoading && fontsLoaded && !isSplashHidden) {
+      SplashScreen.hideAsync()
+        .then(() => setIsSplashHidden(true))
+        .catch(() => setIsSplashHidden(true));
     }
-  }, [isReady, isLoading, fontsLoaded]);
+  }, [isReady, isLoading, fontsLoaded, isSplashHidden]);
 
   // Handle Android back button & swipe back gestures globally
   useEffect(() => {
@@ -137,14 +140,14 @@ function RootLayoutContent() {
   const topInset = insets.top;
   const headerHeight = 52 + topInset;
 
-  // 1. Keep screen solid black until fonts & stored auth are initialized (prevents flicker)
+  // 1. Keep screen solid white matching native splash until fonts & stored auth are initialized (prevents black flicker)
   if (!isReady || isLoading || !fontsLoaded) {
-    return <View style={{ flex: 1, backgroundColor: '#000000' }} />;
+    return <View style={{ flex: 1, backgroundColor: '#ffffff' }} />;
   }
 
   // 2. Render LoginView directly when unauthenticated (prevents underlying Home screen from mounting/glimpsing)
   if (!token) {
-    return <LoginView onSuccess={() => {}} />;
+    return <LoginView onSuccess={() => {}} startAnimation={isSplashHidden} />;
   }
 
   return (

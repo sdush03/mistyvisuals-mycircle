@@ -7,6 +7,11 @@
     "icon": "./assets/images/icon.png",
     "scheme": "mycircle",
     "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/images/logo-black.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "ios": {
       "icon": "./assets/images/ios-icon.png",
       "bundleIdentifier": "com.mistyvisuals.mycircle",
@@ -45,8 +50,9 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#ffffff",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200
+          "image": "./assets/images/logo-black.png",
+          "imageWidth": 160,
+          "resizeMode": "contain"
         }
       ],
       "expo-secure-store",

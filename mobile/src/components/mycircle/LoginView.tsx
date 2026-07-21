@@ -42,9 +42,10 @@ try {
 
 interface LoginViewProps {
   onSuccess: () => void;
+  startAnimation?: boolean;
 }
 
-export default function LoginView({ onSuccess }: LoginViewProps) {
+export default function LoginView({ onSuccess, startAnimation = true }: LoginViewProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [webModal, setWebModal] = useState<{ url: string; title: string } | null>(null);
 
@@ -72,7 +73,7 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
 
   // Splash-to-login animation sequence on mount
   const logoPosAnim = useRef(new Animated.Value(0)).current; // 0 = centered, 1 = top bar
-  const logoFadeAnim = useRef(new Animated.Value(0)).current;
+  const logoFadeAnim = useRef(new Animated.Value(1)).current; // Visible immediately to transition smoothly from native splash
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const googleAnim = useRef(new Animated.Value(0)).current;
   const appleAnim = useRef(new Animated.Value(0)).current;
@@ -86,7 +87,7 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
 
   const logoScale = logoPosAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [1.55, 1],
+    outputRange: [1.15, 1],
   });
 
   // Dark overlay gradient opacity: soft during splash center, deepens as logo slides up to header
@@ -116,45 +117,40 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
   });
 
   useEffect(() => {
-    // 1. Logo fades in at screen center
-    Animated.timing(logoFadeAnim, {
+    if (!startAnimation) return;
+
+    // 1. Slide logo UP to top header once native splash screen is dismissed
+    Animated.timing(logoPosAnim, {
       toValue: 1,
-      duration: 500,
+      duration: 750,
       useNativeDriver: true,
     }).start(() => {
-      // 2. Logo holds for 250ms then smoothly slides UP to top header
-      Animated.timing(logoPosAnim, {
+      // 2. Reveal center text and staggered bottom controls
+      Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 750,
+        duration: 650,
         useNativeDriver: true,
-      }).start(() => {
-        // 3. Reveal center text and staggered bottom controls
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 650,
-          useNativeDriver: true,
-        }).start();
+      }).start();
 
-        Animated.stagger(140, [
-          Animated.timing(googleAnim, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(appleAnim, {
-            toValue: 1,
-            duration: 750,
-            useNativeDriver: true,
-          }),
-          Animated.timing(termsAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      });
+      Animated.stagger(140, [
+        Animated.timing(googleAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(appleAnim, {
+          toValue: 1,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(termsAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ]).start();
     });
-  }, []);
+  }, [startAnimation]);
 
   const setAuth = useAuthStore((state) => state.setAuth);
   const updateProfile = useAuthStore((state) => state.updateProfile);
@@ -530,8 +526,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    height: 60,
-    width: 260,
+    height: 44,
+    width: 180,
   },
 
   /* ── Center Headline ── */
@@ -545,7 +541,6 @@ const styles = StyleSheet.create({
   headline: {
     fontFamily: FONT_FUTURA,
     fontSize: 40,
-    fontWeight: '500',
     color: '#ffffff',
     letterSpacing: 6,
     marginBottom: 6,
@@ -555,7 +550,6 @@ const styles = StyleSheet.create({
   subBrand: {
     fontFamily: FONT_FUTURA_BOLD,
     fontSize: 13,
-    fontWeight: '600',
     color: 'rgba(255,255,255,0.80)',
     letterSpacing: 4,
     marginBottom: 20,
@@ -565,7 +559,6 @@ const styles = StyleSheet.create({
   tagline: {
     fontFamily: FONT_FUTURA,
     fontSize: 17,
-    fontWeight: '400',
     color: 'rgba(255,255,255,0.85)',
     letterSpacing: 0.3,
     textAlign: 'center',
@@ -600,7 +593,6 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FUTURA_BOLD,
     color: '#000000',
     fontSize: 15,
-    fontWeight: '600',
     letterSpacing: 0.3,
   },
 
@@ -621,7 +613,6 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FUTURA,
     color: '#ffffff',
     fontSize: 15,
-    fontWeight: '500',
     letterSpacing: 0.3,
   },
 
@@ -671,9 +662,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   webModalTitle: {
-    fontFamily: FONT_FUTURA,
+    fontFamily: FONT_FUTURA_BOLD,
     fontSize: 16,
-    fontWeight: '600',
     color: '#000000',
   },
   webModalCloseBtn: {
@@ -681,9 +671,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   webModalCloseText: {
-    fontFamily: FONT_FUTURA,
+    fontFamily: FONT_FUTURA_BOLD,
     fontSize: 16,
-    fontWeight: '600',
     color: '#007AFF',
   },
   webView: {
