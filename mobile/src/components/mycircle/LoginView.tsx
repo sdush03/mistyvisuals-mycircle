@@ -13,6 +13,7 @@ import {
   Linking,
   Modal,
   SafeAreaView,
+  StatusBar,
 } from 'react-native';
 
 const SCREEN = Dimensions.get('screen');
@@ -432,10 +433,11 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
       <Modal
         visible={!!webModal}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
         onRequestClose={() => setWebModal(null)}
       >
         <SafeAreaView style={styles.webModalContainer}>
+          <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
           <View style={styles.webModalHeader}>
             <Text style={styles.webModalTitle}>{webModal?.title}</Text>
             <Pressable onPress={() => setWebModal(null)} style={styles.webModalCloseBtn}>
@@ -621,6 +623,7 @@ const styles = StyleSheet.create({
   webModalContainer: {
     flex: 1,
     backgroundColor: '#ffffff',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 0,
   },
   webModalHeader: {
     height: 52,
