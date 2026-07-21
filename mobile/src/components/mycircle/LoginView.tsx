@@ -265,7 +265,7 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
       <Animated.View
         style={[
           styles.centerSection,
-          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+          { opacity: fadeAnim },
         ]}
       >
         <Text style={styles.headline}>MY CIRCLE</Text>
