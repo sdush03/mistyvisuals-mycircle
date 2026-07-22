@@ -6,9 +6,14 @@ import {
   Modal, 
   ScrollView, 
   Image, 
-  Pressable 
+  Pressable,
+  StatusBar,
+  Dimensions
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FONT_MONTSERRAT_REGULAR } from '../../constants/fonts';
+
+const { height: screenHeight } = Dimensions.get('screen');
 
 interface Article {
   id: string;
@@ -26,13 +31,41 @@ interface ArticleViewProps {
   article: Article | null;
 }
 
+const formatDateText = (rawDate?: string): string => {
+  if (!rawDate) return '';
+  const isoMatch = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10);
+    const monthIndex = parseInt(isoMatch[2], 10) - 1;
+    const day = parseInt(isoMatch[3], 10);
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    if (months[monthIndex]) {
+      return `${months[monthIndex]} ${day}, ${year}`;
+    }
+  }
+
+  const parsed = new Date(rawDate);
+  if (!isNaN(parsed.getTime())) {
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return `${months[parsed.getMonth()]} ${parsed.getDate()}, ${parsed.getFullYear()}`;
+  }
+
+  return rawDate;
+};
+
 export default function ArticleView({ isOpen, onClose, article }: ArticleViewProps) {
   const insets = useSafeAreaInsets();
   if (!article) return null;
 
   const categoryText = (article.category || '').toUpperCase();
   const titleText = article.title || '';
-  const dateText = article.date || '';
+  const dateText = formatDateText(article.date);
   const readTimeText = article.readTime || '';
   const contentParagraphs = Array.isArray(article.content) ? article.content : [];
 
@@ -42,15 +75,20 @@ export default function ArticleView({ isOpen, onClose, article }: ArticleViewPro
       animationType="slide"
       presentationStyle="fullScreen"
       onRequestClose={onClose}
+      statusBarTranslucent={true}
     >
       <View style={styles.container}>
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
-          <Pressable style={styles.closeButton} onPress={onClose}>
-            <Text style={styles.closeText}>✕ CLOSE</Text>
-          </Pressable>
-          <Text style={styles.headerTitle}>CIRCLE JOURNAL</Text>
-          <View style={{ width: 60 }} />
-        </View>
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+
+        {/* Borderless Editorial Back Button */}
+        <Pressable 
+          style={[styles.editorialBackButton, { top: Math.max(insets.top + 16, 48) }]} 
+          onPress={onClose}
+          hitSlop={16}
+        >
+          <Text style={styles.editorialBackIcon}>←</Text>
+          <Text style={styles.editorialBackText}>BACK</Text>
+        </Pressable>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Cover Image */}
@@ -75,8 +113,7 @@ export default function ArticleView({ isOpen, onClose, article }: ArticleViewPro
 
           {/* Body Content */}
           <View style={styles.bodyContainer}>
-            {article.content.map((paragraph, index) => {
-              // Highlight the first paragraph with larger font (drop cap/editorial style)
+            {contentParagraphs.map((paragraph, index) => {
               const isFirst = index === 0;
               return (
                 <Text 
@@ -109,40 +146,43 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ffffff',
   },
-  header: {
+  editorialBackButton: {
+    position: 'absolute',
+    left: 24,
+    zIndex: 100,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0ede8',
-    backgroundColor: '#ffffff',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
   },
-  closeButton: {
-    paddingVertical: 12,
+  editorialBackIcon: {
+    color: '#ffffff',
+    fontSize: 19,
+    lineHeight: 19,
+    marginRight: 3,
+    transform: [{ translateY: -3.5 }],
+    textShadowColor: 'rgba(0, 0, 0, 0.65)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
-  closeText: {
-    fontFamily: 'System',
+  editorialBackText: {
+    fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 2,
-    color: '#8c867e',
-  },
-  headerTitle: {
-    fontFamily: 'System',
-    fontSize: 11,
-    fontWeight: '700',
+    lineHeight: 14,
     letterSpacing: 3,
-    color: '#1c1a18',
-    textAlign: 'center',
+    color: '#ffffff',
+    textShadowColor: 'rgba(0, 0, 0, 0.65)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   scrollContent: {
     paddingBottom: 60,
   },
   coverContainer: {
     width: '100%',
-    height: 260,
+    height: Math.round(screenHeight * 0.70),
     backgroundColor: '#f5f5f5',
+    position: 'relative',
   },
   coverImage: {
     width: '100%',
@@ -151,7 +191,7 @@ const styles = StyleSheet.create({
   },
   coverOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.03)', // Subtle tint
+    backgroundColor: 'rgba(0, 0, 0, 0.15)', // Gradient/tint overlay for close button contrast
   },
   metaContainer: {
     paddingHorizontal: 24,
@@ -159,7 +199,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   articleCategory: {
-    fontFamily: 'System',
     fontSize: 10,
     fontWeight: '600',
     letterSpacing: 3,
@@ -180,13 +219,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   metaText: {
-    fontFamily: 'System',
     fontSize: 11,
     color: '#8c867e',
     letterSpacing: 0.5,
   },
   metaDivider: {
-    fontFamily: 'System',
     fontSize: 11,
     color: '#ddd8d0',
     marginHorizontal: 8,
@@ -224,7 +261,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   footerBrand: {
-    fontFamily: 'System',
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 4,
@@ -232,7 +268,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   footerTagline: {
-    fontFamily: 'System',
     fontSize: 8,
     fontWeight: '500',
     letterSpacing: 2,

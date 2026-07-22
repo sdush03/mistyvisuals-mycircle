@@ -23,6 +23,7 @@ import api from '../services/api';
 
 import { Linking } from 'react-native';
 import YoutubePlayer from 'react-native-youtube-iframe';
+import { Image as ExpoImage } from 'expo-image';
 import {
   HeroType,
   type HeroCard,
@@ -217,6 +218,66 @@ export default function HomeScreen() {
       .finally(() => setCountsLoaded(true));
   }, []);
 
+  const storyDetailsCacheRef = useRef<Record<string, any>>({});
+
+  // Helper to parse full story API payload into cached gallery format
+  const parseFullStoryPayload = useCallback((fullStory: any, fallbackStory?: any) => {
+    const photos = fullStory.photos || [];
+    const galleryImages = photos.map((p: any, idx: number) => {
+      const thumbUri = p.file_url_thumb || p.file_url_mobile || p.thumbnail_url || p.thumbnailUrl || p.mobile_url || p.thumb_url || p.preview_url || p.r2Url || p.file_url || '';
+      const fullUri = p.file_url || p.r2Url || p.file_url_mobile || p.file_url_thumb || p.thumbnail_url || '';
+      
+      let originalAspect: number | null = null;
+      if (p.aspect_ratio || p.aspectRatio) {
+        originalAspect = Number(p.aspect_ratio || p.aspectRatio);
+      } else if (p.width && p.height && Number(p.height) > 0) {
+        originalAspect = Number(p.width) / Number(p.height);
+      }
+
+      const isHorizontal = originalAspect ? originalAspect > 1.05 : false;
+
+      const verticalRatios = [2/3, 3/4, 4/5];
+      const vertRatio = verticalRatios[idx % 3];
+
+      const finalAspect = isHorizontal 
+        ? (originalAspect && originalAspect > 1.0 ? originalAspect : 3/2) 
+        : (originalAspect && originalAspect <= 1.0 ? originalAspect : vertRatio);
+
+      return { 
+        originalIndex: idx,
+        id: p.id || `photo-${idx}`,
+        uri: thumbUri,
+        fullUri: fullUri,
+        blurUri: p.blur_data_url || p.blurDataUrl || p.cover_blur_data_url || null,
+        width: p.width ? Number(p.width) : null,
+        height: p.height ? Number(p.height) : null,
+        aspectRatio: finalAspect,
+        isHorizontal: isHorizontal,
+        category: p.tab_name || p.tabName || p.category || p.tag || p.tagName || p.tab || p.event_name || p.eventName || p.folder_name || p.sub_folder || null
+      };
+    });
+
+    const rawTabs = fullStory.tabs || fullStory.categories || fullStory.category || [];
+    const parsedTabs = Array.isArray(rawTabs) 
+      ? rawTabs.filter((s: any) => typeof s === 'string' && s.trim().length <= 25)
+      : (typeof rawTabs === 'string' ? rawTabs.split(',').map((s: string) => s.trim()).filter((s: string) => s && s.length <= 25) : []);
+
+    const coverUri = fullStory.cover_image_mobile_url || fullStory.cover_image_url || fullStory.grid_image_url;
+
+    return {
+      ...(fallbackStory || {}),
+      id: String(fullStory.id || (fallbackStory && fallbackStory.id)),
+      title: fullStory.title || (fallbackStory && fallbackStory.title),
+      subtitle: fullStory.subtitle || fullStory.category || (fallbackStory && fallbackStory.subtitle),
+      location: fullStory.location || (fallbackStory && fallbackStory.location),
+      date: fullStory.date || (fallbackStory && fallbackStory.date),
+      coverImage: coverUri ? { uri: coverUri } : (fallbackStory && fallbackStory.coverImage),
+      description: fullStory.description || fullStory.subtitle || (fallbackStory && fallbackStory.description),
+      images: galleryImages,
+      tabs: parsedTabs,
+    };
+  }, []);
+
   // Fetch featured stories & films from website API in background
   useEffect(() => {
     const fetchWebsiteData = async () => {
@@ -227,6 +288,23 @@ export default function HomeScreen() {
           if (Array.isArray(storiesData) && storiesData.length > 0) {
             setWebsiteStories(storiesData);
             AsyncStorage.setItem('@mycircle_cached_website_stories', JSON.stringify(storiesData)).catch(() => {});
+
+            // Background pre-fetch full story details for top stories so tapping them opens INSTANTLY
+            storiesData.forEach(async (s: any) => {
+              if (!s.slug) return;
+              try {
+                const sRes = await fetch(`https://www.mistyvisuals.com/api/website/stories/${s.slug}`);
+                if (sRes.ok) {
+                  const fullStory = await sRes.json();
+                  const parsed = parseFullStoryPayload(fullStory, s);
+                  storyDetailsCacheRef.current[s.slug] = parsed;
+                  const thumbUris = (parsed.images || []).map((g: any) => g.uri).filter(Boolean);
+                  if (thumbUris.length > 0) {
+                    ExpoImage.prefetch(thumbUris);
+                  }
+                }
+              } catch (_) {}
+            });
           }
         }
       } catch (e) {
@@ -247,7 +325,7 @@ export default function HomeScreen() {
       }
     };
     fetchWebsiteData();
-  }, []);
+  }, [parseFullStoryPayload]);
 
   // Fetch joined wedding events if authenticated
   const fetchUserEvents = useCallback(async () => {
@@ -280,32 +358,33 @@ export default function HomeScreen() {
   }, [fetchUserEvents]);
 
   const handleStoryPress = async (story: any) => {
-    if (story.slug) {
+    // 0ms instant load if pre-cached in background
+    if (story && story.slug && storyDetailsCacheRef.current[story.slug]) {
+      setSelectedStory(storyDetailsCacheRef.current[story.slug]);
+      return;
+    }
+
+    // Immediately open modal with existing story metadata while fetching details
+    setSelectedStory(story);
+
+    if (story && story.slug) {
       try {
         const res = await fetch(`https://www.mistyvisuals.com/api/website/stories/${story.slug}`);
         if (res.ok) {
           const fullStory = await res.json();
-          const photos = fullStory.photos || [];
-          const galleryImages = photos.map((p: any) => ({ uri: p.file_url_mobile || p.file_url }));
-          const coverUri = fullStory.cover_image_mobile_url || fullStory.cover_image_url || fullStory.grid_image_url;
-          setSelectedStory({
-            id: String(fullStory.id),
-            title: fullStory.title,
-            subtitle: fullStory.subtitle || fullStory.category || 'Portfolio Story',
-            location: fullStory.location || 'Misty Visuals',
-            date: fullStory.date || '',
-            coverImage: coverUri ? { uri: coverUri } : null,
-            description: fullStory.subtitle || 'Unscripted moments and intentional design.',
-            images: galleryImages.length > 0 ? galleryImages : (coverUri ? [{ uri: coverUri }] : []),
-          });
-          return;
+          const parsed = parseFullStoryPayload(fullStory, story);
+          storyDetailsCacheRef.current[story.slug] = parsed;
+          setSelectedStory(parsed);
+
+          const thumbUris = (parsed.images || []).map((g: any) => g.uri).filter(Boolean);
+          if (thumbUris.length > 0) {
+            ExpoImage.prefetch(thumbUris);
+          }
         }
       } catch (e) {
         console.warn('Failed to load full story from website:', e);
       }
     }
-
-    setSelectedStory(story);
   };
 
   // Helper for same-day date comparison
