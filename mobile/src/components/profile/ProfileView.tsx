@@ -97,7 +97,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     return false;
   };
 
+  const isCoupleRole = profile?.displayRole === 'BRIDE' || profile?.displayRole === 'GROOM';
+
   const filteredMoodboardSaves = saves.filter((item) => {
+    if (!isCoupleRole) {
+      return isMine(item);
+    }
     if (moodboardFilter === 'mine') {
       return isMine(item);
     }
@@ -231,57 +236,59 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             {/* Sub-Tab 1: Moodboard (Inspo Saves) */}
             {savesSubTab === 'moodboard' ? (
               <View style={styles.subContentContainer}>
-                {/* Moodboard Filter Pills: All | Mine | Partner's */}
-                <View style={styles.filterContainer}>
-                  <Pressable
-                    style={[
-                      styles.filterPill,
-                      moodboardFilter === 'all' && styles.activeFilterPill,
-                    ]}
-                    onPress={() => setMoodboardFilter('all')}
-                  >
-                    <Text
+                {/* Moodboard Filter Pills: All | Mine | Partner's (Only shown for Bride or Groom) */}
+                {isCoupleRole && (
+                  <View style={styles.filterContainer}>
+                    <Pressable
                       style={[
-                        styles.filterText,
-                        moodboardFilter === 'all' && styles.activeFilterText,
+                        styles.filterPill,
+                        moodboardFilter === 'all' && styles.activeFilterPill,
                       ]}
+                      onPress={() => setMoodboardFilter('all')}
                     >
-                      All
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.filterPill,
-                      moodboardFilter === 'mine' && styles.activeFilterPill,
-                    ]}
-                    onPress={() => setMoodboardFilter('mine')}
-                  >
-                    <Text
+                      <Text
+                        style={[
+                          styles.filterText,
+                          moodboardFilter === 'all' && styles.activeFilterText,
+                        ]}
+                      >
+                        All
+                      </Text>
+                    </Pressable>
+                    <Pressable
                       style={[
-                        styles.filterText,
-                        moodboardFilter === 'mine' && styles.activeFilterText,
+                        styles.filterPill,
+                        moodboardFilter === 'mine' && styles.activeFilterPill,
                       ]}
+                      onPress={() => setMoodboardFilter('mine')}
                     >
-                      Mine
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.filterPill,
-                      moodboardFilter === 'partner' && styles.activeFilterPill,
-                    ]}
-                    onPress={() => setMoodboardFilter('partner')}
-                  >
-                    <Text
+                      <Text
+                        style={[
+                          styles.filterText,
+                          moodboardFilter === 'mine' && styles.activeFilterText,
+                        ]}
+                      >
+                        Mine
+                      </Text>
+                    </Pressable>
+                    <Pressable
                       style={[
-                        styles.filterText,
-                        moodboardFilter === 'partner' && styles.activeFilterText,
+                        styles.filterPill,
+                        moodboardFilter === 'partner' && styles.activeFilterPill,
                       ]}
+                      onPress={() => setMoodboardFilter('partner')}
                     >
-                      Partner's
-                    </Text>
-                  </Pressable>
-                </View>
+                      <Text
+                        style={[
+                          styles.filterText,
+                          moodboardFilter === 'partner' && styles.activeFilterText,
+                        ]}
+                      >
+                        Partner's
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
 
                 {loading ? (
                   <ActivityIndicator size="large" color="#000" style={{ marginTop: 40 }} />
