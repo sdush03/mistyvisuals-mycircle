@@ -376,6 +376,7 @@ model Guest {
   providerId      String       @map("provider_id") @db.VarChar(255)
   createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamp(6)
   hasFullAccess   Boolean?     @default(false) @map("has_full_access")
+  displayRole     String?      @map("display_role") @db.VarChar(50)
   isBlocked       Boolean      @default(false) @map("is_blocked")
 
   galleryEvent    GalleryEvent @relation(fields: [eventId], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -1392,3 +1393,19 @@ enum NegotiationType {
 
   @@map("negotiation_type")
 }
+
+model SavedPhoto {
+  id          Int      @id @default(autoincrement())
+  eventId     Int?     @map("event_id")
+  userId      Int      @map("user_id")
+  displayRole String   @default("GUEST") @map("display_role") @db.VarChar(50)
+  photoUrl    String   @map("photo_url") @db.VarChar(1024)
+  storyId     String?  @map("story_id") @db.VarChar(255)
+  sourceType  String   @default("FEATURED_STORY") @map("source_type") @db.VarChar(50)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([eventId], map: "idx_saved_photos_event_id")
+  @@index([userId], map: "idx_saved_photos_user_id")
+  @@map("saved_photos")
+}
+

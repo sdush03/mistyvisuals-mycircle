@@ -1,0 +1,56 @@
+================================================================================
+MISTYVISUALS - COUPLE'S MOODBOARD & SAVED GALLERY FEATURE DISCUSSION SUMMARY
+================================================================================
+
+Date: July 23, 2026
+Topic: Couple's Inspiration Moodboard, Featured Story Bookmarking, Partner Sharing & Photographer Access Strategy
+
+--------------------------------------------------------------------------------
+1. CORE PURPOSE & CONCEPT
+--------------------------------------------------------------------------------
+Upcoming couples want to collect reference photos (poses, lighting, decor, aesthetics) to show photographers before and during events. The feature provides a unified, visual reference gallery ("Saves") built directly into the app.
+
+--------------------------------------------------------------------------------
+2. KEY DECISIONS & USER EXPERIENCE RULES
+--------------------------------------------------------------------------------
+- Simplified Organization: No forced folders or compulsory categories (Mehendi, Haldi, etc.). If a user wants to keep all saved photos unorganized in a single bucket, that is supported and preferred for simplicity.
+- No Photo Notes Overhead: Avoid granular note fields per image to keep the interface light and frictionless.
+- Profile Page Entry Point: Accessing Profile displays a dedicated two-tab interface:
+    Tab 1: "Saves" -> Inspo moodboard gallery of bookmarked photos.
+    Tab 2: "My Photos" -> Post-event gallery uploaded by photographers.
+- Bride & Groom Collaboration & Permissions:
+    * Full Moodboard Gallery Access: Both Bride and Groom have full access to save, view, filter, and delete photos in THEIR JOINT MOODBOARD GALLERY.
+    * NOT System Admin Access: Neither partner is given system admin rights (e.g., event settings, pricing, crew tools, admin management). System permissions remain standard participant permissions.
+    * Source Badges: Every saved thumbnail subtly displays who saved it ("Saved by Bride" / "Saved by Groom") based on display roles.
+    * Quick Filters: All Saves | Mine | Partner's.
+
+--------------------------------------------------------------------------------
+3. PHOTOGRAPHER & VENDOR ACCESS STRATEGY
+--------------------------------------------------------------------------------
+- Deferred Deep Access: Full photographer dashboard integration will be addressed in later phases.
+- Spotify-Style Shareable Link: Public or PIN-protected share link generated for vendors/photographers to easily view the moodboard on mobile browsers or web.
+- Offline Caching: Essential requirement due to poor network connectivity at many event venues. Photos in the moodboard will be cached to local disk storage for offline viewing.
+
+--------------------------------------------------------------------------------
+4. APPROVED 4-PHASE ROADMAP
+--------------------------------------------------------------------------------
+Phase 1: Core Bookmarking & Profile Integration (Completed)
+  - Backend database schema & REST API for saving/unsaving photos.
+  - In-App bookmark button on Featured Stories photos.
+  - Dedicated Profile page layout ("Saves" vs "My Photos").
+  - Partner linking & joint feed with "Saved by Bride/Groom" display badges and full moodboard CRUD access for both partners.
+
+Phase 2: Manual Uploads & Optional Filters
+  - Ability to upload manual screenshots and camera roll images into Saves.
+  - Optional lightweight event tags (#Haldi, #Mehendi, #Wedding) for filtering.
+
+Phase 3: External Links & Mobile Native Sharing
+  - External URL link pasting (Instagram, Pinterest) with backend metadata/thumbnail extraction.
+  - Mobile Native Share Sheet integration ("Share to MistyVisuals").
+
+Phase 4: Spotify-Style Sharing, Offline Caching & PDF Export
+  - Public/Protected share link & QR code for vendors/photographers.
+  - Disk caching for offline mobile access.
+  - One-tap PDF export for printing or offline backup.
+
+================================================================================

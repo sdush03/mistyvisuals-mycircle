@@ -11,6 +11,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withSpring, FadeIn } from '
 import { useAuthStore } from '../store/authStore';
 import api, { API_BASE_URL } from '../services/api';
 import LoginView from '../components/mycircle/LoginView';
+import { ProfileView } from '../components/profile/ProfileView';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -193,49 +194,16 @@ function RootLayoutContent() {
           onOpenProfile={() => setShowProfileModal(true)}
         />
 
-        {/* ── Top Right Profile Details Modal ── */}
-        <Modal
+        {/* ── Profile & Moodboard Saves Modal ── */}
+        <ProfileView
           visible={showProfileModal}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowProfileModal(false)}
-        >
-          <Pressable style={styles.modalOverlay} onPress={() => setShowProfileModal(false)}>
-            <Pressable style={styles.profileCardModal} onPress={(e) => e.stopPropagation()}>
-              <View style={styles.profileModalHeader}>
-                <Text style={styles.profileModalTitle}>Account Profile</Text>
-                <Pressable onPress={() => setShowProfileModal(false)} style={styles.closeBtn}>
-                  <Text style={styles.closeBtnText}>✕</Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.profileInfoSection}>
-                {profile?.selfieUrl ? (
-                  <Image source={{ uri: profile.selfieUrl }} style={styles.largeAvatarImage} />
-                ) : (
-                  <View style={styles.largeAvatarCircle}>
-                    <Text style={styles.largeAvatarText}>
-                      {profile?.name ? profile.name.charAt(0).toUpperCase() : 'U'}
-                    </Text>
-                  </View>
-                )}
-                <Text style={styles.profileName}>{profile?.name || 'My Circle Member'}</Text>
-                {profile?.email ? <Text style={styles.profileEmail}>{profile.email}</Text> : null}
-                {profile?.phoneNumber ? <Text style={styles.profilePhone}>{profile.phoneNumber}</Text> : null}
-              </View>
-
-              <Pressable
-                style={styles.logoutModalBtn}
-                onPress={async () => {
-                  setShowProfileModal(false);
-                  await logout();
-                }}
-              >
-                <Text style={styles.logoutModalBtnText}>Log Out</Text>
-              </Pressable>
-            </Pressable>
-          </Pressable>
-        </Modal>
+          onClose={() => setShowProfileModal(false)}
+          profile={profile}
+          onLogout={async () => {
+            setShowProfileModal(false);
+            await logout();
+          }}
+        />
       </Animated.View>
     </ThemeProvider>
   );

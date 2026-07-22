@@ -1227,16 +1227,16 @@ module.exports = async function galleryRoutes(fastify, opts) {
     }
   });
 
-  // Update a guest's hasFullAccess level (Admin only)
+  // Update a guest's access level & displayRole (Bride/Groom/Guest) - Admin only
   fastify.post('/api/gallery/events/:id/guests/:guestId/access', async (req, reply) => {
     const auth = requireAdmin(req, reply);
     if (!auth) return;
 
     const eventId = parseInt(req.params.id, 10);
     const guestId = parseInt(req.params.guestId, 10);
-    const { hasFullAccess } = req.body;
+    const { hasFullAccess, displayRole } = req.body || {};
 
-    if (isNaN(eventId) || isNaN(guestId) || hasFullAccess === undefined) {
+    if (isNaN(eventId) || isNaN(guestId)) {
       return reply.code(400).send({ error: 'Invalid request parameters' });
     }
 
@@ -1250,12 +1250,37 @@ module.exports = async function galleryRoutes(fastify, opts) {
         return reply.code(404).send({ error: 'Guest not found under this event' });
       }
 
+      let newFullAccess = hasFullAccess !== undefined ? Boolean(hasFullAccess) : guest.hasFullAccess;
+      let newDisplayRole = displayRole !== undefined ? displayRole : guest.displayRole;
+
+      // Rule: Bride and Groom always get full access automatically
+      if (newDisplayRole === 'BRIDE' || newDisplayRole === 'GROOM') {
+        newFullAccess = true;
+
+        // Enforce 1 Bride and 1 Groom per event: Clear previous assignment if any
+        await pool.query(
+          `UPDATE guests SET display_role = NULL WHERE event_id = $1 AND display_role = $2 AND id != $3`,
+          [eventId, newDisplayRole, guestId]
+        );
+      }
+
       const updated = await prisma.guest.update({
         where: { id: guestId },
-        data: { hasFullAccess: Boolean(hasFullAccess) }
+        data: {
+          hasFullAccess: newFullAccess,
+          displayRole: newDisplayRole
+        }
       });
 
-      return { success: true, guest: { id: updated.id, email: updated.email, hasFullAccess: updated.hasFullAccess } };
+      return {
+        success: true,
+        guest: {
+          id: updated.id,
+          email: updated.email,
+          hasFullAccess: updated.hasFullAccess,
+          displayRole: updated.displayRole
+        }
+      };
     } catch (err) {
       req.log.error(err);
       return reply.code(500).send({ error: 'Failed to update guest access' });

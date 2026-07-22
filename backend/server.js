@@ -391,6 +391,9 @@ fastify.register(require('./routes/gallery'), {
 fastify.register(require('./routes/analytics'), {
     pool, requireAdmin, requireAuth
 })
+fastify.register(require('./routes/saves'), {
+    pool, requireAdmin, requireAuth
+})
 // Removed /* ===================== PUBLIC WEBSITE ===================== */
 
 // Removed apiRoutes registration
