@@ -30,8 +30,9 @@ interface ProfileViewProps {
   onLogout: () => void;
 }
 
-type TabType = 'saves' | 'my_photos';
-type FilterType = 'all' | 'mine' | 'partner';
+type TopTabType = 'my_photos' | 'saves';
+type SavesSubTabType = 'moodboard' | 'favorites';
+type MoodboardFilterType = 'all' | 'mine' | 'partner';
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
   visible,
@@ -40,9 +41,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onLogout,
 }) => {
   const insets = useSafeAreaInsets();
-  const updateProfile = useAuthStore((state) => state.updateProfile);
-  const [activeTab, setActiveTab] = useState<TabType>('saves');
-  const [filter, setFilter] = useState<FilterType>('all');
+  const [activeTopTab, setActiveTopTab] = useState<TopTabType>('saves');
+  const [savesSubTab, setSavesSubTab] = useState<SavesSubTabType>('moodboard');
+  const [moodboardFilter, setMoodboardFilter] = useState<MoodboardFilterType>('all');
   const [saves, setSaves] = useState<SavedPhotoItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [selectedPhoto, setSelectedPhoto] = useState<SavedPhotoItem | null>(null);
@@ -71,12 +72,33 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     }
   };
 
-  const filteredSaves = saves.filter((item) => {
-    if (filter === 'mine') {
-      return item.userId === profile?.id;
+  // Helper to check if a saved item belongs to current user
+  const isMine = (item: SavedPhotoItem) => {
+    if (!profile) return false;
+    if (profile.id && String(item.userId) === String(profile.id)) return true;
+    if (
+      profile.email &&
+      (item as any).savedByEmail &&
+      String((item as any).savedByEmail).toLowerCase() === String(profile.email).toLowerCase()
+    ) {
+      return true;
     }
-    if (filter === 'partner') {
-      return item.userId !== profile?.id;
+    if (
+      profile.displayRole &&
+      item.savedBy?.displayRole &&
+      profile.displayRole === item.savedBy.displayRole
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  const filteredMoodboardSaves = saves.filter((item) => {
+    if (moodboardFilter === 'mine') {
+      return isMine(item);
+    }
+    if (moodboardFilter === 'partner') {
+      return !isMine(item);
     }
     return true;
   });
@@ -97,7 +119,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </Pressable>
         </View>
 
-        {/* User Card */}
+        {/* User Profile Info Section */}
         <View style={styles.userSection}>
           {profile?.selfieUrl ? (
             <Image source={{ uri: profile.selfieUrl }} style={styles.avatar} />
@@ -127,126 +149,191 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </View>
         </View>
 
-        {/* Segmented Tab Bar: Saves vs My Photos */}
-        <View style={styles.tabContainer}>
+        {/* ── TOP-LEVEL SEGMENTED TABS: My Photos vs Saves ── */}
+        <View style={styles.topTabContainer}>
           <Pressable
-            style={[styles.tabButton, activeTab === 'saves' && styles.activeTabButton]}
-            onPress={() => setActiveTab('saves')}
+            style={[
+              styles.topTabButton,
+              activeTopTab === 'my_photos' && styles.activeTopTabButton,
+            ]}
+            onPress={() => setActiveTopTab('my_photos')}
           >
             <Text
               style={[
-                styles.tabText,
-                activeTab === 'saves' && styles.activeTabText,
-              ]}
-            >
-              Saves ({saves.length})
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.tabButton, activeTab === 'my_photos' && styles.activeTabButton]}
-            onPress={() => setActiveTab('my_photos')}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'my_photos' && styles.activeTabText,
+                styles.topTabText,
+                activeTopTab === 'my_photos' && styles.activeTopTabText,
               ]}
             >
               My Photos
             </Text>
           </Pressable>
+          <Pressable
+            style={[
+              styles.topTabButton,
+              activeTopTab === 'saves' && styles.activeTopTabButton,
+            ]}
+            onPress={() => setActiveTopTab('saves')}
+          >
+            <Text
+              style={[
+                styles.topTabText,
+                activeTopTab === 'saves' && styles.activeTopTabText,
+              ]}
+            >
+              Saves
+            </Text>
+          </Pressable>
         </View>
 
         {/* Tab Content */}
-        {activeTab === 'saves' ? (
-          <View style={styles.savesContainer}>
-            {/* Filter Pills */}
-            <View style={styles.filterContainer}>
+        {activeTopTab === 'saves' ? (
+          <View style={styles.savesTabWrapper}>
+            {/* ── SUB-TABS: Moodboard vs Event Favorites ── */}
+            <View style={styles.subTabContainer}>
               <Pressable
-                style={[styles.filterPill, filter === 'all' && styles.activeFilterPill]}
-                onPress={() => setFilter('all')}
+                style={[
+                  styles.subTabPill,
+                  savesSubTab === 'moodboard' && styles.activeSubTabPill,
+                ]}
+                onPress={() => setSavesSubTab('moodboard')}
               >
                 <Text
                   style={[
-                    styles.filterText,
-                    filter === 'all' && styles.activeFilterText,
+                    styles.subTabText,
+                    savesSubTab === 'moodboard' && styles.activeSubTabText,
                   ]}
                 >
-                  All Saves
+                  Moodboard ({saves.length})
                 </Text>
               </Pressable>
               <Pressable
-                style={[styles.filterPill, filter === 'mine' && styles.activeFilterPill]}
-                onPress={() => setFilter('mine')}
+                style={[
+                  styles.subTabPill,
+                  savesSubTab === 'favorites' && styles.activeSubTabPill,
+                ]}
+                onPress={() => setSavesSubTab('favorites')}
               >
                 <Text
                   style={[
-                    styles.filterText,
-                    filter === 'mine' && styles.activeFilterText,
+                    styles.subTabText,
+                    savesSubTab === 'favorites' && styles.activeSubTabText,
                   ]}
                 >
-                  Mine
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.filterPill, filter === 'partner' && styles.activeFilterPill]}
-                onPress={() => setFilter('partner')}
-              >
-                <Text
-                  style={[
-                    styles.filterText,
-                    filter === 'partner' && styles.activeFilterText,
-                  ]}
-                >
-                  Partner's
+                  Event Favorites ❤️
                 </Text>
               </Pressable>
             </View>
 
-            {loading ? (
-              <ActivityIndicator size="large" color="#000" style={{ marginTop: 40 }} />
-            ) : filteredSaves.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyTitle}>No saved photos yet</Text>
-                <Text style={styles.emptySub}>
-                  Bookmark photos in Featured Stories to curate your event moodboard here!
-                </Text>
+            {/* Sub-Tab 1: Moodboard (Inspo Saves) */}
+            {savesSubTab === 'moodboard' ? (
+              <View style={styles.subContentContainer}>
+                {/* Moodboard Filter Pills: All | Mine | Partner's */}
+                <View style={styles.filterContainer}>
+                  <Pressable
+                    style={[
+                      styles.filterPill,
+                      moodboardFilter === 'all' && styles.activeFilterPill,
+                    ]}
+                    onPress={() => setMoodboardFilter('all')}
+                  >
+                    <Text
+                      style={[
+                        styles.filterText,
+                        moodboardFilter === 'all' && styles.activeFilterText,
+                      ]}
+                    >
+                      All
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.filterPill,
+                      moodboardFilter === 'mine' && styles.activeFilterPill,
+                    ]}
+                    onPress={() => setMoodboardFilter('mine')}
+                  >
+                    <Text
+                      style={[
+                        styles.filterText,
+                        moodboardFilter === 'mine' && styles.activeFilterText,
+                      ]}
+                    >
+                      Mine
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.filterPill,
+                      moodboardFilter === 'partner' && styles.activeFilterPill,
+                    ]}
+                    onPress={() => setMoodboardFilter('partner')}
+                  >
+                    <Text
+                      style={[
+                        styles.filterText,
+                        moodboardFilter === 'partner' && styles.activeFilterText,
+                      ]}
+                    >
+                      Partner's
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {loading ? (
+                  <ActivityIndicator size="large" color="#000" style={{ marginTop: 40 }} />
+                ) : filteredMoodboardSaves.length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyTitle}>No moodboard saves found</Text>
+                    <Text style={styles.emptySub}>
+                      Bookmark photos in Featured Stories to curate your inspo moodboard here!
+                    </Text>
+                  </View>
+                ) : (
+                  <FlatList
+                    data={filteredMoodboardSaves}
+                    numColumns={2}
+                    keyExtractor={(item) => String(item.id)}
+                    contentContainerStyle={styles.gridList}
+                    renderItem={({ item }) => (
+                      <Pressable
+                        style={styles.gridCard}
+                        onPress={() => setSelectedPhoto(item)}
+                      >
+                        <Image
+                          source={{ uri: item.photoUrl }}
+                          style={styles.gridImage}
+                          contentFit="cover"
+                          cachePolicy="memory-disk"
+                        />
+                        {/* Source Badge */}
+                        <View style={styles.sourceBadge}>
+                          <Text style={styles.sourceBadgeText}>
+                            {item.savedBy.displayRole === 'BRIDE'
+                              ? '👰 Bride'
+                              : item.savedBy.displayRole === 'GROOM'
+                              ? '🤵 Groom'
+                              : item.savedBy.name}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    )}
+                  />
+                )}
               </View>
             ) : (
-              <FlatList
-                data={filteredSaves}
-                numColumns={2}
-                keyExtractor={(item) => String(item.id)}
-                contentContainerStyle={styles.gridList}
-                renderItem={({ item }) => (
-                  <Pressable
-                    style={styles.gridCard}
-                    onPress={() => setSelectedPhoto(item)}
-                  >
-                    <Image
-                      source={{ uri: item.photoUrl }}
-                      style={styles.gridImage}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                    />
-                    {/* Source Badge */}
-                    <View style={styles.sourceBadge}>
-                      <Text style={styles.sourceBadgeText}>
-                        {item.savedBy.displayRole === 'BRIDE'
-                          ? '👰 Bride'
-                          : item.savedBy.displayRole === 'GROOM'
-                          ? '🤵 Groom'
-                          : item.savedBy.name}
-                      </Text>
-                    </View>
-                  </Pressable>
-                )}
-              />
+              /* Sub-Tab 2: Event Favorites (Liked Photos) */
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyTitle}>Event Favorites</Text>
+                <Text style={styles.emptySub}>
+                  Photos you like (❤️) in your event gallery will appear here.
+                </Text>
+              </View>
             )}
           </View>
         ) : (
+          /* Top-Level Tab 2: My Photos */
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>Event Gallery</Text>
+            <Text style={styles.emptyTitle}>My Event Photos</Text>
             <Text style={styles.emptySub}>
               Photos matched to you after the event will appear here automatically.
             </Text>
@@ -327,7 +414,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 14,
   },
   avatar: {
     width: 50,
@@ -361,21 +448,37 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
   },
-  tabContainer: {
+  roleBadgeContainer: {
+    backgroundColor: '#111',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+    marginTop: 6,
+    alignSelf: 'flex-start',
+  },
+  roleBadgeTextReadOnly: {
+    color: '#FFF',
+    fontSize: 11,
+    fontFamily: FONT_JOST_SEMIBOLD || FONT_JOST_MEDIUM || 'System',
+    fontWeight: '600',
+  },
+
+  /* ── TOP TABS: My Photos | Saves ── */
+  topTabContainer: {
     flexDirection: 'row',
     marginHorizontal: 20,
     backgroundColor: '#EAE8E3',
     borderRadius: 25,
     padding: 4,
-    marginBottom: 14,
+    marginBottom: 12,
   },
-  tabButton: {
+  topTabButton: {
     flex: 1,
     paddingVertical: 10,
     alignItems: 'center',
     borderRadius: 20,
   },
-  activeTabButton: {
+  activeTopTabButton: {
     backgroundColor: '#FFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -383,16 +486,47 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  tabText: {
+  topTabText: {
     fontFamily: FONT_JOST_MEDIUM || 'System',
     fontSize: 14,
     color: '#666',
   },
-  activeTabText: {
+  activeTopTabText: {
     color: '#111',
     fontWeight: '600',
   },
-  savesContainer: {
+
+  /* ── SAVES SUB-TABS: Moodboard | Event Favorites ── */
+  savesTabWrapper: {
+    flex: 1,
+  },
+  subTabContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  subTabPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#EAE8E3',
+    marginRight: 10,
+  },
+  activeSubTabPill: {
+    backgroundColor: '#111',
+  },
+  subTabText: {
+    fontFamily: FONT_JOST_MEDIUM || 'System',
+    fontSize: 13,
+    color: '#555',
+  },
+  activeSubTabText: {
+    color: '#FFF',
+    fontWeight: '600',
+  },
+
+  /* ── MOODBOARD FILTERS: All | Mine | Partner's ── */
+  subContentContainer: {
     flex: 1,
   },
   filterContainer: {
@@ -402,23 +536,28 @@ const styles = StyleSheet.create({
   },
   filterPill: {
     paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#EAE8E3',
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#DDD',
+    backgroundColor: '#FFF',
     marginRight: 8,
   },
   activeFilterPill: {
+    borderColor: '#111',
     backgroundColor: '#111',
   },
   filterText: {
     fontFamily: FONT_JOST_REGULAR || 'System',
     fontSize: 12,
-    color: '#444',
+    color: '#666',
   },
   activeFilterText: {
     color: '#FFF',
     fontWeight: '600',
   },
+
+  /* ── PHOTO GRID ── */
   gridList: {
     paddingHorizontal: 15,
   },
@@ -438,7 +577,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 8,
     left: 8,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
@@ -529,20 +668,6 @@ const styles = StyleSheet.create({
   unsaveText: {
     color: '#FF6B6B',
     fontSize: 12,
-    fontWeight: '600',
-  },
-  roleBadgeContainer: {
-    backgroundColor: '#111',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginTop: 6,
-    alignSelf: 'flex-start',
-  },
-  roleBadgeTextReadOnly: {
-    color: '#FFF',
-    fontSize: 11,
-    fontFamily: FONT_JOST_SEMIBOLD || FONT_JOST_MEDIUM || 'System',
     fontWeight: '600',
   },
 });
