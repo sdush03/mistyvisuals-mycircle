@@ -11,6 +11,7 @@ export interface GuestProfile {
   phoneNumber?: string | null;
   hasSelfie?: boolean;
   selfieUrl?: string | null;
+  selfieGuestId?: number | null;
   displayRole?: 'BRIDE' | 'GROOM' | 'GUEST';
 }
 

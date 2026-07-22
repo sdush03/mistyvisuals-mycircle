@@ -2877,6 +2877,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
       return {
         token: familyToken,
         profile: {
+          id: user.id,
           name: user.name || verifiedName,
           email: user.email,
           phoneNumber: user.phoneNumber,
@@ -2944,6 +2945,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
       return {
         token: familyToken,
         profile: {
+          id: user.id,
           name: guest.name,
           email,
           phoneNumber: guest.phoneNumber,

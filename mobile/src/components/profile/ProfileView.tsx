@@ -75,21 +75,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   // Helper to check if a saved item belongs to current user
   const isMine = (item: SavedPhotoItem) => {
     if (!profile) return false;
+    
+    // 1. Check user ID / selfieGuestId
     if (profile.id && String(item.userId) === String(profile.id)) return true;
+    if (profile.selfieGuestId && String(item.userId) === String(profile.selfieGuestId)) return true;
+    
+    // 2. Check email match
     if (
       profile.email &&
-      (item as any).savedByEmail &&
-      String((item as any).savedByEmail).toLowerCase() === String(profile.email).toLowerCase()
+      item.savedBy?.email &&
+      String(item.savedBy.email).toLowerCase().trim() === String(profile.email).toLowerCase().trim()
     ) {
       return true;
     }
-    if (
-      profile.displayRole &&
-      item.savedBy?.displayRole &&
-      profile.displayRole === item.savedBy.displayRole
-    ) {
-      return true;
+    
+    // 3. Check display role match (e.g. BRIDE vs GROOM)
+    if (profile.displayRole && item.savedBy?.displayRole) {
+      return profile.displayRole === item.savedBy.displayRole;
     }
+
     return false;
   };
 

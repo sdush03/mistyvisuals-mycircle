@@ -156,6 +156,7 @@ module.exports = async function savesRoutes(fastify, opts) {
         savedBy: {
           userId: row.user_id,
           name: row.saved_by_name || 'Partner',
+          email: row.saved_by_email,
           displayRole: row.display_role || 'GUEST'
         }
       }));

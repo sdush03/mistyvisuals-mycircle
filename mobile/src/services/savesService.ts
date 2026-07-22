@@ -11,6 +11,7 @@ export interface SavedPhotoItem {
   savedBy: {
     userId: number;
     name: string;
+    email?: string;
     displayRole: 'BRIDE' | 'GROOM' | 'GUEST';
   };
 }
