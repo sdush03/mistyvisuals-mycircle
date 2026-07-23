@@ -981,6 +981,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                       ref={flatListRef}
                       data={filteredGalleryImages}
                       horizontal
+                      disableIntervalMomentum={true}
                       decelerationRate="fast"
                       snapToInterval={width + 18}
                       snapToAlignment="start"
