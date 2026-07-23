@@ -187,160 +187,126 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
   const dragTranslateX = useSharedValue(0);
   const dragScale = useSharedValue(1);
 
-  const pinchGesture = Gesture.Pinch()
-    .cancelsTouchesInView(true)
-    .onBegin(() => {
+  const lastTouchX1 = useSharedValue(0);
+  const lastTouchY1 = useSharedValue(0);
+  const lastTouchX2 = useSharedValue(0);
+  const lastTouchY2 = useSharedValue(0);
+  const initialDist = useSharedValue(0);
+  const initialScaleOnPinch = useSharedValue(1);
+
+  const manualGesture = Gesture.Manual()
+    .onTouchesDown((e, manager) => {
       'worklet';
-      console.log('[GESTURE_LOG] [PINCH] State -> BEGAN');
+      if (e.allTouches.length === 1) {
+        lastTouchX1.value = e.allTouches[0].x;
+        lastTouchY1.value = e.allTouches[0].y;
+        manager.activate();
+      } else if (e.allTouches.length === 2) {
+        const p1 = e.allTouches[0];
+        const p2 = e.allTouches[1];
+        lastTouchX1.value = p1.x;
+        lastTouchY1.value = p1.y;
+        lastTouchX2.value = p2.x;
+        lastTouchY2.value = p2.y;
+        initialDist.value = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        initialScaleOnPinch.value = pinchScale.value;
+        manager.activate();
+        runOnJS(setIsZoomedState)(true);
+        runOnJS(onZoomChange)(true);
+      }
     })
-    .onStart(() => {
+    .onTouchesMove((e, manager) => {
       'worklet';
-      console.log('[GESTURE_LOG] [PINCH] State -> ACTIVE / START');
-      lastPinchTime.value = Date.now();
-      dragTranslateY.value = 0;
-      dragTranslateX.value = 0;
-      dragScale.value = 1;
-      const currentX = zoomTranslateX.value;
-      const currentY = zoomTranslateY.value;
-      zoomTranslateX.value = currentX;
-      zoomTranslateY.value = currentY;
-      savedZoomX.value = currentX;
-      savedZoomY.value = currentY;
-      runOnJS(setIsZoomedState)(true);
-      runOnJS(onZoomChange)(true);
-    })
-    .onUpdate((e) => {
-      'worklet';
-      lastPinchTime.value = Date.now();
-      pinchScale.value = Math.max(1, Math.min(savedScale.value * e.scale, 4.5));
-    })
-    .onEnd(() => {
-      'worklet';
-      console.log('[GESTURE_LOG] [PINCH] State -> END');
-      lastPinchTime.value = Date.now();
-      if (pinchScale.value <= 1.05) {
-        resetZoom();
-      } else {
-        savedScale.value = pinchScale.value;
+      if (e.allTouches.length === 1) {
+        const p1 = e.allTouches[0];
+        const dx = p1.x - lastTouchX1.value;
+        const dy = p1.y - lastTouchY1.value;
+
+        lastTouchX1.value = p1.x;
+        lastTouchY1.value = p1.y;
+
         const s = pinchScale.value;
-        const maxTx = Math.max(0, (width * (s - 1)) / 2);
-        const maxTy = Math.max(0, (screenHeight * (s - 1)) / 2);
-        const clampedX = Math.min(Math.max(zoomTranslateX.value, -maxTx), maxTx);
-        const clampedY = Math.min(Math.max(zoomTranslateY.value, -maxTy), maxTy);
-        zoomTranslateX.value = withTiming(clampedX, { duration: 180, easing: Easing.out(Easing.quad) });
-        zoomTranslateY.value = withTiming(clampedY, { duration: 180, easing: Easing.out(Easing.quad) });
-        savedZoomX.value = clampedX;
-        savedZoomY.value = clampedY;
+        if (s > 1.05) {
+          const imgWidth = width;
+          const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
+          const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2);
+          const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
+
+          let targetX = zoomTranslateX.value + dx;
+          let targetY = zoomTranslateY.value + dy;
+
+          if (targetX > maxTx) targetX = maxTx + (targetX - maxTx) * 0.25;
+          else if (targetX < -maxTx) targetX = -maxTx + (targetX - (-maxTx)) * 0.25;
+
+          if (targetY > maxTy) targetY = maxTy + (targetY - maxTy) * 0.25;
+          else if (targetY < -maxTy) targetY = -maxTy + (targetY - (-maxTy)) * 0.25;
+
+          zoomTranslateX.value = targetX;
+          zoomTranslateY.value = targetY;
+        }
+      } else if (e.allTouches.length === 2) {
+        const p1 = e.allTouches[0];
+        const p2 = e.allTouches[1];
+        const currentDist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+
+        if (initialDist.value > 0) {
+          const scaleFactor = currentDist / initialDist.value;
+          pinchScale.value = Math.max(1, Math.min(initialScaleOnPinch.value * scaleFactor, 4.5));
+        }
+
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+        const lastMidX = (lastTouchX1.value + lastTouchX2.value) / 2;
+        const lastMidY = (lastTouchY1.value + lastTouchY2.value) / 2;
+
+        const dx = midX - lastMidX;
+        const dy = midY - lastMidY;
+
+        lastTouchX1.value = p1.x;
+        lastTouchY1.value = p1.y;
+        lastTouchX2.value = p2.x;
+        lastTouchY2.value = p2.y;
+
+        const s = pinchScale.value;
+        if (s > 1.05) {
+          const imgWidth = width;
+          const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
+          const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2);
+          const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
+
+          let targetX = zoomTranslateX.value + dx;
+          let targetY = zoomTranslateY.value + dy;
+
+          zoomTranslateX.value = Math.min(Math.max(targetX, -maxTx), maxTx);
+          zoomTranslateY.value = Math.min(Math.max(targetY, -maxTy), maxTy);
+        }
       }
     })
-    .onFinalize((g, success) => {
+    .onTouchesUp((e, manager) => {
       'worklet';
-      console.log('[GESTURE_LOG] [PINCH] State -> FINALIZE, success:', success);
-    })
-    .onTouchesDown((e) => {
-      'worklet';
-      console.log('[GESTURE_LOG] [PINCH] TouchesDown count:', e.numberOfTouches);
-    })
-    .onTouchesUp((e) => {
-      'worklet';
-      console.log('[GESTURE_LOG] [PINCH] TouchesUp count:', e.numberOfTouches);
-    })
-    .onTouchesCancelled(() => {
-      'worklet';
-      console.log('[GESTURE_LOG] [PINCH] TouchesCancelled');
-    });
-
-  const zoomPanGesture = Gesture.Pan()
-    .minPointers(1)
-    .maxPointers(2)
-    .enabled(isZoomedState)
-    .onBegin(() => {
-      'worklet';
-      console.log('[GESTURE_LOG] [PAN] State -> BEGAN');
-    })
-    .onStart(() => {
-      'worklet';
-      console.log('[GESTURE_LOG] [PAN] State -> ACTIVE / START');
-      savedZoomX.value = zoomTranslateX.value;
-      savedZoomY.value = zoomTranslateY.value;
-    })
-    .onTouchesUp((e) => {
-      'worklet';
-      console.log('[GESTURE_LOG] [PAN] TouchesUp count:', e.numberOfTouches);
-      savedZoomX.value = zoomTranslateX.value;
-      savedZoomY.value = zoomTranslateY.value;
-    })
-    .onTouchesCancelled(() => {
-      'worklet';
-      console.log('[GESTURE_LOG] [PAN] TouchesCancelled');
-    })
-    .onFinalize((g, success) => {
-      'worklet';
-      console.log('[GESTURE_LOG] [PAN] State -> FINALIZE, success:', success);
-    })
-    .onUpdate((e) => {
-      'worklet';
-      const s = pinchScale.value;
-      if (s <= 1.05) return;
-
-      const imgWidth = width;
-      const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
-      
-      const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2);
-      const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
-
-      const targetX = savedZoomX.value + e.translationX;
-      const targetY = savedZoomY.value + e.translationY;
-
-      let clampedX = targetX;
-      if (targetX > maxTx) {
-        clampedX = maxTx + (targetX - maxTx) * 0.25;
-      } else if (targetX < -maxTx) {
-        clampedX = -maxTx + (targetX - (-maxTx)) * 0.25;
+      if (e.allTouches.length === 1) {
+        const p1 = e.allTouches[0];
+        lastTouchX1.value = p1.x;
+        lastTouchY1.value = p1.y;
+      } else if (e.allTouches.length === 0) {
+        manager.end();
+        const s = pinchScale.value;
+        if (s <= 1.05) {
+          resetZoom();
+        } else {
+          savedScale.value = s;
+          const imgWidth = width;
+          const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
+          const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2);
+          const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
+          const clampedX = Math.min(Math.max(zoomTranslateX.value, -maxTx), maxTx);
+          const clampedY = Math.min(Math.max(zoomTranslateY.value, -maxTy), maxTy);
+          zoomTranslateX.value = withTiming(clampedX, { duration: 180, easing: Easing.out(Easing.quad) });
+          zoomTranslateY.value = withTiming(clampedY, { duration: 180, easing: Easing.out(Easing.quad) });
+          savedZoomX.value = clampedX;
+          savedZoomY.value = clampedY;
+        }
       }
-
-      let clampedY = targetY;
-      if (targetY > maxTy) {
-        clampedY = maxTy + (targetY - maxTy) * 0.25;
-      } else if (targetY < -maxTy) {
-        clampedY = -maxTy + (targetY - (-maxTy)) * 0.25;
-      }
-
-      zoomTranslateX.value = clampedX;
-      zoomTranslateY.value = clampedY;
-    })
-    .onEnd((e) => {
-      'worklet';
-      const s = pinchScale.value;
-      if (s <= 1.05) return;
-
-      const imgWidth = width;
-      const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
-      const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2);
-      const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
-
-      let finalX = zoomTranslateX.value + e.velocityX * 0.12;
-      let finalY = zoomTranslateY.value + e.velocityY * 0.12;
-
-      if (finalX > maxTx) finalX = maxTx;
-      if (finalX < -maxTx) finalX = -maxTx;
-
-      if (finalY > maxTy) finalY = maxTy;
-      if (finalY < -maxTy) finalY = -maxTy;
-
-      zoomTranslateX.value = withTiming(finalX, {
-        duration: 250,
-        easing: Easing.out(Easing.quad),
-      }, (finished) => {
-        if (finished) savedZoomX.value = finalX;
-      });
-
-      zoomTranslateY.value = withTiming(finalY, {
-        duration: 250,
-        easing: Easing.out(Easing.quad),
-      }, (finished) => {
-        if (finished) savedZoomY.value = finalY;
-      });
     });
 
   const swipeDownPanGesture = Gesture.Pan()
@@ -457,8 +423,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
   const tapGestures = Gesture.Exclusive(doubleTapGesture, singleTapGesture);
 
   const composedGesture = Gesture.Simultaneous(
-    pinchGesture,
-    zoomPanGesture,
+    manualGesture,
     swipeDownPanGesture,
     tapGestures
   );
