@@ -9,12 +9,15 @@ import {
   Dimensions,
   StatusBar,
   FlatList,
+  Share,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+// @ts-ignore
+import { AntDesign, Feather, Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence, Easing, runOnJS } from 'react-native-reanimated';
 import {
   FONT_FUTURA,
   FONT_FUTURA_BOLD,
@@ -122,6 +125,47 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   const isFirstPhoto = useSharedValue(false);
   const isLastPhoto = useSharedValue(false);
 
+  // Heart pop animation matching MyCircle Web page.tsx (showHeartPop state + 800ms keyframe curve)
+  const [showHeartPop, setShowHeartPop] = useState(false);
+  const heartPopTimeoutRef = useRef<any>(null);
+  const heartPopScale = useSharedValue(0);
+  const heartPopOpacity = useSharedValue(0);
+
+  const triggerHeartPop = useCallback(() => {
+    if (heartPopTimeoutRef.current) {
+      clearTimeout(heartPopTimeoutRef.current);
+    }
+    setShowHeartPop(true);
+    heartPopTimeoutRef.current = setTimeout(() => {
+      setShowHeartPop(false);
+    }, 800);
+  }, []);
+
+  React.useEffect(() => {
+    if (showHeartPop) {
+      heartPopScale.value = 0;
+      heartPopOpacity.value = 0;
+
+      heartPopOpacity.value = withSequence(
+        withTiming(0.75, { duration: 120 }),
+        withTiming(0.75, { duration: 520 }),
+        withTiming(0, { duration: 160 })
+      );
+
+      heartPopScale.value = withSequence(
+        withTiming(1.2, { duration: 120, easing: Easing.bezier(0.175, 0.885, 0.32, 1.275) }),
+        withTiming(1.0, { duration: 120 }),
+        withTiming(1.0, { duration: 400 }),
+        withTiming(1.4, { duration: 160, easing: Easing.ease })
+      );
+    }
+  }, [showHeartPop]);
+
+  const heartPopAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heartPopScale.value }],
+    opacity: heartPopOpacity.value,
+  }));
+
   const [savedUrls, setSavedUrls] = useState<Set<string>>(new Set());
 
   React.useEffect(() => {
@@ -196,6 +240,25 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     return filtered;
   }, [galleryImages, activeTab]);
 
+  // High-performance background prefetching of adjacent lightbox photos (+/- 2 photos)
+  React.useEffect(() => {
+    if (activeImageIndex !== null && filteredGalleryImages.length > 0) {
+      const urlsToPrefetch: string[] = [];
+      [activeImageIndex - 1, activeImageIndex + 1, activeImageIndex + 2, activeImageIndex - 2].forEach(idx => {
+        if (idx >= 0 && idx < filteredGalleryImages.length) {
+          const item = filteredGalleryImages[idx];
+          const fullUri = typeof item === 'object' && item.fullUri 
+            ? item.fullUri 
+            : (typeof item === 'object' && item.uri ? item.uri : (typeof item === 'string' ? item : null));
+          if (fullUri) urlsToPrefetch.push(fullUri);
+        }
+      });
+      if (urlsToPrefetch.length > 0) {
+        Image.prefetch(urlsToPrefetch);
+      }
+    }
+  }, [activeImageIndex, filteredGalleryImages]);
+
   // FIX 1: slice to renderLimit for the grid only — lightbox still uses full filteredGalleryImages
   const visibleImages = React.useMemo(() => {
     const limit = renderLimit as number;
@@ -253,8 +316,56 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
       return prev > 0 ? prev - 1 : prev;
     });
   };
-  // Stable wrapper so runOnJS never gets a stale reference
   const navigate = useCallback((dir: 'next' | 'prev') => navigateRef.current(dir), []);
+
+  // Stable toggleSave ref for double-tap gesture
+  const toggleSaveRef = useRef(() => {});
+  toggleSaveRef.current = () => {
+    if (activeImageIndex === null) return;
+    const currentImg = filteredGalleryImages[activeImageIndex];
+    if (!currentImg) return;
+    const currentUrl = typeof currentImg === 'object' && currentImg.fullUri
+      ? currentImg.fullUri
+      : (typeof currentImg === 'object' && currentImg.uri ? currentImg.uri : (typeof currentImg === 'string' ? currentImg : ''));
+    if (!currentUrl) return;
+
+    setSavedUrls(prev => {
+      const updated = new Set(prev);
+      if (updated.has(currentUrl)) {
+        // Double tap again -> dislike / unsave WITHOUT animation
+        updated.delete(currentUrl);
+        savesService.unsavePhoto(currentUrl);
+      } else {
+        // Double tap first time -> like / save WITH translucent heart pop animation
+        updated.add(currentUrl);
+        savesService.savePhoto(currentUrl, story?.id);
+        triggerHeartPop();
+      }
+      return updated;
+    });
+  };
+  const toggleSave = useCallback(() => toggleSaveRef.current(), []);
+
+  // Timestamp double-tap fallback for 100% reliable double-tap detection
+  const lastTapRef = useRef<number>(0);
+  const handleImagePress = () => {
+    const now = Date.now();
+    if (lastTapRef.current && (now - lastTapRef.current) < 350) {
+      toggleSave();
+      lastTapRef.current = 0;
+    } else {
+      lastTapRef.current = now;
+    }
+  };
+
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .maxDelay(300)
+    .onEnd(() => {
+      'worklet';
+      if (pinchScale.value > 1.05) return;
+      runOnJS(toggleSave)();
+    });
 
   const pinchGesture = Gesture.Pinch()
     .onUpdate((e) => {
@@ -488,7 +599,108 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
               {/* Top Editorial Header Gradient Overlay */}
               <LinearGradient
                 colors={['rgba(0, 0, 0, 0.85)', 'rgba(0, 0, 0, 0.3)', 'transparent']}
-                style={[styles.lightboxHeaderGradient, { paddingTop: Math.max(insets.top + 8, 44) }]}
+                style={[styles.lightboxHeaderGradient, { paddingTop: Math.max(insets.top + 18, 54) }]}
+                pointerEvents="box-none"
+              >
+                <View style={styles.lightboxHeaderInner}>
+                  {/* Left Spacer to balance close button for perfect centering */}
+                  <View style={styles.headerSpacer} />
+
+                  <View style={styles.lightboxHeaderBrand}>
+                    <Text style={styles.lightboxBrandText}>MISTY VISUALS</Text>
+                    <Text style={styles.lightboxBrandSub}>EDITORIAL</Text>
+                  </View>
+                  
+                  <Pressable 
+                    style={({ pressed }) => [
+                      styles.lightboxCloseEditorial,
+                      pressed && { opacity: 0.6 }
+                    ]} 
+                    onPress={() => setActiveImageIndex(null)}
+                    hitSlop={14}
+                  >
+                    <Text style={styles.lightboxCloseIcon}>✕</Text>
+                  </Pressable>
+                </View>
+              </LinearGradient>
+
+              {/* Native Horizontal Paging Lightbox Stage */}
+              <View style={styles.lightboxImageContainer}>
+                <FlatList
+                  data={filteredGalleryImages}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  initialScrollIndex={activeImageIndex ?? 0}
+                  windowSize={7}
+                  maxToRenderPerBatch={5}
+                  initialNumToRender={3}
+                  getItemLayout={(data, index) => ({
+                    length: width,
+                    offset: width * index,
+                    index,
+                  })}
+                  onMomentumScrollEnd={(e) => {
+                    const newIdx = Math.round(e.nativeEvent.contentOffset.x / width);
+                    if (newIdx >= 0 && newIdx < filteredGalleryImages.length) {
+                      setActiveImageIndex(newIdx);
+                    }
+                  }}
+                  keyExtractor={(item, index) => item.id || `lightbox-${index}`}
+                  renderItem={({ item }) => {
+                    const thumbnailUri = typeof item === 'object' && item.uri ? item.uri : (typeof item === 'string' ? item : null);
+                    const fullUri = typeof item === 'object' && item.fullUri ? item.fullUri : thumbnailUri;
+
+                    return (
+                      <GestureDetector gesture={doubleTapGesture}>
+                        <Pressable 
+                          onPress={handleImagePress}
+                          style={{ width, height: '100%', justifyContent: 'center', alignItems: 'center' }}
+                        >
+                          <View style={styles.lightboxImageStack}>
+                            {/* Layer 1: Instant grid thumbnail from memory cache */}
+                            {thumbnailUri && (
+                              <Image
+                                source={{ uri: thumbnailUri }}
+                                style={[styles.lightboxImage, StyleSheet.absoluteFillObject]}
+                                contentFit="contain"
+                                cachePolicy="memory-disk"
+                                priority="high"
+                              />
+                            )}
+                            {/* Layer 2: High-res image fading in smoothly on top */}
+                            {fullUri && fullUri !== thumbnailUri && (
+                              <Image
+                                source={{ uri: fullUri }}
+                                style={styles.lightboxImage}
+                                contentFit="contain"
+                                cachePolicy="memory-disk"
+                                priority="high"
+                                transition={400}
+                              />
+                            )}
+                            {/* Layer 3: Heart Pop Center Animation Overlay */}
+                            <Animated.View 
+                              style={[
+                                styles.heartPopContainer, 
+                                heartPopAnimatedStyle
+                              ]} 
+                              pointerEvents="none"
+                            >
+                              <Ionicons name="heart" size={80} color="rgba(255, 255, 255, 0.75)" style={styles.heartPopShadow} />
+                            </Animated.View>
+                          </View>
+                        </Pressable>
+                      </GestureDetector>
+                    );
+                  }}
+                />
+              </View>
+
+              {/* Bottom Editorial Footer Gradient Overlay */}
+              <LinearGradient
+                colors={['transparent', 'rgba(0, 0, 0, 0.4)', 'rgba(0, 0, 0, 0.85)']}
+                style={[styles.lightboxFooterGradient, { paddingBottom: Math.max(insets.bottom, 24) + 8 }]}
                 pointerEvents="box-none"
               >
                 {(() => {
@@ -513,134 +725,85 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                       const updated = new Set(savedUrls);
                       updated.add(currentUrlForSave);
                       setSavedUrls(updated);
+                      triggerHeartPop();
                       await savesService.savePhoto(currentUrlForSave, story?.id);
                     }
                   };
 
+                  const handleShareCurrentPhoto = async () => {
+                    if (!currentUrlForSave) return;
+                    try {
+                      await Share.share({
+                        message: `Check out this photo from ${story?.title || 'Misty Visuals'}:\n${currentUrlForSave}`,
+                        url: currentUrlForSave,
+                        title: story?.title || 'Misty Visuals',
+                      });
+                    } catch (error) {
+                      console.warn('Error sharing photo:', error);
+                    }
+                  };
+
+                  const displayTitle = (story?.title || '')
+                    .replace(/'s\s+Wedding/gi, '')
+                    .trim()
+                    .toUpperCase();
+                  const categoryName = (typeof currentImgForSave === 'object' && currentImgForSave && currentImgForSave.category)
+                    ? String(currentImgForSave.category).toUpperCase()
+                    : null;
+                  const titleLabel = categoryName ? `${displayTitle}  ·  ${categoryName}` : displayTitle;
+
                   return (
-                    <View style={styles.lightboxHeaderInner}>
-                      <View style={styles.lightboxHeaderBrand}>
-                        <Text style={styles.lightboxBrandText}>MISTY VISUALS</Text>
-                        <Text style={styles.lightboxBrandSub}>EDITORIAL</Text>
+                    <View style={{ alignItems: 'center', width: '100%' }}>
+                      {/* High-Fashion Format Counter: e.g. "01 // 24" */}
+                      <View style={styles.lightboxCounterContainer}>
+                        <Text style={styles.lightboxCounterCurrent}>
+                          {String(activeImageIndex !== null ? activeImageIndex + 1 : 1).padStart(2, '0')}
+                        </Text>
+                        <Text style={styles.lightboxCounterDivider}>//</Text>
+                        <Text style={styles.lightboxCounterTotal}>
+                          {String(filteredGalleryImages.length).padStart(2, '0')}
+                        </Text>
                       </View>
-                      
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Pressable 
+
+                      {/* Couple Name / Title / Category Tab */}
+                      {titleLabel ? (
+                        <Text style={styles.lightboxCategoryText}>{titleLabel}</Text>
+                      ) : null}
+
+                      {/* Bottom Actions Row: Thin Feather Heart & Share icons */}
+                      <View style={styles.lightboxActionRow}>
+                        <Pressable
                           style={({ pressed }) => [
-                            { paddingHorizontal: 12, paddingVertical: 6, marginRight: 8 },
+                            styles.lightboxIconOnlyBtn,
                             pressed && { opacity: 0.6 }
                           ]}
                           onPress={handleToggleCurrentPhotoSave}
                           hitSlop={14}
                         >
-                          <Text style={{ fontSize: 22, color: isCurrentPhotoSaved ? '#FFD700' : '#FFFFFF' }}>
-                            {isCurrentPhotoSaved ? '★' : '☆'}
-                          </Text>
+                          <Ionicons 
+                            name={isCurrentPhotoSaved ? 'heart' : 'heart-outline'} 
+                            size={21} 
+                            color={isCurrentPhotoSaved ? '#ef4444' : '#ffffff'} 
+                          />
                         </Pressable>
 
-                        <Pressable 
+                        <Pressable
                           style={({ pressed }) => [
-                            styles.lightboxCloseEditorial,
+                            styles.lightboxIconOnlyBtn,
                             pressed && { opacity: 0.6 }
-                          ]} 
-                          onPress={() => setActiveImageIndex(null)}
+                          ]}
+                          onPress={handleShareCurrentPhoto}
                           hitSlop={14}
                         >
-                          <Text style={styles.lightboxCloseIcon}>✕</Text>
+                          <Feather 
+                            name="share-2" 
+                            size={19} 
+                            color="#ffffff" 
+                          />
                         </Pressable>
                       </View>
                     </View>
                   );
-                })()}
-              </LinearGradient>
-
-              {/* Native Horizontal Paging Lightbox Stage */}
-              <View style={styles.lightboxImageContainer}>
-                <FlatList
-                  data={filteredGalleryImages}
-                  horizontal
-                  pagingEnabled
-                  showsHorizontalScrollIndicator={false}
-                  initialScrollIndex={activeImageIndex ?? 0}
-                  getItemLayout={(data, index) => ({
-                    length: width,
-                    offset: width * index,
-                    index,
-                  })}
-                  onMomentumScrollEnd={(e) => {
-                    const newIdx = Math.round(e.nativeEvent.contentOffset.x / width);
-                    if (newIdx >= 0 && newIdx < filteredGalleryImages.length) {
-                      setActiveImageIndex(newIdx);
-                    }
-                  }}
-                  keyExtractor={(item, index) => item.id || `lightbox-${index}`}
-                  renderItem={({ item }) => {
-                    const thumbnailUri = typeof item === 'object' && item.uri ? item.uri : (typeof item === 'string' ? item : null);
-                    const fullUri = typeof item === 'object' && item.fullUri ? item.fullUri : thumbnailUri;
-
-                    return (
-                      <View style={{ width, height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-                        <View style={styles.lightboxImageStack}>
-                          {/* Layer 1: Instant grid thumbnail from memory cache */}
-                          {thumbnailUri && (
-                            <Image
-                              source={{ uri: thumbnailUri }}
-                              style={[styles.lightboxImage, StyleSheet.absoluteFillObject]}
-                              contentFit="contain"
-                              cachePolicy="memory-disk"
-                              priority="high"
-                            />
-                          )}
-                          {/* Layer 2: High-res image fading in smoothly on top */}
-                          {fullUri && fullUri !== thumbnailUri && (
-                            <Image
-                              source={{ uri: fullUri }}
-                              style={styles.lightboxImage}
-                              contentFit="contain"
-                              cachePolicy="memory-disk"
-                              priority="high"
-                              transition={400}
-                            />
-                          )}
-                        </View>
-                      </View>
-                    );
-                  }}
-                />
-              </View>
-
-              {/* Bottom Editorial Footer Gradient Overlay */}
-              <LinearGradient
-                colors={['transparent', 'rgba(0, 0, 0, 0.4)', 'rgba(0, 0, 0, 0.85)']}
-                style={[styles.lightboxFooterGradient, { paddingBottom: Math.max(insets.bottom, 24) + 8 }]}
-                pointerEvents="box-none"
-              >
-                {/* High-Fashion Format Counter: e.g. "01 // 24" placed ABOVE Title */}
-                <View style={styles.lightboxCounterContainer}>
-                  <Text style={styles.lightboxCounterCurrent}>
-                    {String(activeImageIndex !== null ? activeImageIndex + 1 : 1).padStart(2, '0')}
-                  </Text>
-                  <Text style={styles.lightboxCounterDivider}>//</Text>
-                  <Text style={styles.lightboxCounterTotal}>
-                    {String(filteredGalleryImages.length).padStart(2, '0')}
-                  </Text>
-                </View>
-
-                {/* Couple Name / Title / Category Tab */}
-                {(() => {
-                  const displayTitle = (story.title || '')
-                    .replace(/'s\s+Wedding/gi, '')
-                    .trim()
-                    .toUpperCase();
-                  const currentImg = activeImageIndex !== null ? filteredGalleryImages[activeImageIndex] : null;
-                  const categoryName = (typeof currentImg === 'object' && currentImg && currentImg.category)
-                    ? String(currentImg.category).toUpperCase()
-                    : null;
-                  const titleLabel = categoryName ? `${displayTitle}  ·  ${categoryName}` : displayTitle;
-
-                  return titleLabel ? (
-                    <Text style={styles.lightboxCategoryText}>{titleLabel}</Text>
-                  ) : null;
                 })()}
               </LinearGradient>
             </View>
@@ -819,25 +982,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingBottom: 16,
   },
+  headerSpacer: {
+    width: 34,
+    height: 34,
+  },
   lightboxHeaderBrand: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 2,
   },
   lightboxBrandText: {
     fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 12,
-    letterSpacing: 3,
+    letterSpacing: 3.5,
     color: '#ffffff',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   lightboxBrandSub: {
     fontFamily: FONT_JOST_MEDIUM,
-    fontSize: 11,
-    letterSpacing: 2,
+    fontSize: 9,
+    letterSpacing: 4.5,
     color: '#8c867e',
     fontWeight: '500',
   },
@@ -914,5 +1082,40 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8c867e',
     letterSpacing: 2,
+  },
+  lightboxActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 24,
+    marginTop: 6,
+  },
+  lightboxIconOnlyBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lightboxHeartIcon: {
+    fontSize: 22,
+    lineHeight: 22,
+  },
+  lightboxShareIcon: {
+    fontSize: 18,
+    lineHeight: 18,
+    color: '#ffffff',
+  },
+  heartPopContainer: {
+    position: 'absolute',
+    zIndex: 999,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heartPopShadow: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    elevation: 10,
   },
 });
