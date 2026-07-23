@@ -299,8 +299,9 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     .enabled(!isZoomedState)
     .minPointers(1)
     .maxPointers(1)
-    .activeOffsetY(12)
-    .failOffsetX([-30, 30])
+    .activeOffsetY(18)
+    .failOffsetY(-10)
+    .failOffsetX([-40, 40])
     .onStart(() => {
       'worklet';
       dragTranslateY.value = 0;
@@ -309,9 +310,9 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     })
     .onUpdate((e) => {
       'worklet';
-      if (e.translationY > 0) {
+      if (e.translationY > 0 && e.translationY > Math.abs(e.translationX)) {
         dragTranslateY.value = e.translationY;
-        dragTranslateX.value = e.translationX * 0.35;
+        dragTranslateX.value = e.translationX * 0.2;
         const progress = Math.min(e.translationY / 400, 1);
         dragScale.value = 1 - progress * 0.35;
         expandProgress.value = 1 - progress * 0.7;
@@ -319,7 +320,10 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     })
     .onEnd((e) => {
       'worklet';
-      if (e.translationY > 110 || e.velocityY > 750) {
+      const isDownwardDrag = e.translationY > 120 && e.translationY > Math.abs(e.translationX) * 1.5;
+      const isDownwardFlick = e.translationY > 40 && e.velocityY > 850 && e.velocityY > Math.abs(e.velocityX) * 1.5;
+
+      if (isDownwardDrag || isDownwardFlick) {
         runOnJS(onCloseLightbox)();
       } else {
         dragTranslateY.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
