@@ -443,6 +443,14 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     };
   }, [activeImageIndex, showControls]);
 
+  // Reset controls to visible whenever opening or changing photo
+  React.useEffect(() => {
+    if (activeImageIndex !== null) {
+      setShowControls(true);
+      setIsZoomed(false);
+    }
+  }, [activeImageIndex]);
+
   // iPhone Photos style Hero Expansion shared values & callbacks
   const expandProgress = useSharedValue(0);
   const thumbX = useSharedValue(0);
@@ -466,6 +474,8 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
       thumbH.value = 120;
     }
 
+    setShowControls(true);
+    setIsZoomed(false);
     expandProgress.value = 0;
     setActiveImageIndex(finalIdx);
 
