@@ -546,6 +546,13 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   // Keep ref synced to showControls so callbacks always inspect the instant state
   const autoHideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const pauseAutoHideTimer = useCallback(() => {
+    if (autoHideTimeoutRef.current) {
+      clearTimeout(autoHideTimeoutRef.current);
+      autoHideTimeoutRef.current = null;
+    }
+  }, []);
+
   const resetAutoHideTimer = useCallback(() => {
     if (autoHideTimeoutRef.current) clearTimeout(autoHideTimeoutRef.current);
     autoHideTimeoutRef.current = setTimeout(() => {
