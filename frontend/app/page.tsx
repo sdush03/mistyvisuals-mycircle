@@ -571,7 +571,6 @@ export default function CirclePage() {
           fontSize: 'clamp(2rem, 4vw, 3.5rem)',
           fontWeight: 300,
           letterSpacing: '0.12em',
-          textTransform: 'uppercase',
           marginBottom: '1rem',
           lineHeight: 1.1,
           color: '#1c1a18'
@@ -843,7 +842,6 @@ export default function CirclePage() {
           color: '#1c1a18',
           fontWeight: 500,
           letterSpacing: '0.08em',
-          textTransform: 'uppercase',
           margin: 0
         }}>
           Misty Visuals My Circle
