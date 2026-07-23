@@ -690,6 +690,14 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   const isFirstPhoto = useSharedValue(false);
   const isLastPhoto = useSharedValue(false);
 
+  const toastTranslateY = useSharedValue(-150);
+  const toastOpacity = useSharedValue(0);
+
+  const toastAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: toastTranslateY.value }],
+    opacity: toastOpacity.value,
+  }));
+
   // Heart pop animation matching MyCircle Web page.tsx (showHeartPop state + 800ms keyframe curve)
   const [showHeartPop, setShowHeartPop] = useState(false);
   const heartPopTimeoutRef = useRef<any>(null);
@@ -740,8 +748,19 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
       clearTimeout(toastTimeoutRef.current);
     }
     setToastMessage(msg);
+    toastTranslateY.value = -150;
+    toastOpacity.value = 0;
+
+    toastTranslateY.value = withSpring(0, { damping: 15, stiffness: 120 });
+    toastOpacity.value = withTiming(1, { duration: 180 });
+
     toastTimeoutRef.current = setTimeout(() => {
-      setToastMessage(null);
+      toastTranslateY.value = withTiming(-150, { duration: 250, easing: Easing.inOut(Easing.ease) });
+      toastOpacity.value = withTiming(0, { duration: 250 }, (finished) => {
+        if (finished) {
+          runOnJS(setToastMessage)(null);
+        }
+      });
     }, 2200);
   }, []);
 
@@ -1060,17 +1079,17 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 
                 {/* Toast Notification Banner */}
                 {toastMessage && (
-                  <View style={[styles.toastBanner, { top: Math.max(insets.top + 75, 100) }]} pointerEvents="none">
+                  <Animated.View style={[styles.toastBanner, { top: Math.max(insets.top + 75, 100) }, toastAnimatedStyle]} pointerEvents="none">
                     <Ionicons name="bookmark" size={14} color="#FFD700" style={{ marginRight: 8 }} />
                     <Text style={styles.toastText}>{toastMessage}</Text>
-                  </View>
+                  </Animated.View>
                 )}
 
                 {/* Top Editorial Header Gradient Overlay */}
                 {showControls && (
                   <Animated.View style={[{ zIndex: 100 }, controlsFadeAnimatedStyle]} pointerEvents="box-none">
                     <LinearGradient
-                      colors={['rgba(0, 0, 0, 0.85)', 'rgba(0, 0, 0, 0.3)', 'transparent']}
+                      colors={['rgba(0, 0, 0, 0.45)', 'rgba(0, 0, 0, 0.1)', 'transparent']}
                       style={[styles.lightboxHeaderGradient, { paddingTop: Math.max(insets.top + 18, 54) }]}
                       pointerEvents="box-none"
                     >
@@ -1467,30 +1486,28 @@ const styles = StyleSheet.create({
     fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 12,
     letterSpacing: 3.5,
-    color: '#ffffff',
+    color: 'rgba(255, 255, 255, 0.8)',
     fontWeight: '600',
   },
   lightboxBrandSub: {
     fontFamily: FONT_JOST_MEDIUM,
     fontSize: 9,
     letterSpacing: 4.5,
-    color: '#8c867e',
+    color: 'rgba(255, 255, 255, 0.4)',
     fontWeight: '500',
   },
   lightboxCloseEditorial: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.22)',
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   lightboxCloseIcon: {
-    color: '#ffffff',
-    fontSize: 13,
-    lineHeight: 13,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 14,
+    lineHeight: 14,
     fontWeight: '300',
   },
   lightboxImageContainer: {
