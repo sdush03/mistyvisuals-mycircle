@@ -231,6 +231,12 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     .minPointers(1)
     .maxPointers(1)
     .enabled(isZoomedState)
+    .onTouchesDown((e, state) => {
+      'worklet';
+      if (e.numberOfTouches > 1) {
+        state.fail();
+      }
+    })
     .onStart(() => {
       'worklet';
       savedZoomX.value = zoomTranslateX.value;
