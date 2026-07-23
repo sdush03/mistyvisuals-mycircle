@@ -502,6 +502,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   const thumbY = useSharedValue(0);
   const thumbW = useSharedValue(100);
   const thumbH = useSharedValue(100);
+  const activeCardAspect = useSharedValue(0.75);
 
   const mainScrollRef = useRef<ScrollView>(null);
   const cardRefs = useRef<{ [key: string]: View | null }>({});
@@ -514,6 +515,10 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     if (idx < 0 || idx >= filteredGalleryImages.length) return;
     const img = filteredGalleryImages[idx];
     if (!img) return;
+    const aspect = (typeof img === 'object' && img.cardAspect)
+      ? img.cardAspect
+      : ((typeof img === 'object' && img.aspectRatio) ? img.aspectRatio : 0.75);
+    activeCardAspect.value = aspect;
     const cardId = img.id || img.uri || `idx-${idx}`;
     const targetCard = cardRefs.current[cardId];
 
@@ -560,6 +565,10 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   const openLightbox = useCallback((img: any, bounds: { x: number; y: number; width: number; height: number } | null) => {
     const targetIdx = filteredGalleryImages.findIndex(item => item.id === img.id);
     const finalIdx = targetIdx !== -1 ? targetIdx : (img.originalIndex ?? 0);
+    const aspect = (typeof img === 'object' && img.cardAspect)
+      ? img.cardAspect
+      : ((typeof img === 'object' && img.aspectRatio) ? img.aspectRatio : 0.75);
+    activeCardAspect.value = aspect;
 
     if (bounds && bounds.width > 0 && bounds.height > 0) {
       thumbX.value = bounds.x;
@@ -603,11 +612,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   const heroAnimatedStyle = useAnimatedStyle(() => {
     'worklet';
     const p = expandProgress.value;
-
-    const currentImg = filteredGalleryImages[activeImageIndex ?? 0];
-    const cardAspect = (currentImg && typeof currentImg === 'object' && currentImg.cardAspect)
-      ? currentImg.cardAspect
-      : ((currentImg && typeof currentImg === 'object' && currentImg.aspectRatio) ? currentImg.aspectRatio : 0.75);
+    const cardAspect = activeCardAspect.value > 0 ? activeCardAspect.value : 0.75;
 
     const w_grid = thumbW.value > 0 ? thumbW.value : 120;
     const h_grid = thumbH.value > 0 ? thumbH.value : (w_grid / cardAspect);
