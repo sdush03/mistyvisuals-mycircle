@@ -824,6 +824,42 @@ export default function CirclePage() {
           </div>
         )}
       </main>
+      
+      {/* ── Footer / App Info (Required for Google Verification) ── */}
+      <footer style={{
+        width: '100%',
+        maxWidth: '1200px',
+        marginTop: 'auto',
+        padding: '3rem 2rem 2rem 2rem',
+        borderTop: '1px solid #f0ede8',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '0.5rem',
+        textAlign: 'center'
+      }}>
+        <p style={{
+          fontSize: '0.75rem',
+          color: '#1c1a18',
+          fontWeight: 500,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          margin: 0
+        }}>
+          Misty Visuals My Circle
+        </p>
+        <p style={{
+          fontFamily: 'Cormorant Garamond, serif',
+          fontSize: '0.875rem',
+          fontStyle: 'italic',
+          color: '#8c867e',
+          maxWidth: '650px',
+          lineHeight: 1.5,
+          margin: '0.25rem 0 0 0'
+        }}>
+          Misty Visuals My Circle is a secure private gallery application that allows wedding guests to easily access their photos, view curated event galleries, and download high-quality images captured during the wedding celebrations.
+        </p>
+      </footer>
 
       
 

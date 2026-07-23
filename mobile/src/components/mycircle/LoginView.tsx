@@ -29,7 +29,7 @@ import { FONT_FUTURA, FONT_FUTURA_BOLD } from '../../constants/fonts';
 
 // Web & iOS Client IDs from Google Cloud Console
 const GOOGLE_WEB_CLIENT_ID = '1051090030242-du725l33veu6vl637lo1jpgpka1ilujj.apps.googleusercontent.com';
-const GOOGLE_IOS_CLIENT_ID = '813548862884-m06a6t1mbo7v71qipthtao91bg105lqt.apps.googleusercontent.com';
+const GOOGLE_IOS_CLIENT_ID = '1051090030242-vhi0ec15ittd3ugik983p9gaohlr7fv4.apps.googleusercontent.com';
 
 // Safe dynamic imports for Google Sign-In to prevent crashes in Expo Go
 let NativeGoogleSignin: any = null;
@@ -234,6 +234,13 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
 
       await NativeGoogleSignin.hasPlayServices();
       const userInfo = await NativeGoogleSignin.signIn();
+
+      // Handle new Google Sign-In v13+ API cancellation
+      if (userInfo && userInfo.type === 'cancelled') {
+        setIsLoggingIn(false);
+        return;
+      }
+
       let idToken = userInfo.data?.idToken || userInfo.idToken || (userInfo as any)?.idToken;
 
       if (!idToken && typeof NativeGoogleSignin.getTokens === 'function') {
@@ -258,7 +265,8 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
       }
     } catch (error: any) {
       console.error('Google Sign-In error', error);
-      if (error.code !== 'SIGN_IN_CANCELLED') {
+      const isCancel = error.code === 'SIGN_IN_CANCELLED' || error.code === '12501';
+      if (!isCancel) {
         Alert.alert('Google Sign-In Error', error.message || 'Google authentication failed. Please try again.');
       }
     } finally {
