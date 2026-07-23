@@ -604,26 +604,35 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     'worklet';
     const p = expandProgress.value;
 
+    const currentImg = filteredGalleryImages[activeImageIndex ?? 0];
+    const cardAspect = (currentImg && typeof currentImg === 'object' && currentImg.cardAspect)
+      ? currentImg.cardAspect
+      : ((currentImg && typeof currentImg === 'object' && currentImg.aspectRatio) ? currentImg.aspectRatio : 0.75);
+
     const w_grid = thumbW.value > 0 ? thumbW.value : 120;
-    const cx_grid = thumbX.value + w_grid / 2;
-    const cy_grid = thumbY.value + (thumbH.value > 0 ? thumbH.value : 160) / 2;
-    const cx_screen = width / 2;
-    const cy_screen = screenHeight / 2;
+    const h_grid = thumbH.value > 0 ? thumbH.value : (w_grid / cardAspect);
+    const x_grid = thumbX.value;
+    const y_grid = thumbY.value;
 
-    const initialScale = Math.max(w_grid / width, 0.15);
-    const scale = initialScale + (1 - initialScale) * p;
+    const photoW = width;
+    const photoH = Math.min(screenHeight, width / cardAspect);
+    const photoY = (screenHeight - photoH) / 2;
 
-    const translateX = (cx_grid - cx_screen) * (1 - p);
-    const translateY = (cy_grid - cy_screen) * (1 - p);
+    const curW = w_grid + (photoW - w_grid) * p;
+    const curH = h_grid + (photoH - h_grid) * p;
+    const curX = x_grid * (1 - p);
+    const curY = y_grid + (photoY - y_grid) * p;
 
     return {
-      opacity: p > 0.002 ? 1 : 0,
-      transform: [
-        { translateX },
-        { translateY },
-        { scale },
-      ],
+      position: 'absolute',
+      left: curX,
+      top: curY,
+      width: curW,
+      height: curH,
       borderRadius: (1 - p) * 14,
+      overflow: 'hidden',
+      opacity: p > 0.002 ? 1 : 0,
+      zIndex: p < 0.95 ? 50 : 0,
     };
   });
 
@@ -1075,9 +1084,31 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                   </Animated.View>
                 )}
 
-                {/* Native Horizontal Paging Lightbox Stage -- ONLY THE PHOTO EXPANDS! */}
-                <Animated.View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center' }, heroAnimatedStyle]}>
-                  <View style={styles.lightboxImageContainer}>
+                {/* Pure Hero Image Overlay (Morphs directly into grid thumbnail ratio without black margins) */}
+                {(() => {
+                  const currentImgForHero = activeImageIndex !== null ? filteredGalleryImages[activeImageIndex] : null;
+                  const heroUri = currentImgForHero
+                    ? (typeof currentImgForHero === 'object' && currentImgForHero.uri
+                        ? currentImgForHero.uri
+                        : (typeof currentImgForHero === 'object' && currentImgForHero.fullUri
+                            ? currentImgForHero.fullUri
+                            : (typeof currentImgForHero === 'string' ? currentImgForHero : '')))
+                    : '';
+                  return (
+                    <Animated.View style={heroAnimatedStyle} pointerEvents="none">
+                      {heroUri ? (
+                        <Image
+                          source={{ uri: heroUri }}
+                          style={{ width: '100%', height: '100%' }}
+                          contentFit="cover"
+                        />
+                      ) : null}
+                    </Animated.View>
+                  );
+                })()}
+
+                {/* Native Horizontal Paging Lightbox Stage */}
+                <View style={styles.lightboxImageContainer}>
                     <FlatList
                       ref={flatListRef}
                       data={filteredGalleryImages}
@@ -1121,7 +1152,6 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                       )}
                     />
                   </View>
-                </Animated.View>
 
                 {/* Bottom Editorial Footer Gradient Overlay */}
                 {showControls && (
