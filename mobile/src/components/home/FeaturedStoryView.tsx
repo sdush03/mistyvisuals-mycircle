@@ -74,11 +74,16 @@ const formatDateText = (rawDate?: string): string => {
 };
 
 const MasonryCard = React.memo(function MasonryCard({ 
-  img, index, isColumn0, onSelect 
+  img, index, isColumn0, onSelect, onRegisterRef 
 }: { 
-  img: any; index: number; isColumn0: boolean; onSelect: (bounds: { x: number; y: number; width: number; height: number } | null) => void;
+  img: any;
+  index: number;
+  isColumn0: boolean;
+  onSelect: (bounds: { x: number; y: number; width: number; height: number } | null) => void;
+  onRegisterRef?: (cardId: string, ref: View | null) => void;
 }) {
   const cardRef = useRef<View>(null);
+  const cardId = img.id || img.uri || `idx-${index}`;
   const primaryUri = typeof img === 'object' && img.uri ? img.uri : (typeof img === 'string' ? img : '');
   const fallbackUri = typeof img === 'object' && img.fullUri ? img.fullUri : '';
   const blurUri = typeof img === 'object' && img.blurUri ? img.blurUri : null;
@@ -103,7 +108,14 @@ const MasonryCard = React.memo(function MasonryCard({
   }, [onSelect]);
 
   return (
-    <Pressable ref={cardRef} style={[styles.masonryCard, { aspectRatio: cardAspect }]} onPress={handlePress}>
+    <Pressable 
+      ref={(ref) => {
+        (cardRef as any).current = ref;
+        if (onRegisterRef) onRegisterRef(cardId, ref);
+      }} 
+      style={[styles.masonryCard, { aspectRatio: cardAspect }]} 
+      onPress={handlePress}
+    >
       {currentUri ? (
         <Image
           source={{ uri: currentUri }}
@@ -474,6 +486,60 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   const thumbW = useSharedValue(100);
   const thumbH = useSharedValue(100);
 
+  const mainScrollRef = useRef<ScrollView>(null);
+  const cardRefs = useRef<{ [key: string]: View | null }>({});
+
+  const registerCardRef = useCallback((cardId: string, ref: View | null) => {
+    cardRefs.current[cardId] = ref;
+  }, []);
+
+  const updateThumbForIndex = useCallback((idx: number) => {
+    if (idx < 0 || idx >= filteredGalleryImages.length) return;
+    const img = filteredGalleryImages[idx];
+    if (!img) return;
+    const cardId = img.id || img.uri || `idx-${idx}`;
+    const targetCard = cardRefs.current[cardId];
+
+    if (targetCard) {
+      targetCard.measureInWindow((x, y, cardWidth, cardHeight) => {
+        if (cardWidth > 0 && cardHeight > 0) {
+          if (y < 80 || y + cardHeight > screenHeight - 60) {
+            targetCard.measureLayout(
+              mainScrollRef.current as any,
+              (left, top, w, h) => {
+                const targetScrollY = Math.max(0, top - screenHeight / 2 + h / 2);
+                mainScrollRef.current?.scrollTo({ y: targetScrollY, animated: false });
+                requestAnimationFrame(() => {
+                  targetCard.measureInWindow((nx, ny, nw, nh) => {
+                    if (nw > 0 && nh > 0) {
+                      thumbX.value = nx;
+                      thumbY.value = ny;
+                      thumbW.value = nw;
+                      thumbH.value = nh;
+                    }
+                  });
+                });
+              },
+              () => {}
+            );
+          } else {
+            thumbX.value = x;
+            thumbY.value = y;
+            thumbW.value = cardWidth;
+            thumbH.value = cardHeight;
+          }
+        }
+      });
+    }
+  }, [filteredGalleryImages]);
+
+  // Keep thumbnail target position updated whenever activeImageIndex changes in Lightbox
+  React.useEffect(() => {
+    if (activeImageIndex !== null) {
+      updateThumbForIndex(activeImageIndex);
+    }
+  }, [activeImageIndex, updateThumbForIndex]);
+
   const openLightbox = useCallback((img: any, bounds: { x: number; y: number; width: number; height: number } | null) => {
     const targetIdx = filteredGalleryImages.findIndex(item => item.id === img.id);
     const finalIdx = targetIdx !== -1 ? targetIdx : (img.originalIndex ?? 0);
@@ -504,6 +570,9 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   }, [filteredGalleryImages, width]);
 
   const closeLightbox = useCallback(() => {
+    if (activeImageIndex !== null) {
+      updateThumbForIndex(activeImageIndex);
+    }
     expandProgress.value = withTiming(0, {
       duration: 380,
       easing: Easing.bezier(0.25, 0.1, 0.25, 1),
@@ -512,7 +581,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
         runOnJS(setActiveImageIndex)(null);
       }
     });
-  }, []);
+  }, [activeImageIndex, updateThumbForIndex]);
 
   const heroAnimatedStyle = useAnimatedStyle(() => {
     'worklet';
@@ -825,6 +894,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
         </Pressable>
 
         <ScrollView
+          ref={mainScrollRef}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           bounces={true}
@@ -919,6 +989,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                       index={idx}
                       isColumn0={true}
                       onSelect={(bounds) => openLightbox(img, bounds)}
+                      onRegisterRef={registerCardRef}
                     />
                   ))}
                 </View>
@@ -930,6 +1001,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                       index={idx}
                       isColumn0={false}
                       onSelect={(bounds) => openLightbox(img, bounds)}
+                      onRegisterRef={registerCardRef}
                     />
                   ))}
                 </View>
