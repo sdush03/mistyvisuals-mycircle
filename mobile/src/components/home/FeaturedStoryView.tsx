@@ -10,6 +10,7 @@ import {
   StatusBar,
   FlatList,
   Share,
+  Image as RNImage,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -492,10 +493,10 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
             />
             {/* White Logo on Cover (positioned exactly where app header logo is) */}
             <View style={[styles.coverHeaderLogoContainer, { top: insets.top + 6 }]} pointerEvents="none">
-              <Image
+              <RNImage
                 source={require('../../../assets/images/logo-white.png')}
                 style={styles.coverHeaderLogo}
-                contentFit="contain"
+                resizeMode="contain"
               />
             </View>
             <LinearGradient
