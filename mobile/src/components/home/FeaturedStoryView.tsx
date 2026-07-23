@@ -371,7 +371,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
         dragTranslateY.value = withSpring(0, { damping: 20, mass: 1, stiffness: 150 });
         dragTranslateX.value = withSpring(0, { damping: 20, mass: 1, stiffness: 150 });
         dragScale.value = withSpring(1, { damping: 20, mass: 1, stiffness: 150 });
-        expandProgress.value = withSpring(1, { damping: 20, mass: 1, stiffness: 150 });
+        expandProgress.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) });
       }
     });
 
@@ -647,7 +647,10 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     setActiveImageIndex(finalIdx);
 
     requestAnimationFrame(() => {
-      expandProgress.value = withSpring(1, { damping: 26, mass: 1, stiffness: 170 });
+      expandProgress.value = withTiming(1, {
+        duration: 400,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      });
     });
   }, [filteredGalleryImages, width]);
 
@@ -655,7 +658,10 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     if (activeImageIndex !== null) {
       updateThumbForIndex(activeImageIndex);
     }
-    expandProgress.value = withSpring(0, { damping: 28, mass: 1, stiffness: 190 }, (finished) => {
+    expandProgress.value = withTiming(0, {
+      duration: 350,
+      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+    }, (finished) => {
       if (finished) {
         runOnJS(setActiveImageIndex)(null);
       }
