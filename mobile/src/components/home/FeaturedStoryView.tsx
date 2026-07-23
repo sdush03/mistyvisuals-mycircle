@@ -493,7 +493,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
             {/* White Logo on Cover (positioned exactly where app header logo is) */}
             <View style={[styles.coverHeaderLogoContainer, { top: insets.top + 6 }]} pointerEvents="none">
               <Image
-                source={require('../../assets/images/logo-white.png')}
+                source={require('../../../assets/images/logo-white.png')}
                 style={styles.coverHeaderLogo}
                 contentFit="contain"
               />
