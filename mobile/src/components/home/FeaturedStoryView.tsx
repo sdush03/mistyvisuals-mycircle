@@ -137,11 +137,13 @@ interface LightboxImageItemProps {
   item: any;
   width: number;
   onDoubleTap: () => void;
-  onSingleTap?: () => void;
-  onNavigate: (dir: 'next' | 'prev') => void;
-  onZoomChange: (zoomed: boolean) => void;
+  onSingleTap: () => void;
+  onNavigate: (direction: 'next' | 'prev') => void;
+  onZoomChange: (isZoomed: boolean) => void;
   onToggleControls: () => void;
   onCloseLightbox: () => void;
+  onInteractionStart: () => void;
+  onInteractionEnd: () => void;
   expandProgress: SharedValue<number>;
   heartPopAnimatedStyle: any;
 }
@@ -154,6 +156,8 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
   onZoomChange,
   onToggleControls,
   onCloseLightbox,
+  onInteractionStart,
+  onInteractionEnd,
   expandProgress,
   heartPopAnimatedStyle,
 }: LightboxImageItemProps) {
@@ -172,14 +176,11 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     savedScale.value = 1;
     savedZoomX.value = 0;
     savedZoomY.value = 0;
-    zoomTranslateX.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
-    zoomTranslateY.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
-    pinchScale.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
-      if (finished) {
-        runOnJS(setIsZoomedState)(false);
-        runOnJS(onZoomChange)(false);
-      }
-    });
+    zoomTranslateX.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) });
+    zoomTranslateY.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) });
+    pinchScale.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.quad) });
+    runOnJS(setIsZoomedState)(false);
+    runOnJS(onZoomChange)(false);
   }, [onZoomChange]);
 
 
@@ -197,10 +198,11 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
   const manualGesture = Gesture.Manual()
     .onTouchesDown((e, manager) => {
       'worklet';
+      runOnJS(onInteractionStart)();
       if (e.allTouches.length === 1) {
         lastTouchX1.value = e.allTouches[0].x;
         lastTouchY1.value = e.allTouches[0].y;
-        if (pinchScale.value > 1.05) {
+        if (pinchScale.value > 1.01) {
           manager.activate();
         }
       } else if (e.allTouches.length === 2) {
@@ -219,9 +221,10 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     })
     .onTouchesMove((e, manager) => {
       'worklet';
+      runOnJS(onInteractionStart)();
       if (e.allTouches.length === 1) {
         const s = pinchScale.value;
-        if (s <= 1.05) {
+        if (s <= 1.01) {
           manager.fail();
           return;
         }
@@ -274,7 +277,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
         lastTouchY2.value = p2.y;
 
         const s = pinchScale.value;
-        if (s > 1.05) {
+        if (s > 1.01) {
           const imgWidth = width;
           const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
           const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2);
@@ -296,8 +299,9 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
         lastTouchY1.value = p1.y;
       } else if (e.allTouches.length === 0) {
         manager.end();
+        runOnJS(onInteractionEnd)();
         const s = pinchScale.value;
-        if (s <= 1.05) {
+        if (s <= 1.01) {
           resetZoom();
         } else {
           savedScale.value = s;
@@ -329,18 +333,20 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     })
     .onStart(() => {
       'worklet';
+      runOnJS(onInteractionStart)();
       dragTranslateY.value = 0;
       dragTranslateX.value = 0;
       dragScale.value = 1;
     })
     .onUpdate((e) => {
       'worklet';
+      runOnJS(onInteractionStart)();
       if (Date.now() - lastPinchTime.value < 400) return;
       const s = pinchScale.value;
       const imgWidth = width;
       const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
       const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
-      const atTop = s <= 1.05 || savedZoomY.value >= (maxTy - 12);
+      const atTop = s <= 1.01 || savedZoomY.value >= (maxTy - 12);
 
       if (e.translationY > 0 && e.translationY > Math.abs(e.translationX) && atTop) {
         dragTranslateY.value = e.translationY;
@@ -352,6 +358,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     })
     .onEnd((e) => {
       'worklet';
+      runOnJS(onInteractionEnd)();
       if (Date.now() - lastPinchTime.value < 400) {
         dragTranslateY.value = 0;
         dragTranslateX.value = 0;
@@ -362,7 +369,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
       const imgWidth = width;
       const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
       const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
-      const atTop = s <= 1.05 || savedZoomY.value >= (maxTy - 12);
+      const atTop = s <= 1.01 || savedZoomY.value >= (maxTy - 12);
 
       const isDownwardDrag = e.translationY > 110 && e.translationY > Math.abs(e.translationX) * 1.5 && atTop;
       const isDownwardFlick = e.translationY > 40 && e.velocityY > 800 && e.velocityY > Math.abs(e.velocityX) * 1.5 && atTop;
@@ -1202,7 +1209,12 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                         offset: (width + 18) * index,
                         index,
                       })}
+                      onScrollBeginDrag={() => {
+                        setShowControls(true);
+                        pauseAutoHideTimer();
+                      }}
                       onMomentumScrollEnd={(e) => {
+                        resetAutoHideTimer();
                         const newIdx = Math.round(e.nativeEvent.contentOffset.x / (width + 18));
                         if (newIdx >= 0 && newIdx < filteredGalleryImages.length) {
                           setActiveImageIndex(newIdx);
@@ -1220,6 +1232,8 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                           onZoomChange={handleZoomChange}
                           onToggleControls={handleToggleControls}
                           onCloseLightbox={closeLightbox}
+                          onInteractionStart={pauseAutoHideTimer}
+                          onInteractionEnd={resetAutoHideTimer}
                           expandProgress={expandProgress}
                           heartPopAnimatedStyle={heartPopAnimatedStyle}
                         />
