@@ -200,7 +200,9 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
       if (e.allTouches.length === 1) {
         lastTouchX1.value = e.allTouches[0].x;
         lastTouchY1.value = e.allTouches[0].y;
-        manager.activate();
+        if (pinchScale.value > 1.05) {
+          manager.activate();
+        }
       } else if (e.allTouches.length === 2) {
         const p1 = e.allTouches[0];
         const p2 = e.allTouches[1];
@@ -218,6 +220,13 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     .onTouchesMove((e, manager) => {
       'worklet';
       if (e.allTouches.length === 1) {
+        const s = pinchScale.value;
+        if (s <= 1.05) {
+          manager.fail();
+          return;
+        }
+
+        manager.activate();
         const p1 = e.allTouches[0];
         const dx = p1.x - lastTouchX1.value;
         const dy = p1.y - lastTouchY1.value;
@@ -225,25 +234,22 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
         lastTouchX1.value = p1.x;
         lastTouchY1.value = p1.y;
 
-        const s = pinchScale.value;
-        if (s > 1.05) {
-          const imgWidth = width;
-          const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
-          const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2);
-          const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
+        const imgWidth = width;
+        const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
+        const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2);
+        const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
 
-          let targetX = zoomTranslateX.value + dx;
-          let targetY = zoomTranslateY.value + dy;
+        let targetX = zoomTranslateX.value + dx;
+        let targetY = zoomTranslateY.value + dy;
 
-          if (targetX > maxTx) targetX = maxTx + (targetX - maxTx) * 0.25;
-          else if (targetX < -maxTx) targetX = -maxTx + (targetX - (-maxTx)) * 0.25;
+        if (targetX > maxTx) targetX = maxTx + (targetX - maxTx) * 0.25;
+        else if (targetX < -maxTx) targetX = -maxTx + (targetX - (-maxTx)) * 0.25;
 
-          if (targetY > maxTy) targetY = maxTy + (targetY - maxTy) * 0.25;
-          else if (targetY < -maxTy) targetY = -maxTy + (targetY - (-maxTy)) * 0.25;
+        if (targetY > maxTy) targetY = maxTy + (targetY - maxTy) * 0.25;
+        else if (targetY < -maxTy) targetY = -maxTy + (targetY - (-maxTy)) * 0.25;
 
-          zoomTranslateX.value = targetX;
-          zoomTranslateY.value = targetY;
-        }
+        zoomTranslateX.value = targetX;
+        zoomTranslateY.value = targetY;
       } else if (e.allTouches.length === 2) {
         const p1 = e.allTouches[0];
         const p2 = e.allTouches[1];
