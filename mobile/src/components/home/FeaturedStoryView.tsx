@@ -605,14 +605,13 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     const p = expandProgress.value;
 
     const w_grid = thumbW.value > 0 ? thumbW.value : 120;
-    const h_grid = thumbH.value > 0 ? thumbH.value : 160;
     const cx_grid = thumbX.value + w_grid / 2;
-    const cy_grid = thumbY.value + h_grid / 2;
+    const cy_grid = thumbY.value + (thumbH.value > 0 ? thumbH.value : 160) / 2;
     const cx_screen = width / 2;
     const cy_screen = screenHeight / 2;
 
-    const scaleX = (w_grid / width) + (1 - (w_grid / width)) * p;
-    const scaleY = (h_grid / screenHeight) + (1 - (h_grid / screenHeight)) * p;
+    const initialScale = Math.max(w_grid / width, 0.15);
+    const scale = initialScale + (1 - initialScale) * p;
 
     const translateX = (cx_grid - cx_screen) * (1 - p);
     const translateY = (cy_grid - cy_screen) * (1 - p);
@@ -622,11 +621,9 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
       transform: [
         { translateX },
         { translateY },
-        { scaleX },
-        { scaleY },
+        { scale },
       ],
       borderRadius: (1 - p) * 14,
-      overflow: 'hidden',
     };
   });
 
