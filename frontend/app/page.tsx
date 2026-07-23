@@ -576,7 +576,7 @@ export default function CirclePage() {
           lineHeight: 1.1,
           color: '#1c1a18'
         }}>
-          MY CIRCLE
+          Misty Visuals My Circle
         </h1>
         <p style={{
           fontFamily: 'Cormorant Garamond, serif',

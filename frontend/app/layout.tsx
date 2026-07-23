@@ -4,7 +4,7 @@ import ScrollRestoration from '@/components/ScrollRestoration'
 import LayoutWrapper from '@/components/LayoutWrapper'
 
 export const metadata: Metadata = {
-  title: 'My Circle | Misty Visuals',
+  title: 'Misty Visuals My Circle',
   description: 'Discover your wedding photos and matched celebrations.',
   icons: {
     icon: '/icons/icon-192x192-v3.png',
