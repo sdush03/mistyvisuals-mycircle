@@ -464,7 +464,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 
         {/* Borderless Editorial Back Button */}
         <Pressable
-          style={[styles.editorialBackButton, { top: Math.max(insets.top + 16, 48) }]}
+          style={[styles.editorialBackButton, { top: Math.max(insets.top + 10, 42) }]}
           onPress={onClose}
           hitSlop={16}
         >
@@ -490,6 +490,14 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
               cachePolicy="memory-disk"
               transition={100}
             />
+            {/* White Logo on Cover (positioned exactly where app header logo is) */}
+            <View style={[styles.coverHeaderLogoContainer, { top: insets.top + 6 }]} pointerEvents="none">
+              <Image
+                source={require('../../assets/images/logo-white.png')}
+                style={styles.coverHeaderLogo}
+                contentFit="contain"
+              />
+            </View>
             <LinearGradient
               colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.75)']}
               locations={[0, 0.45, 1]}
@@ -827,6 +835,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 6,
     paddingHorizontal: 4,
+  },
+  coverHeaderLogoContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 95,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverHeaderLogo: {
+    width: 135,
+    height: 38,
   },
   editorialBackIcon: {
     color: '#ffffff',
