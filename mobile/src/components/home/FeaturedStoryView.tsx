@@ -292,7 +292,6 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
   const dragScale = useSharedValue(1);
 
   const swipeDownPanGesture = Gesture.Pan()
-    .enabled(!isZoomedState)
     .minPointers(1)
     .maxPointers(1)
     .activeOffsetY(18)
@@ -306,7 +305,13 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     })
     .onUpdate((e) => {
       'worklet';
-      if (e.translationY > 0 && e.translationY > Math.abs(e.translationX)) {
+      const s = pinchScale.value;
+      const imgWidth = width;
+      const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
+      const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
+      const atTop = s <= 1.05 || savedZoomY.value >= (maxTy - 12);
+
+      if (e.translationY > 0 && e.translationY > Math.abs(e.translationX) && atTop) {
         dragTranslateY.value = e.translationY;
         dragTranslateX.value = e.translationX * 0.2;
         const progress = Math.min(e.translationY / 400, 1);
@@ -316,8 +321,14 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     })
     .onEnd((e) => {
       'worklet';
-      const isDownwardDrag = e.translationY > 120 && e.translationY > Math.abs(e.translationX) * 1.5;
-      const isDownwardFlick = e.translationY > 40 && e.velocityY > 850 && e.velocityY > Math.abs(e.velocityX) * 1.5;
+      const s = pinchScale.value;
+      const imgWidth = width;
+      const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
+      const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
+      const atTop = s <= 1.05 || savedZoomY.value >= (maxTy - 12);
+
+      const isDownwardDrag = e.translationY > 110 && e.translationY > Math.abs(e.translationX) * 1.5 && atTop;
+      const isDownwardFlick = e.translationY > 40 && e.velocityY > 800 && e.velocityY > Math.abs(e.velocityX) * 1.5 && atTop;
 
       if (isDownwardDrag || isDownwardFlick) {
         runOnJS(onCloseLightbox)();
