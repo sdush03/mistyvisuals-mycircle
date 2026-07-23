@@ -454,7 +454,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
             <Image
               source={{ uri: thumbnailUri }}
               style={[styles.lightboxImage, StyleSheet.absoluteFillObject]}
-              contentFit="cover"
+              contentFit="contain"
               cachePolicy="memory-disk"
               priority="high"
             />
@@ -464,7 +464,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
             <Image
               source={{ uri: fullUri }}
               style={styles.lightboxImage}
-              contentFit="cover"
+              contentFit="contain"
               cachePolicy="memory-disk"
               priority="high"
               transition={400}
@@ -682,9 +682,8 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     const cx_screen = width / 2;
     const cy_screen = screenHeight / 2;
 
-    const stageHeight = screenHeight * 0.82;
-    const currentW = thumbW.value + (width - thumbW.value) * p;
-    const currentH = thumbH.value + (stageHeight - thumbH.value) * p;
+    const initialScale = Math.max(thumbW.value / width, 0.12);
+    const scale = initialScale + (1 - initialScale) * p;
 
     const initialTx = cx_grid - cx_screen;
     const initialTy = cy_grid - cy_screen;
@@ -693,11 +692,10 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 
     return {
       opacity: p > 0.002 ? 1 : 0,
-      width: currentW,
-      height: currentH,
       transform: [
         { translateX },
         { translateY },
+        { scale },
       ],
       borderRadius: (1 - p) * 16,
       overflow: 'hidden',
