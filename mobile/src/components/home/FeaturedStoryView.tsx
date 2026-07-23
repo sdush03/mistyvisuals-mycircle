@@ -361,17 +361,17 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
       const isDownwardFlick = e.translationY > 40 && e.velocityY > 800 && e.velocityY > Math.abs(e.velocityX) * 1.5 && atTop;
 
       if (isDownwardDrag || isDownwardFlick) {
-        dragTranslateY.value = withTiming(0, { duration: 380, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
-        dragTranslateX.value = withTiming(0, { duration: 380, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
-        dragScale.value = withTiming(1, { duration: 380, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
-        zoomTranslateX.value = withTiming(0, { duration: 380, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
-        zoomTranslateY.value = withTiming(0, { duration: 380, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
+        dragTranslateY.value = withSpring(0, { damping: 28, mass: 1, stiffness: 190 });
+        dragTranslateX.value = withSpring(0, { damping: 28, mass: 1, stiffness: 190 });
+        dragScale.value = withSpring(1, { damping: 28, mass: 1, stiffness: 190 });
+        zoomTranslateX.value = withSpring(0, { damping: 28, mass: 1, stiffness: 190 });
+        zoomTranslateY.value = withSpring(0, { damping: 28, mass: 1, stiffness: 190 });
         runOnJS(onCloseLightbox)();
       } else {
-        dragTranslateY.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
-        dragTranslateX.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
-        dragScale.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) });
-        expandProgress.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) });
+        dragTranslateY.value = withSpring(0, { damping: 20, mass: 1, stiffness: 150 });
+        dragTranslateX.value = withSpring(0, { damping: 20, mass: 1, stiffness: 150 });
+        dragScale.value = withSpring(1, { damping: 20, mass: 1, stiffness: 150 });
+        expandProgress.value = withSpring(1, { damping: 20, mass: 1, stiffness: 150 });
       }
     });
 
@@ -387,12 +387,35 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
   const doubleTapGesture = Gesture.Tap()
     .numberOfTaps(2)
     .maxDelay(250)
-    .onEnd(() => {
+    .onEnd((e) => {
       'worklet';
       if (pinchScale.value > 1.05) {
         resetZoom();
       } else {
-        runOnJS(onDoubleTap)();
+        const targetScale = 2.5;
+        const centerX = width / 2;
+        const centerY = screenHeight / 2;
+
+        const targetX = (centerX - e.x) * (targetScale - 1);
+        const targetY = (centerY - e.y) * (targetScale - 1);
+
+        const maxTx = Math.max(0, (width * (targetScale - 1)) / 2);
+        const maxTy = Math.max(0, (screenHeight * (targetScale - 1)) / 2);
+
+        const clampedX = Math.min(Math.max(targetX, -maxTx), maxTx);
+        const clampedY = Math.min(Math.max(targetY, -maxTy), maxTy);
+
+        savedScale.value = targetScale;
+        zoomTranslateX.value = withTiming(clampedX, { duration: 250, easing: Easing.out(Easing.quad) });
+        zoomTranslateY.value = withTiming(clampedY, { duration: 250, easing: Easing.out(Easing.quad) });
+        pinchScale.value = withTiming(targetScale, { duration: 250, easing: Easing.out(Easing.quad) }, (finished) => {
+          if (finished) {
+            savedZoomX.value = clampedX;
+            savedZoomY.value = clampedY;
+            runOnJS(setIsZoomedState)(true);
+            runOnJS(onZoomChange)(true);
+          }
+        });
       }
     });
 
@@ -624,10 +647,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     setActiveImageIndex(finalIdx);
 
     requestAnimationFrame(() => {
-      expandProgress.value = withTiming(1, {
-        duration: 420,
-        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-      });
+      expandProgress.value = withSpring(1, { damping: 26, mass: 1, stiffness: 170 });
     });
   }, [filteredGalleryImages, width]);
 
@@ -635,10 +655,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     if (activeImageIndex !== null) {
       updateThumbForIndex(activeImageIndex);
     }
-    expandProgress.value = withTiming(0, {
-      duration: 380,
-      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-    }, (finished) => {
+    expandProgress.value = withSpring(0, { damping: 28, mass: 1, stiffness: 190 }, (finished) => {
       if (finished) {
         runOnJS(setActiveImageIndex)(null);
       }
@@ -669,6 +686,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
         { scale },
       ],
       borderRadius: (1 - p) * 16,
+      overflow: 'hidden',
     };
   });
 
