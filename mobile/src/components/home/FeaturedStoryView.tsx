@@ -331,6 +331,11 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
       const isDownwardFlick = e.translationY > 40 && e.velocityY > 800 && e.velocityY > Math.abs(e.velocityX) * 1.5 && atTop;
 
       if (isDownwardDrag || isDownwardFlick) {
+        dragTranslateY.value = withTiming(0, { duration: 380, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
+        dragTranslateX.value = withTiming(0, { duration: 380, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
+        dragScale.value = withTiming(1, { duration: 380, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
+        zoomTranslateX.value = withTiming(0, { duration: 380, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
+        zoomTranslateY.value = withTiming(0, { duration: 380, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
         runOnJS(onCloseLightbox)();
       } else {
         dragTranslateY.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
