@@ -189,8 +189,13 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
 
   const pinchGesture = Gesture.Pinch()
     .cancelsTouchesInView(true)
+    .onBegin(() => {
+      'worklet';
+      console.log('[GESTURE_LOG] [PINCH] State -> BEGAN');
+    })
     .onStart(() => {
       'worklet';
+      console.log('[GESTURE_LOG] [PINCH] State -> ACTIVE / START');
       lastPinchTime.value = Date.now();
       dragTranslateY.value = 0;
       dragTranslateX.value = 0;
@@ -211,6 +216,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     })
     .onEnd(() => {
       'worklet';
+      console.log('[GESTURE_LOG] [PINCH] State -> END');
       lastPinchTime.value = Date.now();
       if (pinchScale.value <= 1.05) {
         resetZoom();
@@ -226,21 +232,51 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
         savedZoomX.value = clampedX;
         savedZoomY.value = clampedY;
       }
+    })
+    .onFinalize((g, success) => {
+      'worklet';
+      console.log('[GESTURE_LOG] [PINCH] State -> FINALIZE, success:', success);
+    })
+    .onTouchesDown((e) => {
+      'worklet';
+      console.log('[GESTURE_LOG] [PINCH] TouchesDown count:', e.numberOfTouches);
+    })
+    .onTouchesUp((e) => {
+      'worklet';
+      console.log('[GESTURE_LOG] [PINCH] TouchesUp count:', e.numberOfTouches);
+    })
+    .onTouchesCancelled(() => {
+      'worklet';
+      console.log('[GESTURE_LOG] [PINCH] TouchesCancelled');
     });
 
   const zoomPanGesture = Gesture.Pan()
     .minPointers(1)
     .maxPointers(2)
     .enabled(isZoomedState)
+    .onBegin(() => {
+      'worklet';
+      console.log('[GESTURE_LOG] [PAN] State -> BEGAN');
+    })
     .onStart(() => {
       'worklet';
+      console.log('[GESTURE_LOG] [PAN] State -> ACTIVE / START');
       savedZoomX.value = zoomTranslateX.value;
       savedZoomY.value = zoomTranslateY.value;
     })
-    .onTouchesUp(() => {
+    .onTouchesUp((e) => {
       'worklet';
+      console.log('[GESTURE_LOG] [PAN] TouchesUp count:', e.numberOfTouches);
       savedZoomX.value = zoomTranslateX.value;
       savedZoomY.value = zoomTranslateY.value;
+    })
+    .onTouchesCancelled(() => {
+      'worklet';
+      console.log('[GESTURE_LOG] [PAN] TouchesCancelled');
+    })
+    .onFinalize((g, success) => {
+      'worklet';
+      console.log('[GESTURE_LOG] [PAN] State -> FINALIZE, success:', success);
     })
     .onUpdate((e) => {
       'worklet';
