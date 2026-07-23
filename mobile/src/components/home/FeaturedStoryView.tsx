@@ -604,25 +604,29 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     'worklet';
     const p = expandProgress.value;
 
-    const targetW = thumbW.value > 0 ? thumbW.value : 120;
-    const targetH = thumbH.value > 0 ? thumbH.value : 160;
-    const targetX = thumbX.value;
-    const targetY = thumbY.value;
+    const w_grid = thumbW.value > 0 ? thumbW.value : 120;
+    const h_grid = thumbH.value > 0 ? thumbH.value : 160;
+    const cx_grid = thumbX.value + w_grid / 2;
+    const cy_grid = thumbY.value + h_grid / 2;
+    const cx_screen = width / 2;
+    const cy_screen = screenHeight / 2;
 
-    const curW = targetW + (width - targetW) * p;
-    const curH = targetH + (screenHeight - targetH) * p;
-    const curX = targetX * (1 - p);
-    const curY = targetY * (1 - p);
+    const scaleX = (w_grid / width) + (1 - (w_grid / width)) * p;
+    const scaleY = (h_grid / screenHeight) + (1 - (h_grid / screenHeight)) * p;
+
+    const translateX = (cx_grid - cx_screen) * (1 - p);
+    const translateY = (cy_grid - cy_screen) * (1 - p);
 
     return {
-      position: 'absolute',
-      left: curX,
-      top: curY,
-      width: curW,
-      height: curH,
+      opacity: p > 0.002 ? 1 : 0,
+      transform: [
+        { translateX },
+        { translateY },
+        { scaleX },
+        { scaleY },
+      ],
       borderRadius: (1 - p) * 14,
       overflow: 'hidden',
-      opacity: p > 0.002 ? 1 : 0,
     };
   });
 
