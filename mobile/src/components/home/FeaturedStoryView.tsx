@@ -18,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 // @ts-ignore
 import { AntDesign, Feather, Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence, withDecay, Easing, runOnJS, SharedValue } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence, withDecay, Easing, runOnJS, SharedValue, useAnimatedReaction } from 'react-native-reanimated';
 import {
   FONT_FUTURA,
   FONT_FUTURA_BOLD,
@@ -442,6 +442,18 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     ],
   }));
 
+  const [contentFitMode, setContentFitMode] = useState<'cover' | 'contain'>('cover');
+
+  useAnimatedReaction(
+    () => expandProgress.value >= 0.85,
+    (isExpanded, previous) => {
+      if (isExpanded !== previous) {
+        runOnJS(setContentFitMode)(isExpanded ? 'contain' : 'cover');
+      }
+    },
+    []
+  );
+
   const thumbnailUri = typeof item === 'object' && item.uri ? item.uri : (typeof item === 'string' ? item : null);
   const fullUri = typeof item === 'object' && item.fullUri ? item.fullUri : thumbnailUri;
 
@@ -454,7 +466,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
             <Image
               source={{ uri: thumbnailUri }}
               style={[styles.lightboxImage, StyleSheet.absoluteFillObject]}
-              contentFit="contain"
+              contentFit={contentFitMode}
               cachePolicy="memory-disk"
               priority="high"
             />
@@ -464,7 +476,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
             <Image
               source={{ uri: fullUri }}
               style={styles.lightboxImage}
-              contentFit="contain"
+              contentFit={contentFitMode}
               cachePolicy="memory-disk"
               priority="high"
               transition={400}
@@ -682,8 +694,12 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     const cx_screen = width / 2;
     const cy_screen = screenHeight / 2;
 
-    const initialScale = Math.max(thumbW.value / width, 0.12);
-    const scale = initialScale + (1 - initialScale) * p;
+    const stageHeight = screenHeight * 0.82;
+    const initialScaleX = Math.max(thumbW.value / width, 0.05);
+    const initialScaleY = Math.max(thumbH.value / stageHeight, 0.05);
+
+    const scaleX = initialScaleX + (1 - initialScaleX) * p;
+    const scaleY = initialScaleY + (1 - initialScaleY) * p;
 
     const initialTx = cx_grid - cx_screen;
     const initialTy = cy_grid - cy_screen;
@@ -695,7 +711,8 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
       transform: [
         { translateX },
         { translateY },
-        { scale },
+        { scaleX },
+        { scaleY },
       ],
       borderRadius: (1 - p) * 16,
       overflow: 'hidden',
