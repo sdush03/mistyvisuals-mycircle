@@ -537,18 +537,34 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   }, [galleryImages, activeTab]);
 
   // Keep ref synced to showControls so callbacks always inspect the instant state
+  const autoHideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const resetAutoHideTimer = useCallback(() => {
+    if (autoHideTimeoutRef.current) clearTimeout(autoHideTimeoutRef.current);
+    autoHideTimeoutRef.current = setTimeout(() => {
+      setShowControls(false);
+    }, 2800);
+  }, []);
+
   const handleZoomChange = useCallback((zoomed: boolean) => {
     setIsZoomed(zoomed);
     if (zoomed) {
       setShowControls(false);
+      if (autoHideTimeoutRef.current) clearTimeout(autoHideTimeoutRef.current);
     } else {
-      setShowControls(true); // Always show everything back when zoomed out!
+      setShowControls(true);
+      resetAutoHideTimer();
     }
-  }, []);
+  }, [resetAutoHideTimer]);
 
   const handleToggleControls = useCallback(() => {
-    setShowControls(prev => !prev);
-  }, []);
+    setShowControls(prev => {
+      const next = !prev;
+      if (next) resetAutoHideTimer();
+      else if (autoHideTimeoutRef.current) clearTimeout(autoHideTimeoutRef.current);
+      return next;
+    });
+  }, [resetAutoHideTimer]);
 
   // Imperatively hide/show StatusBar when single tapping in Lightbox or zooming
   React.useEffect(() => {
@@ -562,13 +578,27 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     };
   }, [activeImageIndex, showControls]);
 
-  // Reset controls to visible whenever opening or changing photo
+  // Reset controls & timer whenever changing photo, plus prefetch adjacent images
   React.useEffect(() => {
     if (activeImageIndex !== null) {
       setShowControls(true);
       setIsZoomed(false);
+      resetAutoHideTimer();
+
+      const prevImg = filteredGalleryImages[activeImageIndex - 1];
+      const nextImg = filteredGalleryImages[activeImageIndex + 1];
+      if (prevImg) {
+        const url = typeof prevImg === 'object' ? (prevImg.fullUri || prevImg.uri) : prevImg;
+        if (url) Image.prefetch(url, 'memory-disk');
+      }
+      if (nextImg) {
+        const url = typeof nextImg === 'object' ? (nextImg.fullUri || nextImg.uri) : nextImg;
+        if (url) Image.prefetch(url, 'memory-disk');
+      }
+    } else {
+      if (autoHideTimeoutRef.current) clearTimeout(autoHideTimeoutRef.current);
     }
-  }, [activeImageIndex]);
+  }, [activeImageIndex, filteredGalleryImages, resetAutoHideTimer]);
 
   // iPhone Photos style Hero Expansion shared values & callbacks
   const expandProgress = useSharedValue(0);
@@ -1139,6 +1169,9 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                           ]} 
                           onPress={closeLightbox}
                           hitSlop={14}
+                          accessibilityRole="button"
+                          accessibilityLabel="Close lightbox"
+                          accessibilityHint="Closes the fullscreen photo viewer and returns to gallery"
                         >
                           <Text style={styles.lightboxCloseIcon}>✕</Text>
                         </Pressable>
@@ -1217,12 +1250,14 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                         const handleToggleCurrentPhotoSave = async () => {
                           if (!currentUrlForSave) return;
                           if (isCurrentPhotoSaved) {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                             const updated = new Set(savedUrls);
                             updated.delete(currentUrlForSave);
                             setSavedUrls(updated);
                             showToast("Removed from Moodboard");
                             await savesService.unsavePhoto(currentUrlForSave);
                           } else {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                             const updated = new Set(savedUrls);
                             updated.add(currentUrlForSave);
                             setSavedUrls(updated);
