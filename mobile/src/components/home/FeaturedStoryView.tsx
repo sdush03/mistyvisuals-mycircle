@@ -603,27 +603,26 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   const heroAnimatedStyle = useAnimatedStyle(() => {
     'worklet';
     const p = expandProgress.value;
-    const cx_grid = thumbX.value + thumbW.value / 2;
-    const cy_grid = thumbY.value + thumbH.value / 2;
-    const cx_screen = width / 2;
-    const cy_screen = screenHeight / 2;
+    if (p <= 0.001) {
+      return {
+        opacity: 0,
+      };
+    }
 
-    const initialScale = Math.max(thumbW.value / width, 0.12);
-    const scale = initialScale + (1 - initialScale) * p;
-
-    const initialTx = cx_grid - cx_screen;
-    const initialTy = cy_grid - cy_screen;
-    const translateX = initialTx * (1 - p);
-    const translateY = initialTy * (1 - p);
+    const curW = thumbW.value + (width - thumbW.value) * p;
+    const curH = thumbH.value + (screenHeight - thumbH.value) * p;
+    const curX = thumbX.value * (1 - p);
+    const curY = thumbY.value * (1 - p);
 
     return {
-      opacity: p > 0.002 ? 1 : 0,
-      transform: [
-        { translateX },
-        { translateY },
-        { scale },
-      ],
-      borderRadius: (1 - p) * 16,
+      position: 'absolute',
+      left: curX,
+      top: curY,
+      width: curW,
+      height: curH,
+      borderRadius: (1 - p) * 14,
+      overflow: 'hidden',
+      opacity: 1,
     };
   });
 
@@ -1076,7 +1075,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                 )}
 
                 {/* Native Horizontal Paging Lightbox Stage -- ONLY THE PHOTO EXPANDS! */}
-                <Animated.View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center' }, heroAnimatedStyle]}>
+                <Animated.View style={[heroAnimatedStyle]}>
                   <View style={styles.lightboxImageContainer}>
                     <FlatList
                       ref={flatListRef}
