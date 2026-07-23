@@ -182,12 +182,18 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
   }, [onZoomChange]);
 
 
+  const dragTranslateY = useSharedValue(0);
+  const dragTranslateX = useSharedValue(0);
+  const dragScale = useSharedValue(1);
 
   const pinchGesture = Gesture.Pinch()
     .cancelsTouchesInView(true)
     .onStart(() => {
       'worklet';
       lastPinchTime.value = Date.now();
+      dragTranslateY.value = 0;
+      dragTranslateX.value = 0;
+      dragScale.value = 1;
       const currentX = zoomTranslateX.value;
       const currentY = zoomTranslateY.value;
       zoomTranslateX.value = currentX;
@@ -210,8 +216,8 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
       } else {
         savedScale.value = pinchScale.value;
         const s = pinchScale.value;
-        const maxTx = (width * (s - 1)) / 2;
-        const maxTy = (screenHeight * (s - 1)) / 2;
+        const maxTx = Math.max(0, (width * (s - 1)) / 2);
+        const maxTy = Math.max(0, (screenHeight * (s - 1)) / 2);
         const clampedX = Math.min(Math.max(zoomTranslateX.value, -maxTx), maxTx);
         const clampedY = Math.min(Math.max(zoomTranslateY.value, -maxTy), maxTy);
         zoomTranslateX.value = withTiming(clampedX, { duration: 180, easing: Easing.out(Easing.quad) });
@@ -227,17 +233,13 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     .enabled(isZoomedState)
     .onStart(() => {
       'worklet';
-      const currentX = zoomTranslateX.value;
-      const currentY = zoomTranslateY.value;
-      zoomTranslateX.value = currentX;
-      zoomTranslateY.value = currentY;
-      savedZoomX.value = currentX;
-      savedZoomY.value = currentY;
+      savedZoomX.value = zoomTranslateX.value;
+      savedZoomY.value = zoomTranslateY.value;
     })
     .onUpdate((e) => {
       'worklet';
       const s = pinchScale.value;
-      if (s <= 1.05) return; // Allow native FlatList to handle 100% of unzoomed horizontal paging
+      if (s <= 1.05) return;
 
       const imgWidth = width;
       const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
@@ -299,16 +301,18 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
       });
     });
 
-  const dragTranslateY = useSharedValue(0);
-  const dragTranslateX = useSharedValue(0);
-  const dragScale = useSharedValue(1);
-
   const swipeDownPanGesture = Gesture.Pan()
     .minPointers(1)
     .maxPointers(1)
     .activeOffsetY(18)
     .failOffsetY(-10)
     .failOffsetX([-40, 40])
+    .onTouchesDown((e, state) => {
+      'worklet';
+      if (e.numberOfTouches > 1) {
+        state.fail();
+      }
+    })
     .onStart(() => {
       'worklet';
       dragTranslateY.value = 0;
@@ -317,6 +321,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     })
     .onUpdate((e) => {
       'worklet';
+      if (Date.now() - lastPinchTime.value < 400) return;
       const s = pinchScale.value;
       const imgWidth = width;
       const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
@@ -333,6 +338,12 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     })
     .onEnd((e) => {
       'worklet';
+      if (Date.now() - lastPinchTime.value < 400) {
+        dragTranslateY.value = 0;
+        dragTranslateX.value = 0;
+        dragScale.value = 1;
+        return;
+      }
       const s = pinchScale.value;
       const imgWidth = width;
       const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
