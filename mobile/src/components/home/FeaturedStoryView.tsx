@@ -230,15 +230,14 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
 
   const zoomPanGesture = Gesture.Pan()
     .minPointers(1)
-    .maxPointers(1)
+    .maxPointers(2)
     .enabled(isZoomedState)
-    .onTouchesDown((e, state) => {
-      'worklet';
-      if (e.numberOfTouches > 1) {
-        state.fail();
-      }
-    })
     .onStart(() => {
+      'worklet';
+      savedZoomX.value = zoomTranslateX.value;
+      savedZoomY.value = zoomTranslateY.value;
+    })
+    .onTouchesUp(() => {
       'worklet';
       savedZoomX.value = zoomTranslateX.value;
       savedZoomY.value = zoomTranslateY.value;
