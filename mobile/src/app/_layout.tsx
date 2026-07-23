@@ -197,7 +197,7 @@ function RootLayoutContent() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+      <Animated.View entering={FadeIn.duration(350)} style={{ flex: 1, backgroundColor: '#ffffff' }}>
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
         {/* Global Header — Centered Logo */}
         <View style={[styles.globalHeader, { height: headerHeight, paddingTop: topInset }]}>
@@ -237,7 +237,7 @@ function RootLayoutContent() {
             await logout();
           }}
         />
-      </View>
+      </Animated.View>
     </ThemeProvider>
   );
 }

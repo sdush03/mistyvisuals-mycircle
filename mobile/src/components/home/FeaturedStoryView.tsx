@@ -18,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 // @ts-ignore
 import { AntDesign, Feather, Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence, withDecay, Easing, runOnJS } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence, withDecay, Easing, runOnJS, SharedValue } from 'react-native-reanimated';
 import {
   FONT_FUTURA,
   FONT_FUTURA_BOLD,
@@ -137,11 +137,12 @@ interface LightboxImageItemProps {
   item: any;
   width: number;
   onDoubleTap: () => void;
+  onSingleTap?: () => void;
   onNavigate: (dir: 'next' | 'prev') => void;
   onZoomChange: (zoomed: boolean) => void;
   onToggleControls: () => void;
   onCloseLightbox: () => void;
-  expandProgress: Animated.SharedValue<number>;
+  expandProgress: SharedValue<number>;
   heartPopAnimatedStyle: any;
 }
 
@@ -462,6 +463,50 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   const [showControls, setShowControls] = useState(true);
   const [activeTab, setActiveTab] = useState<string>('ALL');
 
+  const galleryImages = React.useMemo(() => {
+    if (!story || !Array.isArray(story.images)) return [];
+    return story.images;
+  }, [story]);
+
+  const availableTabs = React.useMemo(() => {
+    if (!story) return ['ALL'];
+    const catSet = new Set<string>();
+    if (story.tabs) {
+      if (Array.isArray(story.tabs)) {
+        story.tabs.forEach((t: any) => {
+          if (typeof t === 'string' && t.trim() && t.trim().length <= 25) catSet.add(t.trim());
+        });
+      } else if (typeof story.tabs === 'string') {
+        (story.tabs as string).split(',').forEach((t: string) => {
+          if (t.trim() && t.trim().length <= 25) catSet.add(t.trim());
+        });
+      }
+    }
+    galleryImages.forEach((img: any) => {
+      if (img && typeof img === 'object' && img.category) {
+        String(img.category).split(',').forEach((c: string) => {
+          if (c.trim() && c.trim().length <= 25) catSet.add(c.trim());
+        });
+      }
+    });
+    const uniqueTabs = Array.from(catSet).filter(t => t.toUpperCase() !== 'ALL');
+    return uniqueTabs.length === 0 ? ['ALL'] : ['ALL', ...uniqueTabs];
+  }, [story, galleryImages]);
+
+  const filteredGalleryImages = React.useMemo(() => {
+    if (activeTab.toUpperCase() === 'ALL') return galleryImages;
+    const tabLower = activeTab.toLowerCase().trim();
+    const filtered = galleryImages.filter((img: any) => {
+      if (!img) return false;
+      const rawCat = typeof img === 'object' ? String(img.category || '') : '';
+      if (!rawCat) return false;
+      const catLower = rawCat.toLowerCase().trim();
+      const parts = catLower.split(',').map(s => s.trim());
+      return parts.some(c => c === tabLower || c.includes(tabLower) || tabLower.includes(c));
+    });
+    return filtered;
+  }, [galleryImages, activeTab]);
+
   // Keep ref synced to showControls so callbacks always inspect the instant state
   const handleZoomChange = useCallback((zoomed: boolean) => {
     setIsZoomed(zoomed);
@@ -502,7 +547,6 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   const thumbY = useSharedValue(0);
   const thumbW = useSharedValue(100);
   const thumbH = useSharedValue(100);
-  const activeCardAspect = useSharedValue(0.75);
 
   const mainScrollRef = useRef<ScrollView>(null);
   const cardRefs = useRef<{ [key: string]: View | null }>({});
@@ -515,10 +559,6 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     if (idx < 0 || idx >= filteredGalleryImages.length) return;
     const img = filteredGalleryImages[idx];
     if (!img) return;
-    const aspect = (typeof img === 'object' && img.cardAspect)
-      ? img.cardAspect
-      : ((typeof img === 'object' && img.aspectRatio) ? img.aspectRatio : 0.75);
-    activeCardAspect.value = aspect;
     const cardId = img.id || img.uri || `idx-${idx}`;
     const targetCard = cardRefs.current[cardId];
 
@@ -565,10 +605,6 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   const openLightbox = useCallback((img: any, bounds: { x: number; y: number; width: number; height: number } | null) => {
     const targetIdx = filteredGalleryImages.findIndex(item => item.id === img.id);
     const finalIdx = targetIdx !== -1 ? targetIdx : (img.originalIndex ?? 0);
-    const aspect = (typeof img === 'object' && img.cardAspect)
-      ? img.cardAspect
-      : ((typeof img === 'object' && img.aspectRatio) ? img.aspectRatio : 0.75);
-    activeCardAspect.value = aspect;
 
     if (bounds && bounds.width > 0 && bounds.height > 0) {
       thumbX.value = bounds.x;
@@ -612,32 +648,27 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   const heroAnimatedStyle = useAnimatedStyle(() => {
     'worklet';
     const p = expandProgress.value;
-    const cardAspect = activeCardAspect.value > 0 ? activeCardAspect.value : 0.75;
+    const cx_grid = thumbX.value + thumbW.value / 2;
+    const cy_grid = thumbY.value + thumbH.value / 2;
+    const cx_screen = width / 2;
+    const cy_screen = screenHeight / 2;
 
-    const w_grid = thumbW.value > 0 ? thumbW.value : 120;
-    const h_grid = thumbH.value > 0 ? thumbH.value : (w_grid / cardAspect);
-    const x_grid = thumbX.value;
-    const y_grid = thumbY.value;
+    const initialScale = Math.max(thumbW.value / width, 0.12);
+    const scale = initialScale + (1 - initialScale) * p;
 
-    const photoW = width;
-    const photoH = Math.min(screenHeight, width / cardAspect);
-    const photoY = (screenHeight - photoH) / 2;
-
-    const curW = w_grid + (photoW - w_grid) * p;
-    const curH = h_grid + (photoH - h_grid) * p;
-    const curX = x_grid * (1 - p);
-    const curY = y_grid + (photoY - y_grid) * p;
+    const initialTx = cx_grid - cx_screen;
+    const initialTy = cy_grid - cy_screen;
+    const translateX = initialTx * (1 - p);
+    const translateY = initialTy * (1 - p);
 
     return {
-      position: 'absolute',
-      left: curX,
-      top: curY,
-      width: curW,
-      height: curH,
-      borderRadius: (1 - p) * 14,
-      overflow: 'hidden',
       opacity: p > 0.002 ? 1 : 0,
-      zIndex: p < 0.95 ? 50 : 0,
+      transform: [
+        { translateX },
+        { translateY },
+        { scale },
+      ],
+      borderRadius: (1 - p) * 16,
     };
   });
 
@@ -701,6 +732,18 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   }));
 
   const [savedUrls, setSavedUrls] = useState<Set<string>>(new Set());
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<any>(null);
+
+  const showToast = useCallback((msg: string) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    setToastMessage(msg);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 2200);
+  }, []);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -728,50 +771,6 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     translateX.value = 0;
     opacity.value = 1;
   }, [activeImageIndex]);
-
-  const galleryImages = React.useMemo(() => {
-    if (!story || !Array.isArray(story.images)) return [];
-    return story.images;
-  }, [story]);
-
-  const availableTabs = React.useMemo(() => {
-    if (!story) return ['ALL'];
-    const catSet = new Set<string>();
-    if (story.tabs) {
-      if (Array.isArray(story.tabs)) {
-        story.tabs.forEach((t: any) => {
-          if (typeof t === 'string' && t.trim() && t.trim().length <= 25) catSet.add(t.trim());
-        });
-      } else if (typeof story.tabs === 'string') {
-        (story.tabs as string).split(',').forEach((t: string) => {
-          if (t.trim() && t.trim().length <= 25) catSet.add(t.trim());
-        });
-      }
-    }
-    galleryImages.forEach((img: any) => {
-      if (img && typeof img === 'object' && img.category) {
-        String(img.category).split(',').forEach((c: string) => {
-          if (c.trim() && c.trim().length <= 25) catSet.add(c.trim());
-        });
-      }
-    });
-    const uniqueTabs = Array.from(catSet).filter(t => t.toUpperCase() !== 'ALL');
-    return uniqueTabs.length === 0 ? ['ALL'] : ['ALL', ...uniqueTabs];
-  }, [story, galleryImages]);
-
-  const filteredGalleryImages = React.useMemo(() => {
-    if (activeTab.toUpperCase() === 'ALL') return galleryImages;
-    const tabLower = activeTab.toLowerCase().trim();
-    const filtered = galleryImages.filter((img: any) => {
-      if (!img) return false;
-      const rawCat = typeof img === 'object' ? String(img.category || '') : '';
-      if (!rawCat) return false;
-      const catLower = rawCat.toLowerCase().trim();
-      const parts = catLower.split(',').map(s => s.trim());
-      return parts.some(c => c === tabLower || c.includes(tabLower) || tabLower.includes(c));
-    });
-    return filtered;
-  }, [galleryImages, activeTab]);
 
   // High-performance background prefetching of adjacent lightbox photos (+/- 2 photos)
   React.useEffect(() => {
@@ -873,11 +872,13 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
         // Double tap again -> dislike / unsave WITHOUT animation
         updated.delete(currentUrl);
         savesService.unsavePhoto(currentUrl);
+        showToast("Removed from Moodboard");
       } else {
         // Double tap first time -> like / save WITH translucent heart pop animation
         updated.add(currentUrl);
         savesService.savePhoto(currentUrl, story?.id);
         triggerHeartPop();
+        showToast("Photo saved to Moodboard ✨");
       }
       return updated;
     });
@@ -1057,6 +1058,14 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
               <View style={styles.lightboxContainer}>
                 <StatusBar barStyle="light-content" translucent backgroundColor="transparent" hidden={!showControls} animated={true} />
 
+                {/* Toast Notification Banner */}
+                {toastMessage && (
+                  <View style={[styles.toastBanner, { top: Math.max(insets.top + 75, 100) }]} pointerEvents="none">
+                    <Ionicons name="bookmark" size={14} color="#FFD700" style={{ marginRight: 8 }} />
+                    <Text style={styles.toastText}>{toastMessage}</Text>
+                  </View>
+                )}
+
                 {/* Top Editorial Header Gradient Overlay */}
                 {showControls && (
                   <Animated.View style={[{ zIndex: 100 }, controlsFadeAnimatedStyle]} pointerEvents="box-none">
@@ -1089,31 +1098,9 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                   </Animated.View>
                 )}
 
-                {/* Pure Hero Image Overlay (Morphs directly into grid thumbnail ratio without black margins) */}
-                {(() => {
-                  const currentImgForHero = activeImageIndex !== null ? filteredGalleryImages[activeImageIndex] : null;
-                  const heroUri = currentImgForHero
-                    ? (typeof currentImgForHero === 'object' && currentImgForHero.uri
-                        ? currentImgForHero.uri
-                        : (typeof currentImgForHero === 'object' && currentImgForHero.fullUri
-                            ? currentImgForHero.fullUri
-                            : (typeof currentImgForHero === 'string' ? currentImgForHero : '')))
-                    : '';
-                  return (
-                    <Animated.View style={heroAnimatedStyle} pointerEvents="none">
-                      {heroUri ? (
-                        <Image
-                          source={{ uri: heroUri }}
-                          style={{ width: '100%', height: '100%' }}
-                          contentFit="cover"
-                        />
-                      ) : null}
-                    </Animated.View>
-                  );
-                })()}
-
-                {/* Native Horizontal Paging Lightbox Stage */}
-                <View style={styles.lightboxImageContainer}>
+                {/* Native Horizontal Paging Lightbox Stage -- ONLY THE PHOTO EXPANDS! */}
+                <Animated.View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center' }, heroAnimatedStyle]}>
+                  <View style={styles.lightboxImageContainer}>
                     <FlatList
                       ref={flatListRef}
                       data={filteredGalleryImages}
@@ -1157,6 +1144,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                       )}
                     />
                   </View>
+                </Animated.View>
 
                 {/* Bottom Editorial Footer Gradient Overlay */}
                 {showControls && (
@@ -1183,12 +1171,14 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                             const updated = new Set(savedUrls);
                             updated.delete(currentUrlForSave);
                             setSavedUrls(updated);
+                            showToast("Removed from Moodboard");
                             await savesService.unsavePhoto(currentUrlForSave);
                           } else {
                             const updated = new Set(savedUrls);
                             updated.add(currentUrlForSave);
                             setSavedUrls(updated);
                             triggerHeartPop();
+                            showToast("Photo saved to Moodboard ✨");
                             await savesService.savePhoto(currentUrlForSave, story?.id);
                           }
                         };
@@ -1595,5 +1585,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.6,
     shadowRadius: 12,
     elevation: 10,
+  },
+  toastBanner: {
+    position: 'absolute',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(20, 20, 20, 0.92)',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 1000,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontFamily: FONT_JOST_MEDIUM,
+    letterSpacing: 0.2,
   },
 });
