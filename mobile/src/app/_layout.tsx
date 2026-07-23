@@ -13,12 +13,45 @@ import api, { API_BASE_URL } from '../services/api';
 import LoginView from '../components/mycircle/LoginView';
 import { ProfileView } from '../components/profile/ProfileView';
 
+import { deactivateKeepAwake } from 'expo-keep-awake';
+
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+try {
+  deactivateKeepAwake().catch(() => {});
+} catch (e) {
+  // Ignore native keep awake initialization failures on emulator
+}
 
 LogBox.ignoreLogs([
   'SafeAreaView has been deprecated',
   'Unable to activate keep awake',
+  'Error: Unable to activate keep awake',
+  'InvocationTargetException',
 ]);
+
+if (typeof global !== 'undefined' && (global as any).ErrorUtils) {
+  const defaultHandler = (global as any).ErrorUtils.getGlobalHandler();
+  (global as any).ErrorUtils.setGlobalHandler((error: any, isFatal?: boolean) => {
+    if (error?.message?.includes('keep awake') || error?.message?.includes('Keep awake')) {
+      return;
+    }
+    if (defaultHandler) {
+      defaultHandler(error, isFatal);
+    }
+  });
+}
+
+if (__DEV__) {
+  const origError = console.error;
+  console.error = (...args: any[]) => {
+    const str = args.map(a => (typeof a === 'object' ? (a?.message || JSON.stringify(a)) : String(a))).join(' ');
+    if (str.includes('keep awake') || str.includes('Keep awake') || str.includes('InvocationTargetException')) {
+      return;
+    }
+    origError(...args);
+  };
+}
 
 export { FONT_FUTURA, FONT_FUTURA_BOLD, FONT_MONTSERRAT_REGULAR } from '../constants/fonts';
 

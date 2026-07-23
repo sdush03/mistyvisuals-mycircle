@@ -18,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 // @ts-ignore
 import { AntDesign, Feather, Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence, Easing, runOnJS } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence, withDecay, Easing, runOnJS } from 'react-native-reanimated';
 import {
   FONT_FUTURA,
   FONT_FUTURA_BOLD,
@@ -76,8 +76,9 @@ const formatDateText = (rawDate?: string): string => {
 const MasonryCard = React.memo(function MasonryCard({ 
   img, index, isColumn0, onSelect 
 }: { 
-  img: any; index: number; isColumn0: boolean; onSelect: () => void;
+  img: any; index: number; isColumn0: boolean; onSelect: (bounds: { x: number; y: number; width: number; height: number } | null) => void;
 }) {
+  const cardRef = useRef<View>(null);
   const primaryUri = typeof img === 'object' && img.uri ? img.uri : (typeof img === 'string' ? img : '');
   const fallbackUri = typeof img === 'object' && img.fullUri ? img.fullUri : '';
   const blurUri = typeof img === 'object' && img.blurUri ? img.blurUri : null;
@@ -91,8 +92,18 @@ const MasonryCard = React.memo(function MasonryCard({
       ? img.aspectRatio
       : ((index + (isColumn0 ? 0 : 1)) % 3 === 0 ? 0.67 : ((index + (isColumn0 ? 0 : 1)) % 3 === 1 ? 0.75 : 0.80)));
 
+  const handlePress = useCallback(() => {
+    if (cardRef.current) {
+      cardRef.current.measureInWindow((x, y, width, height) => {
+        onSelect({ x, y, width, height });
+      });
+    } else {
+      onSelect(null);
+    }
+  }, [onSelect]);
+
   return (
-    <Pressable style={[styles.masonryCard, { aspectRatio: cardAspect }]} onPress={onSelect}>
+    <Pressable ref={cardRef} style={[styles.masonryCard, { aspectRatio: cardAspect }]} onPress={handlePress}>
       {currentUri ? (
         <Image
           source={{ uri: currentUri }}
@@ -100,7 +111,6 @@ const MasonryCard = React.memo(function MasonryCard({
           contentFit="cover"
           priority="normal"
           cachePolicy="memory-disk"
-          // Grid quality blur placeholder — replaced by actual image on load
           placeholder={blurUri ? { uri: blurUri } : undefined}
           placeholderContentFit="cover"
           transition={blurUri ? 200 : 0}
@@ -111,16 +121,413 @@ const MasonryCard = React.memo(function MasonryCard({
   );
 });
 
+interface LightboxImageItemProps {
+  item: any;
+  width: number;
+  onDoubleTap: () => void;
+  onNavigate: (dir: 'next' | 'prev') => void;
+  onZoomChange: (zoomed: boolean) => void;
+  onToggleControls: () => void;
+  onCloseLightbox: () => void;
+  expandProgress: Animated.SharedValue<number>;
+  heartPopAnimatedStyle: any;
+}
+
+const LightboxImageItem = React.memo(function LightboxImageItem({
+  item,
+  width,
+  onDoubleTap,
+  onNavigate,
+  onZoomChange,
+  onToggleControls,
+  onCloseLightbox,
+  expandProgress,
+  heartPopAnimatedStyle,
+}: LightboxImageItemProps) {
+  const [isZoomedState, setIsZoomedState] = useState(false);
+  const pinchScale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const zoomTranslateX = useSharedValue(0);
+  const zoomTranslateY = useSharedValue(0);
+  const savedZoomX = useSharedValue(0);
+  const savedZoomY = useSharedValue(0);
+
+  const lastPinchTime = useSharedValue(0);
+
+  const resetZoom = useCallback(() => {
+    'worklet';
+    savedScale.value = 1;
+    savedZoomX.value = 0;
+    savedZoomY.value = 0;
+    zoomTranslateX.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
+    zoomTranslateY.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
+    pinchScale.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
+      if (finished) {
+        runOnJS(setIsZoomedState)(false);
+        runOnJS(onZoomChange)(false);
+      }
+    });
+  }, [onZoomChange]);
+
+
+
+  const pinchGesture = Gesture.Pinch()
+    .cancelsTouchesInView(true)
+    .onStart(() => {
+      'worklet';
+      lastPinchTime.value = Date.now();
+      const currentX = zoomTranslateX.value;
+      const currentY = zoomTranslateY.value;
+      zoomTranslateX.value = currentX;
+      zoomTranslateY.value = currentY;
+      savedZoomX.value = currentX;
+      savedZoomY.value = currentY;
+      runOnJS(setIsZoomedState)(true);
+      runOnJS(onZoomChange)(true);
+    })
+    .onUpdate((e) => {
+      'worklet';
+      lastPinchTime.value = Date.now();
+      pinchScale.value = Math.max(1, Math.min(savedScale.value * e.scale, 4.5));
+    })
+    .onEnd(() => {
+      'worklet';
+      lastPinchTime.value = Date.now();
+      if (pinchScale.value <= 1.05) {
+        resetZoom();
+      } else {
+        savedScale.value = pinchScale.value;
+        const s = pinchScale.value;
+        const maxTx = (width * (s - 1)) / 2;
+        const maxTy = (screenHeight * (s - 1)) / 2;
+        const clampedX = Math.min(Math.max(zoomTranslateX.value, -maxTx), maxTx);
+        const clampedY = Math.min(Math.max(zoomTranslateY.value, -maxTy), maxTy);
+        zoomTranslateX.value = withTiming(clampedX, { duration: 180, easing: Easing.out(Easing.quad) });
+        zoomTranslateY.value = withTiming(clampedY, { duration: 180, easing: Easing.out(Easing.quad) });
+        savedZoomX.value = clampedX;
+        savedZoomY.value = clampedY;
+      }
+    });
+
+  const zoomPanGesture = Gesture.Pan()
+    .minPointers(1)
+    .maxPointers(1)
+    .enabled(isZoomedState)
+    .onStart(() => {
+      'worklet';
+      const currentX = zoomTranslateX.value;
+      const currentY = zoomTranslateY.value;
+      zoomTranslateX.value = currentX;
+      zoomTranslateY.value = currentY;
+      savedZoomX.value = currentX;
+      savedZoomY.value = currentY;
+    })
+    .onUpdate((e) => {
+      'worklet';
+      const s = pinchScale.value;
+      if (s <= 1.05) return; // Allow native FlatList to handle 100% of unzoomed horizontal paging
+
+      const imgWidth = width;
+      const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
+      
+      const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2 + 15);
+      const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2 + 75);
+
+      const targetX = savedZoomX.value + e.translationX;
+      const targetY = savedZoomY.value + e.translationY;
+
+      let clampedX = targetX;
+      if (targetX > maxTx) {
+        clampedX = maxTx + (targetX - maxTx) * 0.6;
+      } else if (targetX < -maxTx) {
+        clampedX = -maxTx + (targetX - (-maxTx)) * 0.6;
+      }
+
+      let clampedY = targetY;
+      if (targetY > maxTy) {
+        clampedY = maxTy + (targetY - maxTy) * 0.6;
+      } else if (targetY < -maxTy) {
+        clampedY = -maxTy + (targetY - (-maxTy)) * 0.6;
+      }
+
+      zoomTranslateX.value = clampedX;
+      zoomTranslateY.value = clampedY;
+    })
+    .onEnd((e) => {
+      'worklet';
+      const s = pinchScale.value;
+      if (s <= 1.05) return; // Allow native FlatList to handle unzoomed swipe
+
+      const imgWidth = width;
+      const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
+      const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2 + 15);
+      const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2 + 75);
+
+      // Inertial Momentum Decay Panning (iPhone Photos fluid coasting!)
+      zoomTranslateX.value = withDecay(
+        {
+          velocity: e.velocityX,
+          clamp: [-maxTx, maxTx],
+          deceleration: 0.995,
+        },
+        (finished) => {
+          if (finished) {
+            savedZoomX.value = zoomTranslateX.value;
+          }
+        }
+      );
+
+      zoomTranslateY.value = withDecay(
+        {
+          velocity: e.velocityY,
+          clamp: [-maxTy, maxTy],
+          deceleration: 0.995,
+        },
+        (finished) => {
+          if (finished) {
+            savedZoomY.value = zoomTranslateY.value;
+          }
+        }
+      );
+    });
+
+  const dragTranslateY = useSharedValue(0);
+  const dragTranslateX = useSharedValue(0);
+  const dragScale = useSharedValue(1);
+
+  const swipeDownPanGesture = Gesture.Pan()
+    .enabled(!isZoomedState)
+    .minPointers(1)
+    .maxPointers(1)
+    .activeOffsetY(12)
+    .failOffsetX([-30, 30])
+    .onStart(() => {
+      'worklet';
+      dragTranslateY.value = 0;
+      dragTranslateX.value = 0;
+      dragScale.value = 1;
+    })
+    .onUpdate((e) => {
+      'worklet';
+      if (e.translationY > 0) {
+        dragTranslateY.value = e.translationY;
+        dragTranslateX.value = e.translationX * 0.35;
+        const progress = Math.min(e.translationY / 400, 1);
+        dragScale.value = 1 - progress * 0.35;
+        expandProgress.value = 1 - progress * 0.7;
+      }
+    })
+    .onEnd((e) => {
+      'worklet';
+      if (e.translationY > 110 || e.velocityY > 750) {
+        runOnJS(onCloseLightbox)();
+      } else {
+        dragTranslateY.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
+        dragTranslateX.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
+        dragScale.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) });
+        expandProgress.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) });
+      }
+    });
+
+  const singleTapGesture = Gesture.Tap()
+    .numberOfTaps(1)
+    .maxDuration(250)
+    .onEnd(() => {
+      'worklet';
+      if (pinchScale.value > 1.05 || isZoomedState) return;
+      runOnJS(onToggleControls)();
+    });
+
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .maxDelay(250)
+    .onEnd(() => {
+      'worklet';
+      if (pinchScale.value > 1.05) {
+        resetZoom();
+      } else {
+        runOnJS(onDoubleTap)();
+      }
+    });
+
+  const tapGestures = Gesture.Exclusive(doubleTapGesture, singleTapGesture);
+
+  const composedGesture = Gesture.Simultaneous(
+    pinchGesture,
+    zoomPanGesture,
+    swipeDownPanGesture,
+    tapGestures
+  );
+
+  const imageZoomAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: zoomTranslateX.value + dragTranslateX.value },
+      { translateY: zoomTranslateY.value + dragTranslateY.value },
+      { scale: pinchScale.value * dragScale.value },
+    ],
+  }));
+
+  const thumbnailUri = typeof item === 'object' && item.uri ? item.uri : (typeof item === 'string' ? item : null);
+  const fullUri = typeof item === 'object' && item.fullUri ? item.fullUri : thumbnailUri;
+
+  return (
+    <GestureDetector gesture={composedGesture}>
+      <View style={{ width, height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+        <Animated.View style={[styles.lightboxImageStack, imageZoomAnimatedStyle]}>
+          {/* Layer 1: Instant grid thumbnail from memory cache */}
+          {thumbnailUri && (
+            <Image
+              source={{ uri: thumbnailUri }}
+              style={[styles.lightboxImage, StyleSheet.absoluteFillObject]}
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              priority="high"
+            />
+          )}
+          {/* Layer 2: High-res image fading in smoothly on top */}
+          {fullUri && fullUri !== thumbnailUri && (
+            <Image
+              source={{ uri: fullUri }}
+              style={styles.lightboxImage}
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              priority="high"
+              transition={400}
+            />
+          )}
+          {/* Layer 3: Heart Pop Center Animation Overlay */}
+          <Animated.View 
+            style={[
+              styles.heartPopContainer, 
+              heartPopAnimatedStyle
+            ]} 
+            pointerEvents="none"
+          >
+            <Ionicons name="heart" size={80} color="rgba(255, 255, 255, 0.75)" style={styles.heartPopShadow} />
+          </Animated.View>
+        </Animated.View>
+      </View>
+    </GestureDetector>
+  );
+});
+
 export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedStoryViewProps) {
   const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [showControls, setShowControls] = useState(true);
   const [activeTab, setActiveTab] = useState<string>('ALL');
+
+  // Keep ref synced to showControls so callbacks always inspect the instant state
+  const handleZoomChange = useCallback((zoomed: boolean) => {
+    setIsZoomed(zoomed);
+    if (zoomed) {
+      setShowControls(false);
+    } else {
+      setShowControls(true); // Always show everything back when zoomed out!
+    }
+  }, []);
+
+  const handleToggleControls = useCallback(() => {
+    setShowControls(prev => !prev);
+  }, []);
+
+  // Imperatively hide/show StatusBar when single tapping in Lightbox or zooming
+  React.useEffect(() => {
+    if (activeImageIndex !== null) {
+      StatusBar.setHidden(!showControls, 'fade');
+    } else {
+      StatusBar.setHidden(false, 'fade');
+    }
+    return () => {
+      StatusBar.setHidden(false, 'fade');
+    };
+  }, [activeImageIndex, showControls]);
+
+  // iPhone Photos style Hero Expansion shared values & callbacks
+  const expandProgress = useSharedValue(0);
+  const thumbX = useSharedValue(0);
+  const thumbY = useSharedValue(0);
+  const thumbW = useSharedValue(100);
+  const thumbH = useSharedValue(100);
+
+  const openLightbox = useCallback((img: any, bounds: { x: number; y: number; width: number; height: number } | null) => {
+    const targetIdx = filteredGalleryImages.findIndex(item => item.id === img.id);
+    const finalIdx = targetIdx !== -1 ? targetIdx : (img.originalIndex ?? 0);
+
+    if (bounds && bounds.width > 0 && bounds.height > 0) {
+      thumbX.value = bounds.x;
+      thumbY.value = bounds.y;
+      thumbW.value = bounds.width;
+      thumbH.value = bounds.height;
+    } else {
+      thumbX.value = width / 2 - 60;
+      thumbY.value = screenHeight / 2 - 60;
+      thumbW.value = 120;
+      thumbH.value = 120;
+    }
+
+    expandProgress.value = 0;
+    setActiveImageIndex(finalIdx);
+
+    requestAnimationFrame(() => {
+      expandProgress.value = withTiming(1, {
+        duration: 420,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      });
+    });
+  }, [filteredGalleryImages, width]);
+
+  const closeLightbox = useCallback(() => {
+    expandProgress.value = withTiming(0, {
+      duration: 380,
+      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+    }, (finished) => {
+      if (finished) {
+        runOnJS(setActiveImageIndex)(null);
+      }
+    });
+  }, []);
+
+  const heroAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const p = expandProgress.value;
+    const cx_grid = thumbX.value + thumbW.value / 2;
+    const cy_grid = thumbY.value + thumbH.value / 2;
+    const cx_screen = width / 2;
+    const cy_screen = screenHeight / 2;
+
+    const initialScale = Math.max(thumbW.value / width, 0.12);
+    const scale = initialScale + (1 - initialScale) * p;
+
+    const initialTx = cx_grid - cx_screen;
+    const initialTy = cy_grid - cy_screen;
+    const translateX = initialTx * (1 - p);
+    const translateY = initialTy * (1 - p);
+
+    return {
+      opacity: p > 0.002 ? 1 : 0,
+      transform: [
+        { translateX },
+        { translateY },
+        { scale },
+      ],
+      borderRadius: (1 - p) * 16,
+    };
+  });
+
+  const backdropAnimatedStyle = useAnimatedStyle(() => ({
+    backgroundColor: '#000000',
+    opacity: expandProgress.value,
+  }));
+
+  const controlsFadeAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: expandProgress.value,
+  }));
   // FIX 1: start at 40, bump to Infinity after 150ms
   const [renderLimit, setRenderLimit] = useState<number>(40);
   const insets = useSafeAreaInsets();
 
-  // Reanimated shared values for smooth pinch-to-zoom + swipe animations (UI thread)
-  const pinchScale = useSharedValue(1);
-  const savedScale = useSharedValue(1);
+  // Reanimated shared values for smooth swipe animations (UI thread)
   const translateX = useSharedValue(0);
   const opacity = useSharedValue(1);
   const isFirstPhoto = useSharedValue(false);
@@ -191,8 +598,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 
   // Reset zoom & transform when photo changes
   React.useEffect(() => {
-    pinchScale.value = withSpring(1, { damping: 20 });
-    savedScale.value = 1;
+    setIsZoomed(false);
     translateX.value = 0;
     opacity.value = 1;
   }, [activeImageIndex]);
@@ -308,13 +714,18 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 
   // ── FIX 2: UI-thread swipe + pinch via RNGH v2 Gesture API ──────────────
 
+  const flatListRef = useRef<FlatList>(null);
+
   // Stable navigate ref — always points to latest closure without recreating gestures
   const navigateRef = useRef((dir: 'next' | 'prev') => {});
   navigateRef.current = (dir: 'next' | 'prev') => {
     setActiveImageIndex(prev => {
       if (prev === null) return prev;
-      if (dir === 'next') return prev < filteredGalleryImages.length - 1 ? prev + 1 : prev;
-      return prev > 0 ? prev - 1 : prev;
+      const targetIdx = dir === 'next' ? (prev < filteredGalleryImages.length - 1 ? prev + 1 : prev) : (prev > 0 ? prev - 1 : prev);
+      if (targetIdx !== prev) {
+        flatListRef.current?.scrollToIndex({ index: targetIdx, animated: true });
+      }
+      return targetIdx;
     });
   };
   const navigate = useCallback((dir: 'next' | 'prev') => navigateRef.current(dir), []);
@@ -358,92 +769,6 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
       lastTapRef.current = now;
     }
   };
-
-  const doubleTapGesture = Gesture.Tap()
-    .numberOfTaps(2)
-    .maxDelay(300)
-    .onEnd(() => {
-      'worklet';
-      if (pinchScale.value > 1.05) return;
-      runOnJS(toggleSave)();
-    });
-
-  const pinchGesture = Gesture.Pinch()
-    .onUpdate((e) => {
-      pinchScale.value = Math.max(1, Math.min(savedScale.value * e.scale, 4.5));
-    })
-    .onEnd(() => {
-      if (pinchScale.value <= 1.05) {
-        pinchScale.value = withSpring(1, { damping: 20 });
-        savedScale.value = 1;
-      } else {
-        savedScale.value = pinchScale.value;
-      }
-    });
-
-  // Pan gesture runs entirely on the UI thread with real-time finger tracking & spring exit/entry
-  const panGesture = Gesture.Pan()
-    .activeOffsetX([-8, 8])      // activate after 8px horizontal drag
-    .failOffsetY([-25, 25])      // allow scrollview to handle vertical scroll if user pulls down
-    .onUpdate((e) => {
-      'worklet';
-      if (pinchScale.value > 1.05) return; // disable swipe when zoomed in
-
-      // Rubber-banding if user tries to swipe past ends
-      if ((isFirstPhoto.value && e.translationX > 0) || (isLastPhoto.value && e.translationX < 0)) {
-        translateX.value = e.translationX * 0.3;
-      } else {
-        translateX.value = e.translationX;
-        const absX = Math.abs(e.translationX);
-        opacity.value = Math.max(0.65, 1 - absX / (width * 1.5));
-      }
-    })
-    .onEnd((e) => {
-      'worklet';
-      if (pinchScale.value > 1.05) return;
-
-      const SWIPE_THRESHOLD = width * 0.22;
-      const velocityX = e.velocityX;
-
-      const isSwipeNext = (e.translationX < -SWIPE_THRESHOLD || velocityX < -400) && !isLastPhoto.value;
-      const isSwipePrev = (e.translationX > SWIPE_THRESHOLD || velocityX > 400) && !isFirstPhoto.value;
-
-      if (isSwipeNext) {
-        // Slide out to left
-        translateX.value = withTiming(-width * 0.85, { duration: 160 }, (finished) => {
-          if (finished) {
-            runOnJS(navigate)('next');
-            translateX.value = width * 0.35;
-            opacity.value = 1;
-            translateX.value = withSpring(0, { damping: 22, stiffness: 220 });
-          }
-        });
-      } else if (isSwipePrev) {
-        // Slide out to right
-        translateX.value = withTiming(width * 0.85, { duration: 160 }, (finished) => {
-          if (finished) {
-            runOnJS(navigate)('prev');
-            translateX.value = -width * 0.35;
-            opacity.value = 1;
-            translateX.value = withSpring(0, { damping: 22, stiffness: 220 });
-          }
-        });
-      } else {
-        // Snap back to center smoothly
-        translateX.value = withSpring(0, { damping: 22, stiffness: 220 });
-        opacity.value = withSpring(1);
-      }
-    });
-
-  const lightboxGesture = Gesture.Simultaneous(pinchGesture, panGesture);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { scale: pinchScale.value }
-    ],
-    opacity: opacity.value,
-  }));
 
   if (!story) return null;
 
@@ -567,10 +892,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                       img={img}
                       index={idx}
                       isColumn0={true}
-                      onSelect={() => {
-                        const targetIdx = filteredGalleryImages.findIndex(item => item.id === img.id);
-                        setActiveImageIndex(targetIdx !== -1 ? targetIdx : (img.originalIndex ?? 0));
-                      }}
+                      onSelect={(bounds) => openLightbox(img, bounds)}
                     />
                   ))}
                 </View>
@@ -581,10 +903,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                       img={img}
                       index={idx}
                       isColumn0={false}
-                      onSelect={() => {
-                        const targetIdx = filteredGalleryImages.findIndex(item => item.id === img.id);
-                        setActiveImageIndex(targetIdx !== -1 ? targetIdx : (img.originalIndex ?? 0));
-                      }}
+                      onSelect={(bounds) => openLightbox(img, bounds)}
                     />
                   ))}
                 </View>
@@ -598,224 +917,211 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
           <Modal
             transparent={true}
             visible={true}
-            animationType="fade"
-            onRequestClose={() => setActiveImageIndex(null)}
+            animationType="none"
+            onRequestClose={closeLightbox}
             statusBarTranslucent={true}
           >
-            <View style={styles.lightboxContainer}>
-              <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              {/* Full-screen Dark Backdrop */}
+              <Animated.View style={[StyleSheet.absoluteFillObject, backdropAnimatedStyle]} pointerEvents="none" />
 
-              {/* Top Editorial Header Gradient Overlay */}
-              <LinearGradient
-                colors={['rgba(0, 0, 0, 0.85)', 'rgba(0, 0, 0, 0.3)', 'transparent']}
-                style={[styles.lightboxHeaderGradient, { paddingTop: Math.max(insets.top + 18, 54) }]}
-                pointerEvents="box-none"
-              >
-                <View style={styles.lightboxHeaderInner}>
-                  {/* Left Spacer to balance close button for perfect centering */}
-                  <View style={styles.headerSpacer} />
+              <View style={styles.lightboxContainer}>
+                <StatusBar barStyle="light-content" translucent backgroundColor="transparent" hidden={!showControls} animated={true} />
 
-                  <View style={styles.lightboxHeaderBrand}>
-                    <Text style={styles.lightboxBrandText}>MISTY VISUALS</Text>
-                    <Text style={styles.lightboxBrandSub}>EDITORIAL</Text>
-                  </View>
-                  
-                  <Pressable 
-                    style={({ pressed }) => [
-                      styles.lightboxCloseEditorial,
-                      pressed && { opacity: 0.6 }
-                    ]} 
-                    onPress={() => setActiveImageIndex(null)}
-                    hitSlop={14}
-                  >
-                    <Text style={styles.lightboxCloseIcon}>✕</Text>
-                  </Pressable>
-                </View>
-              </LinearGradient>
+                {/* Top Editorial Header Gradient Overlay */}
+                {showControls && (
+                  <Animated.View style={[{ zIndex: 100 }, controlsFadeAnimatedStyle]} pointerEvents="box-none">
+                    <LinearGradient
+                      colors={['rgba(0, 0, 0, 0.85)', 'rgba(0, 0, 0, 0.3)', 'transparent']}
+                      style={[styles.lightboxHeaderGradient, { paddingTop: Math.max(insets.top + 18, 54) }]}
+                      pointerEvents="box-none"
+                    >
+                      <View style={styles.lightboxHeaderInner}>
+                        {/* Left Spacer to balance close button for perfect centering */}
+                        <View style={styles.headerSpacer} />
 
-              {/* Native Horizontal Paging Lightbox Stage */}
-              <View style={styles.lightboxImageContainer}>
-                <FlatList
-                  data={filteredGalleryImages}
-                  horizontal
-                  pagingEnabled
-                  showsHorizontalScrollIndicator={false}
-                  initialScrollIndex={activeImageIndex ?? 0}
-                  windowSize={7}
-                  maxToRenderPerBatch={5}
-                  initialNumToRender={3}
-                  getItemLayout={(data, index) => ({
-                    length: width,
-                    offset: width * index,
-                    index,
-                  })}
-                  onMomentumScrollEnd={(e) => {
-                    const newIdx = Math.round(e.nativeEvent.contentOffset.x / width);
-                    if (newIdx >= 0 && newIdx < filteredGalleryImages.length) {
-                      setActiveImageIndex(newIdx);
-                    }
-                  }}
-                  keyExtractor={(item, index) => item.id || `lightbox-${index}`}
-                  renderItem={({ item }) => {
-                    const thumbnailUri = typeof item === 'object' && item.uri ? item.uri : (typeof item === 'string' ? item : null);
-                    const fullUri = typeof item === 'object' && item.fullUri ? item.fullUri : thumbnailUri;
-
-                    return (
-                      <GestureDetector gesture={doubleTapGesture}>
+                        <View style={styles.lightboxHeaderBrand}>
+                          <Text style={styles.lightboxBrandText}>MISTY VISUALS</Text>
+                          <Text style={styles.lightboxBrandSub}>EDITORIAL</Text>
+                        </View>
+                        
                         <Pressable 
-                          onPress={handleImagePress}
-                          style={{ width, height: '100%', justifyContent: 'center', alignItems: 'center' }}
+                          style={({ pressed }) => [
+                            styles.lightboxCloseEditorial,
+                            pressed && { opacity: 0.6 }
+                          ]} 
+                          onPress={closeLightbox}
+                          hitSlop={14}
                         >
-                          <View style={styles.lightboxImageStack}>
-                            {/* Layer 1: Instant grid thumbnail from memory cache */}
-                            {thumbnailUri && (
-                              <Image
-                                source={{ uri: thumbnailUri }}
-                                style={[styles.lightboxImage, StyleSheet.absoluteFillObject]}
-                                contentFit="contain"
-                                cachePolicy="memory-disk"
-                                priority="high"
-                              />
-                            )}
-                            {/* Layer 2: High-res image fading in smoothly on top */}
-                            {fullUri && fullUri !== thumbnailUri && (
-                              <Image
-                                source={{ uri: fullUri }}
-                                style={styles.lightboxImage}
-                                contentFit="contain"
-                                cachePolicy="memory-disk"
-                                priority="high"
-                                transition={400}
-                              />
-                            )}
-                            {/* Layer 3: Heart Pop Center Animation Overlay */}
-                            <Animated.View 
-                              style={[
-                                styles.heartPopContainer, 
-                                heartPopAnimatedStyle
-                              ]} 
-                              pointerEvents="none"
-                            >
-                              <Ionicons name="heart" size={80} color="rgba(255, 255, 255, 0.75)" style={styles.heartPopShadow} />
-                            </Animated.View>
+                          <Text style={styles.lightboxCloseIcon}>✕</Text>
+                        </Pressable>
+                      </View>
+                    </LinearGradient>
+                  </Animated.View>
+                )}
+
+                {/* Native Horizontal Paging Lightbox Stage -- ONLY THE PHOTO EXPANDS! */}
+                <Animated.View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center' }, heroAnimatedStyle]}>
+                  <View style={styles.lightboxImageContainer}>
+                    <FlatList
+                      ref={flatListRef}
+                      data={filteredGalleryImages}
+                      horizontal
+                      decelerationRate="fast"
+                      snapToInterval={width + 18}
+                      snapToAlignment="start"
+                      scrollEnabled={!isZoomed}
+                      showsHorizontalScrollIndicator={false}
+                      initialScrollIndex={activeImageIndex ?? 0}
+                      windowSize={7}
+                      maxToRenderPerBatch={5}
+                      initialNumToRender={3}
+                      getItemLayout={(data, index) => ({
+                        length: width + 18,
+                        offset: (width + 18) * index,
+                        index,
+                      })}
+                      onMomentumScrollEnd={(e) => {
+                        const newIdx = Math.round(e.nativeEvent.contentOffset.x / (width + 18));
+                        if (newIdx >= 0 && newIdx < filteredGalleryImages.length) {
+                          setActiveImageIndex(newIdx);
+                        }
+                      }}
+                      keyExtractor={(item, index) => item.id || `lightbox-${index}`}
+                      ItemSeparatorComponent={() => <View style={{ width: 18, backgroundColor: '#000000' }} />}
+                      renderItem={({ item }) => (
+                        <LightboxImageItem
+                          item={item}
+                          width={width}
+                          onDoubleTap={toggleSave}
+                          onSingleTap={handleToggleControls}
+                          onNavigate={navigate}
+                          onZoomChange={handleZoomChange}
+                          onToggleControls={handleToggleControls}
+                          onCloseLightbox={closeLightbox}
+                          expandProgress={expandProgress}
+                          heartPopAnimatedStyle={heartPopAnimatedStyle}
+                        />
+                      )}
+                    />
+                  </View>
+                </Animated.View>
+
+                {/* Bottom Editorial Footer Gradient Overlay */}
+                {showControls && (
+                  <Animated.View style={[{ zIndex: 100 }, controlsFadeAnimatedStyle]} pointerEvents="box-none">
+                    <LinearGradient
+                      colors={['transparent', 'rgba(0, 0, 0, 0.4)', 'rgba(0, 0, 0, 0.85)']}
+                      style={[styles.lightboxFooterGradient, { paddingBottom: Math.max(insets.bottom, 24) + 8 }]}
+                      pointerEvents="box-none"
+                    >
+                      {(() => {
+                        const currentImgForSave = activeImageIndex !== null ? filteredGalleryImages[activeImageIndex] : null;
+                        const currentUrlForSave = currentImgForSave
+                          ? (typeof currentImgForSave === 'object' && currentImgForSave.fullUri
+                              ? currentImgForSave.fullUri
+                              : (typeof currentImgForSave === 'object' && currentImgForSave.uri
+                                  ? currentImgForSave.uri
+                                  : (typeof currentImgForSave === 'string' ? currentImgForSave : '')))
+                          : '';
+                        const isCurrentPhotoSaved = savedUrls.has(currentUrlForSave);
+
+                        const handleToggleCurrentPhotoSave = async () => {
+                          if (!currentUrlForSave) return;
+                          if (isCurrentPhotoSaved) {
+                            const updated = new Set(savedUrls);
+                            updated.delete(currentUrlForSave);
+                            setSavedUrls(updated);
+                            await savesService.unsavePhoto(currentUrlForSave);
+                          } else {
+                            const updated = new Set(savedUrls);
+                            updated.add(currentUrlForSave);
+                            setSavedUrls(updated);
+                            triggerHeartPop();
+                            await savesService.savePhoto(currentUrlForSave, story?.id);
+                          }
+                        };
+
+                        const handleShareCurrentPhoto = async () => {
+                          if (!currentUrlForSave) return;
+                          try {
+                            await Share.share({
+                              message: `Check out this photo from ${story?.title || 'Misty Visuals'}:\n${currentUrlForSave}`,
+                              url: currentUrlForSave,
+                              title: story?.title || 'Misty Visuals',
+                            });
+                          } catch (error) {
+                            console.warn('Error sharing photo:', error);
+                          }
+                        };
+
+                        const displayTitle = (story?.title || '')
+                          .replace(/'s\s+Wedding/gi, '')
+                          .trim()
+                          .toUpperCase();
+                        const categoryName = (typeof currentImgForSave === 'object' && currentImgForSave && currentImgForSave.category)
+                          ? String(currentImgForSave.category).toUpperCase()
+                          : null;
+                        const titleLabel = categoryName ? `${displayTitle}  ·  ${categoryName}` : displayTitle;
+
+                        return (
+                          <View style={{ alignItems: 'center', width: '100%' }}>
+                            {/* High-Fashion Format Counter: e.g. "01 // 24" */}
+                            <View style={styles.lightboxCounterContainer}>
+                              <Text style={styles.lightboxCounterCurrent}>
+                                {String(activeImageIndex !== null ? activeImageIndex + 1 : 1).padStart(2, '0')}
+                              </Text>
+                              <Text style={styles.lightboxCounterDivider}>//</Text>
+                              <Text style={styles.lightboxCounterTotal}>
+                                {String(filteredGalleryImages.length).padStart(2, '0')}
+                              </Text>
+                            </View>
+
+                            {/* Couple Name / Title / Category Tab */}
+                            {titleLabel ? (
+                              <Text style={styles.lightboxCategoryText}>{titleLabel}</Text>
+                            ) : null}
+
+                            {/* Bottom Actions Row: Thin Feather Heart & Share icons */}
+                            <View style={styles.lightboxActionRow}>
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.lightboxIconOnlyBtn,
+                                  pressed && { opacity: 0.6 }
+                                ]}
+                                onPress={handleToggleCurrentPhotoSave}
+                                hitSlop={14}
+                              >
+                                <Ionicons 
+                                  name={isCurrentPhotoSaved ? 'heart' : 'heart-outline'} 
+                                  size={21} 
+                                  color={isCurrentPhotoSaved ? '#ef4444' : '#ffffff'} 
+                                />
+                              </Pressable>
+
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.lightboxIconOnlyBtn,
+                                  pressed && { opacity: 0.6 }
+                                ]}
+                                onPress={handleShareCurrentPhoto}
+                                hitSlop={14}
+                              >
+                                <Feather 
+                                  name="share-2" 
+                                  size={19} 
+                                  color="#ffffff" 
+                                />
+                              </Pressable>
+                            </View>
                           </View>
-                        </Pressable>
-                      </GestureDetector>
-                    );
-                  }}
-                />
+                        );
+                      })()}
+                    </LinearGradient>
+                  </Animated.View>
+                )}
               </View>
-
-              {/* Bottom Editorial Footer Gradient Overlay */}
-              <LinearGradient
-                colors={['transparent', 'rgba(0, 0, 0, 0.4)', 'rgba(0, 0, 0, 0.85)']}
-                style={[styles.lightboxFooterGradient, { paddingBottom: Math.max(insets.bottom, 24) + 8 }]}
-                pointerEvents="box-none"
-              >
-                {(() => {
-                  const currentImgForSave = activeImageIndex !== null ? filteredGalleryImages[activeImageIndex] : null;
-                  const currentUrlForSave = currentImgForSave
-                    ? (typeof currentImgForSave === 'object' && currentImgForSave.fullUri
-                        ? currentImgForSave.fullUri
-                        : (typeof currentImgForSave === 'object' && currentImgForSave.uri
-                            ? currentImgForSave.uri
-                            : (typeof currentImgForSave === 'string' ? currentImgForSave : '')))
-                    : '';
-                  const isCurrentPhotoSaved = savedUrls.has(currentUrlForSave);
-
-                  const handleToggleCurrentPhotoSave = async () => {
-                    if (!currentUrlForSave) return;
-                    if (isCurrentPhotoSaved) {
-                      const updated = new Set(savedUrls);
-                      updated.delete(currentUrlForSave);
-                      setSavedUrls(updated);
-                      await savesService.unsavePhoto(currentUrlForSave);
-                    } else {
-                      const updated = new Set(savedUrls);
-                      updated.add(currentUrlForSave);
-                      setSavedUrls(updated);
-                      triggerHeartPop();
-                      await savesService.savePhoto(currentUrlForSave, story?.id);
-                    }
-                  };
-
-                  const handleShareCurrentPhoto = async () => {
-                    if (!currentUrlForSave) return;
-                    try {
-                      await Share.share({
-                        message: `Check out this photo from ${story?.title || 'Misty Visuals'}:\n${currentUrlForSave}`,
-                        url: currentUrlForSave,
-                        title: story?.title || 'Misty Visuals',
-                      });
-                    } catch (error) {
-                      console.warn('Error sharing photo:', error);
-                    }
-                  };
-
-                  const displayTitle = (story?.title || '')
-                    .replace(/'s\s+Wedding/gi, '')
-                    .trim()
-                    .toUpperCase();
-                  const categoryName = (typeof currentImgForSave === 'object' && currentImgForSave && currentImgForSave.category)
-                    ? String(currentImgForSave.category).toUpperCase()
-                    : null;
-                  const titleLabel = categoryName ? `${displayTitle}  ·  ${categoryName}` : displayTitle;
-
-                  return (
-                    <View style={{ alignItems: 'center', width: '100%' }}>
-                      {/* High-Fashion Format Counter: e.g. "01 // 24" */}
-                      <View style={styles.lightboxCounterContainer}>
-                        <Text style={styles.lightboxCounterCurrent}>
-                          {String(activeImageIndex !== null ? activeImageIndex + 1 : 1).padStart(2, '0')}
-                        </Text>
-                        <Text style={styles.lightboxCounterDivider}>//</Text>
-                        <Text style={styles.lightboxCounterTotal}>
-                          {String(filteredGalleryImages.length).padStart(2, '0')}
-                        </Text>
-                      </View>
-
-                      {/* Couple Name / Title / Category Tab */}
-                      {titleLabel ? (
-                        <Text style={styles.lightboxCategoryText}>{titleLabel}</Text>
-                      ) : null}
-
-                      {/* Bottom Actions Row: Thin Feather Heart & Share icons */}
-                      <View style={styles.lightboxActionRow}>
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.lightboxIconOnlyBtn,
-                            pressed && { opacity: 0.6 }
-                          ]}
-                          onPress={handleToggleCurrentPhotoSave}
-                          hitSlop={14}
-                        >
-                          <Ionicons 
-                            name={isCurrentPhotoSaved ? 'heart' : 'heart-outline'} 
-                            size={21} 
-                            color={isCurrentPhotoSaved ? '#ef4444' : '#ffffff'} 
-                          />
-                        </Pressable>
-
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.lightboxIconOnlyBtn,
-                            pressed && { opacity: 0.6 }
-                          ]}
-                          onPress={handleShareCurrentPhoto}
-                          hitSlop={14}
-                        >
-                          <Feather 
-                            name="share-2" 
-                            size={19} 
-                            color="#ffffff" 
-                          />
-                        </Pressable>
-                      </View>
-                    </View>
-                  );
-                })()}
-              </LinearGradient>
-            </View>
+            </GestureHandlerRootView>
           </Modal>
         )}
       </GestureHandlerRootView>
@@ -990,7 +1296,7 @@ const styles = StyleSheet.create({
   // Minimalist Editorial Lightbox (Vogue Style)
   lightboxContainer: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: 'transparent',
   },
   lightboxHeaderGradient: {
     position: 'absolute',
