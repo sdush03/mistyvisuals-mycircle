@@ -442,18 +442,6 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     ],
   }));
 
-  const [contentFitMode, setContentFitMode] = useState<'cover' | 'contain'>('cover');
-
-  useAnimatedReaction(
-    () => expandProgress.value >= 0.85,
-    (isExpanded, previous) => {
-      if (isExpanded !== previous) {
-        runOnJS(setContentFitMode)(isExpanded ? 'contain' : 'cover');
-      }
-    },
-    []
-  );
-
   const thumbnailUri = typeof item === 'object' && item.uri ? item.uri : (typeof item === 'string' ? item : null);
   const fullUri = typeof item === 'object' && item.fullUri ? item.fullUri : thumbnailUri;
 
@@ -466,7 +454,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
             <Image
               source={{ uri: thumbnailUri }}
               style={[styles.lightboxImage, StyleSheet.absoluteFillObject]}
-              contentFit={contentFitMode}
+              contentFit="cover"
               cachePolicy="memory-disk"
               priority="high"
             />
@@ -476,7 +464,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
             <Image
               source={{ uri: fullUri }}
               style={styles.lightboxImage}
-              contentFit={contentFitMode}
+              contentFit="cover"
               cachePolicy="memory-disk"
               priority="high"
               transition={400}
@@ -695,11 +683,8 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     const cy_screen = screenHeight / 2;
 
     const stageHeight = screenHeight * 0.82;
-    const initialScaleX = Math.max(thumbW.value / width, 0.05);
-    const initialScaleY = Math.max(thumbH.value / stageHeight, 0.05);
-
-    const scaleX = initialScaleX + (1 - initialScaleX) * p;
-    const scaleY = initialScaleY + (1 - initialScaleY) * p;
+    const currentW = thumbW.value + (width - thumbW.value) * p;
+    const currentH = thumbH.value + (stageHeight - thumbH.value) * p;
 
     const initialTx = cx_grid - cx_screen;
     const initialTy = cy_grid - cy_screen;
@@ -708,11 +693,11 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 
     return {
       opacity: p > 0.002 ? 1 : 0,
+      width: currentW,
+      height: currentH,
       transform: [
         { translateX },
         { translateY },
-        { scaleX },
-        { scaleY },
       ],
       borderRadius: (1 - p) * 16,
       overflow: 'hidden',
