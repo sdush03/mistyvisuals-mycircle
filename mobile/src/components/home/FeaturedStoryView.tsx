@@ -230,24 +230,24 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
       const imgWidth = width;
       const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
       
-      const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2 + 15);
-      const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2 + 75);
+      const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2);
+      const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
 
       const targetX = savedZoomX.value + e.translationX;
       const targetY = savedZoomY.value + e.translationY;
 
       let clampedX = targetX;
       if (targetX > maxTx) {
-        clampedX = maxTx + (targetX - maxTx) * 0.6;
+        clampedX = maxTx + (targetX - maxTx) * 0.25;
       } else if (targetX < -maxTx) {
-        clampedX = -maxTx + (targetX - (-maxTx)) * 0.6;
+        clampedX = -maxTx + (targetX - (-maxTx)) * 0.25;
       }
 
       let clampedY = targetY;
       if (targetY > maxTy) {
-        clampedY = maxTy + (targetY - maxTy) * 0.6;
+        clampedY = maxTy + (targetY - maxTy) * 0.25;
       } else if (targetY < -maxTy) {
-        clampedY = -maxTy + (targetY - (-maxTy)) * 0.6;
+        clampedY = -maxTy + (targetY - (-maxTy)) * 0.25;
       }
 
       zoomTranslateX.value = clampedX;
@@ -256,39 +256,35 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     .onEnd((e) => {
       'worklet';
       const s = pinchScale.value;
-      if (s <= 1.05) return; // Allow native FlatList to handle unzoomed swipe
+      if (s <= 1.05) return;
 
       const imgWidth = width;
       const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
-      const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2 + 15);
-      const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2 + 75);
+      const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2);
+      const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
 
-      // Inertial Momentum Decay Panning (iPhone Photos fluid coasting!)
-      zoomTranslateX.value = withDecay(
-        {
-          velocity: e.velocityX,
-          clamp: [-maxTx, maxTx],
-          deceleration: 0.995,
-        },
-        (finished) => {
-          if (finished) {
-            savedZoomX.value = zoomTranslateX.value;
-          }
-        }
-      );
+      let finalX = zoomTranslateX.value + e.velocityX * 0.12;
+      let finalY = zoomTranslateY.value + e.velocityY * 0.12;
 
-      zoomTranslateY.value = withDecay(
-        {
-          velocity: e.velocityY,
-          clamp: [-maxTy, maxTy],
-          deceleration: 0.995,
-        },
-        (finished) => {
-          if (finished) {
-            savedZoomY.value = zoomTranslateY.value;
-          }
-        }
-      );
+      if (finalX > maxTx) finalX = maxTx;
+      if (finalX < -maxTx) finalX = -maxTx;
+
+      if (finalY > maxTy) finalY = maxTy;
+      if (finalY < -maxTy) finalY = -maxTy;
+
+      zoomTranslateX.value = withTiming(finalX, {
+        duration: 250,
+        easing: Easing.out(Easing.quad),
+      }, (finished) => {
+        if (finished) savedZoomX.value = finalX;
+      });
+
+      zoomTranslateY.value = withTiming(finalY, {
+        duration: 250,
+        easing: Easing.out(Easing.quad),
+      }, (finished) => {
+        if (finished) savedZoomY.value = finalY;
+      });
     });
 
   const dragTranslateY = useSharedValue(0);
