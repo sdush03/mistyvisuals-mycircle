@@ -123,7 +123,6 @@ export default function MoodboardsView({
 
   const handleCardPress = (board: Moodboard) => {
     if (onSelectInspiration) {
-      onClose();
       onSelectInspiration(board);
     } else {
       setActiveBoard(board);

@@ -52,7 +52,6 @@ export default function AllStoriesView({
       items={collectionItems}
       initialCategory={initialVibe}
       onSelectItem={(item) => {
-        onClose();
         onSelectStory(item.rawItem);
       }}
     />
