@@ -77,9 +77,6 @@ export default function CollectionGridView({
       return;
     }
 
-    // Show initial story metadata immediately
-    setActiveStoryModalItem(raw);
-
     // Fetch full gallery photos payload if slug is present
     if (raw.slug) {
       try {
@@ -116,11 +113,15 @@ export default function CollectionGridView({
           };
 
           setActiveStoryModalItem(parsedStory);
+          return;
         }
       } catch (err) {
         console.warn('Failed to fetch story gallery photos:', err);
       }
     }
+
+    // Fallback if fetch failed or no slug
+    setActiveStoryModalItem(raw);
   };
 
   const translateX = useSharedValue(0);
