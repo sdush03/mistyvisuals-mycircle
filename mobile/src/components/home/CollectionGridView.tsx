@@ -27,7 +27,7 @@ import {
   FONT_JOST_MEDIUM,
   FONT_JOST_SEMIBOLD,
 } from '../../constants/fonts';
-import FilmPlayerModal from './FilmPlayerModal';
+import FeaturedStoryView from './FeaturedStoryView';
 
 const { width } = Dimensions.get('window');
 
@@ -413,10 +413,10 @@ export default function CollectionGridView({
               )}
             </ScrollView>
 
-            <FilmPlayerModal
+            <FeaturedStoryView
               isOpen={activeStoryModalItem !== null}
               onClose={() => setActiveStoryModalItem(null)}
-              film={activeStoryModalItem}
+              story={activeStoryModalItem}
             />
           </Animated.View>
         </GestureDetector>
