@@ -1520,7 +1520,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     position: 'relative',
     overflow: 'hidden',
-    borderRadius: 2,
+    borderRadius: 0,
   },
   openYouTubeBadge: {
     position: 'absolute',
