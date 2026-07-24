@@ -950,22 +950,28 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── 6. Inspirations (Preview section with View All — hidden if 0 published) ── */}
+        {/* ── 6. Inspirations (2x2 Grid Layout matching Browse by Vibe) ── */}
         {websiteInspirations.length > 0 && (
           <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionHeader}>INSPIRATIONS</Text>
-              <Pressable onPress={() => setIsMoodboardsOpen(true)}>
-                <Text style={styles.viewAllText}>View All →</Text>
-              </Pressable>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-              {websiteInspirations.slice(0, 6).map((board) => {
+            <Text style={styles.sectionHeader}>INSPIRATIONS</Text>
+
+            {/* 2x2 Grid of 4 Inspiration Cards */}
+            <View style={styles.vibeGridContainer}>
+              {websiteInspirations.slice(0, 4).map((board) => {
                 const coverSrc = board.coverImageMobile || board.coverImage || (board.images && board.images[0]);
+                const formattedTitle = (board.title || '')
+                  .split(' ')
+                  .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+                  .join(' ');
+                const photoCount = Array.isArray(board.images) ? board.images.length : 0;
+                const subtext = photoCount > 0
+                  ? `${photoCount} ${photoCount === 1 ? 'Photo' : 'Photos'} →`
+                  : 'Curated Collection →';
+
                 return (
                   <Pressable
                     key={board.id}
-                    style={styles.moodboardCard}
+                    style={styles.vibeGridCard}
                     onPress={() => {
                       setSelectedStory({
                         id: String(board.id || board.slug),
@@ -984,23 +990,35 @@ export default function HomeScreen() {
                       });
                     }}
                   >
-                    <Image
-                      source={typeof coverSrc === 'string' ? { uri: coverSrc } : coverSrc}
-                      style={styles.moodboardImage}
-                    />
+                    {coverSrc ? (
+                      <Image
+                        source={typeof coverSrc === 'string' ? { uri: coverSrc } : coverSrc}
+                        style={styles.vibeCardImage}
+                      />
+                    ) : (
+                      <View style={[styles.vibeCardImage, { backgroundColor: '#18181b' }]} />
+                    )}
                     <LinearGradient
-                      colors={['transparent', 'rgba(18, 16, 14, 0.15)', 'rgba(18, 16, 14, 0.85)']}
-                      locations={[0, 0.45, 1]}
+                      colors={['transparent', 'rgba(18, 16, 14, 0.2)', 'rgba(18, 16, 14, 0.85)']}
+                      locations={[0, 0.4, 1]}
                       style={styles.featuredOverlay}
                     />
-                    <View style={styles.moodboardContent}>
-                      <Text style={styles.moodboardTitle}>{board.title}</Text>
-                      {board.subtitle ? <Text style={styles.moodboardSub}>{board.subtitle}</Text> : null}
+                    <View style={styles.vibeCardContent}>
+                      <Text style={styles.vibeCardTitle} numberOfLines={1}>{formattedTitle}</Text>
+                      <Text style={styles.vibeCardSubtext} numberOfLines={1}>{subtext}</Text>
                     </View>
                   </Pressable>
                 );
               })}
-            </ScrollView>
+            </View>
+
+            {/* View More → Button */}
+            <Pressable 
+              style={styles.viewMoreGridBtn}
+              onPress={() => setIsMoodboardsOpen(true)}
+            >
+              <Text style={styles.viewAllText}>View More →</Text>
+            </Pressable>
           </View>
         )}
 
