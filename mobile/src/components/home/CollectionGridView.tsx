@@ -263,13 +263,6 @@ export default function CollectionGridView({
                 ) : null}
               </View>
 
-              {/* Back to All Categories link when viewing a specific category */}
-              {selectedCategory !== 'All' && (
-                <Pressable style={styles.backToCategoriesLink} onPress={() => setSelectedCategory('All')}>
-                  <Text style={styles.backToCategoriesText}>← ALL CATEGORIES</Text>
-                </Pressable>
-              )}
-
               {filteredItems.length === 0 ? (
                 <View style={styles.emptyContainer}>
                   <Text style={styles.emptyText}>No items found under "{selectedCategory}".</Text>
