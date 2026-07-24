@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -164,8 +164,10 @@ export default function CollectionGridView({
     return ['All', ...Array.from(categoriesSet).sort()];
   }, [items]);
 
+  const prevIsOpenRef = React.useRef(isOpen);
+
   React.useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpenRef.current) {
       translateX.value = 0;
       if (initialCategory && initialCategory !== 'All') {
         const found = categories.find((c) => c.toLowerCase() === initialCategory.toLowerCase());
@@ -174,6 +176,7 @@ export default function CollectionGridView({
         setSelectedCategory('All');
       }
     }
+    prevIsOpenRef.current = isOpen;
   }, [isOpen, initialCategory, categories]);
 
   // Generate visual Category Cards for the "All" view mode with priority cover deduplication
