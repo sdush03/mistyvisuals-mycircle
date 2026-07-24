@@ -21,6 +21,8 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import {
+  FONT_FUTURA,
+  FONT_FUTURA_BOLD,
   FONT_MONTSERRAT_REGULAR,
   FONT_MONTSERRAT_LIGHT,
   FONT_JOST_REGULAR,
@@ -476,6 +478,38 @@ export default function CollectionGridView({
                   ) : null}
                 </View>
 
+                {/* Category Filter Pills (Horizontal Scroll) */}
+                {categories.length > 2 && (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterPillsContainer}
+                  >
+                    {categories.map((cat) => {
+                      const isActive = (selectedCategory || 'All').toLowerCase() === cat.toLowerCase();
+                      const formattedPill = cat
+                        .split(' ')
+                        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+                        .join(' ');
+
+                      return (
+                        <Pressable
+                          key={cat}
+                          style={[styles.filterPill, isActive && styles.filterPillActive]}
+                          onPress={() => {
+                            if (isActive) return;
+                            selectCategoryWithPush(cat);
+                          }}
+                        >
+                          <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
+                            {formattedPill}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+
                 {filteredItems.length === 0 ? (
                   <View style={styles.emptyContainer}>
                     <Text style={styles.emptyText}>No items found under "{selectedCategory}".</Text>
@@ -606,6 +640,14 @@ export default function CollectionGridView({
                   </View>
                 </>
               )}
+
+              {/* Editorial Brand Footer */}
+              <View style={styles.brandFooter}>
+                <View style={styles.brandLine} />
+                <Text style={styles.brandFooterTitle}>MISTY VISUALS</Text>
+                <Text style={styles.brandFooterSubtext}>FINE ART & DESTINATION WEDDING PHOTOGRAPHY</Text>
+                <Text style={styles.brandFooterDescription}>Capturing unscripted moments & intentional design worldwide.</Text>
+              </View>
             </ScrollView>
           </Animated.View>
 
@@ -776,5 +818,66 @@ const styles = StyleSheet.create({
     fontFamily: FONT_JOST_REGULAR,
     fontSize: 13,
     color: '#8c867e',
+  },
+  filterPillsContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+    gap: 8,
+  },
+  filterPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e5e5e5',
+    backgroundColor: '#ffffff',
+  },
+  filterPillActive: {
+    borderColor: '#1c1a18',
+    backgroundColor: '#1c1a18',
+  },
+  filterPillText: {
+    fontFamily: FONT_JOST_MEDIUM,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    color: '#666666',
+    textTransform: 'uppercase',
+  },
+  filterPillTextActive: {
+    color: '#ffffff',
+  },
+  brandFooter: {
+    alignItems: 'center',
+    paddingTop: 48,
+    paddingBottom: 40,
+    paddingHorizontal: 24,
+  },
+  brandLine: {
+    width: 32,
+    height: 1,
+    backgroundColor: '#d0c8be',
+    marginBottom: 16,
+  },
+  brandFooterTitle: {
+    fontFamily: FONT_FUTURA_BOLD,
+    fontSize: 11,
+    letterSpacing: 3,
+    color: '#1c1a18',
+    marginBottom: 6,
+  },
+  brandFooterSubtext: {
+    fontFamily: FONT_JOST_MEDIUM,
+    fontSize: 9,
+    letterSpacing: 1.8,
+    color: '#9a7d52',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  brandFooterDescription: {
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 11,
+    color: '#888888',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
