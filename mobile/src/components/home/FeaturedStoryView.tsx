@@ -391,12 +391,12 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   }, [isOpen, handleCloseScreen]);
 
   const edgeSwipeGesture = Gesture.Pan()
-    .activeOffsetX(10)
-    .failOffsetY([-40, 40])
-    .onStart((e) => {
+    .activeOffsetX(5)
+    .failOffsetY([-20, 20])
+    .onBegin((e) => {
       'worklet';
-      // Only activate for touches starting on the left edge, and only when lightbox is closed
-      touchStartedOnLeftEdge.value = e.x <= 50 && !isLightboxOpen.value;
+      // Capture touch position immediately on touch down
+      touchStartedOnLeftEdge.value = e.x <= 65 && !isLightboxOpen.value;
     })
     .onUpdate((e) => {
       'worklet';
@@ -408,7 +408,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     .onEnd((e) => {
       'worklet';
       if (!touchStartedOnLeftEdge.value) return;
-      if (e.translationX > width * 0.25 || e.velocityX > 400) {
+      if (e.translationX > width * 0.20 || e.velocityX > 250) {
         screenSwipeX.value = withTiming(width, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
           if (finished) {
             runOnJS(onClose)();
