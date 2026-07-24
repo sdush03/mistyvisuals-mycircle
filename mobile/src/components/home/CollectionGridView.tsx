@@ -83,20 +83,44 @@ export default function CollectionGridView({
         const res = await fetch(`https://www.mistyvisuals.com/api/website/stories/${raw.slug}`);
         if (res.ok) {
           const fullStory = await res.json();
-          const rawImages = fullStory.images || fullStory.gallery || fullStory.photos || [];
+          const photos = fullStory.photos || fullStory.images || fullStory.gallery || [];
+          const galleryImages = (Array.isArray(photos) ? photos : []).map((p: any, idx: number) => {
+            const thumbUri = p.file_url_thumb || p.file_url_mobile || p.thumbnail_url || p.thumbnailUrl || p.mobile_url || p.thumb_url || p.preview_url || p.r2Url || p.file_url || (typeof p === 'string' ? p : '');
+            const fullUri = p.file_url || p.r2Url || p.file_url_mobile || p.file_url_thumb || p.thumbnail_url || (typeof p === 'string' ? p : '');
 
-          const galleryImages = (Array.isArray(rawImages) ? rawImages : []).map((img: any, idx: number) => {
-            const uri = typeof img === 'string' ? img : (img.url || img.src || img.image_url || img.uri);
-            const caption = typeof img === 'object' ? (img.caption || img.title || img.alt || fullStory.title) : fullStory.title;
+            let originalAspect: number | null = null;
+            if (p.aspect_ratio || p.aspectRatio) {
+              originalAspect = Number(p.aspect_ratio || p.aspectRatio);
+            } else if (p.width && p.height && Number(p.height) > 0) {
+              originalAspect = Number(p.width) / Number(p.height);
+            }
+
+            const isHorizontal = originalAspect ? originalAspect > 1.05 : false;
+            const verticalRatios = [2 / 3, 3 / 4, 4 / 5];
+            const vertRatio = verticalRatios[idx % 3];
+
+            const finalAspect = isHorizontal
+              ? (originalAspect && originalAspect > 1.0 ? originalAspect : 3 / 2)
+              : (originalAspect && originalAspect <= 1.0 ? originalAspect : vertRatio);
+
             return {
-              id: `story-photo-${fullStory.id || raw.slug}-${idx}`,
-              uri: uri,
-              caption: caption,
-              category: (img.category || img.tab || fullStory.category || 'GALLERY').trim(),
-              aspectRatio: img.aspect_ratio || img.aspectRatio || 1,
               originalIndex: idx,
+              id: p.id || `photo-${idx}`,
+              uri: thumbUri,
+              fullUri: fullUri,
+              blurUri: p.blur_data_url || p.blurDataUrl || p.cover_blur_data_url || null,
+              width: p.width ? Number(p.width) : null,
+              height: p.height ? Number(p.height) : null,
+              aspectRatio: finalAspect,
+              isHorizontal: isHorizontal,
+              category: p.tab_name || p.tabName || p.category || p.tag || p.tagName || p.tab || p.event_name || p.eventName || p.folder_name || p.sub_folder || null,
             };
           });
+
+          const rawTabs = fullStory.tabs || fullStory.categories || fullStory.category || [];
+          const parsedTabs = Array.isArray(rawTabs)
+            ? rawTabs.filter((s: any) => typeof s === 'string' && s.trim().length <= 25)
+            : (typeof rawTabs === 'string' ? rawTabs.split(',').map((s: string) => s.trim()).filter((s: string) => s && s.length <= 25) : []);
 
           const coverUri = fullStory.cover_image_mobile_url || fullStory.cover_image_url || fullStory.grid_image_url;
 
@@ -110,6 +134,7 @@ export default function CollectionGridView({
             coverImage: coverUri ? { uri: coverUri } : raw.coverImage,
             description: fullStory.description || fullStory.subtitle || raw.description,
             images: galleryImages,
+            tabs: parsedTabs,
           };
 
           setActiveStoryModalItem(parsedStory);
