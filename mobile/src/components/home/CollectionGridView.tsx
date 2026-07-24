@@ -17,7 +17,7 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  withSpring,
+  Easing,
   runOnJS,
 } from 'react-native-reanimated';
 import {
@@ -306,7 +306,7 @@ export default function CollectionGridView({
             runOnJS(handleBackPress)();
           });
         } else {
-          translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
+          translateX.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) });
         }
       }
     });
@@ -348,17 +348,20 @@ export default function CollectionGridView({
       .join(' ');
   }, [selectedCategory, headerTitle]);
 
-  const contentTranslateY = useSharedValue(35);
+  const contentTranslateX = useSharedValue(40);
   const contentOpacity = useSharedValue(0);
   const backButtonOpacity = useSharedValue(0);
 
   React.useEffect(() => {
     if (isOpen) {
-      contentTranslateY.value = withSpring(0, { damping: 22, stiffness: 220 });
-      contentOpacity.value = withTiming(1, { duration: 250 });
+      contentTranslateX.value = withTiming(0, {
+        duration: 250,
+        easing: Easing.out(Easing.quad),
+      });
+      contentOpacity.value = withTiming(1, { duration: 200 });
       backButtonOpacity.value = withTiming(1, { duration: 200 });
     } else {
-      contentTranslateY.value = 35;
+      contentTranslateX.value = 40;
       contentOpacity.value = 0;
       backButtonOpacity.value = 0;
     }
@@ -366,15 +369,18 @@ export default function CollectionGridView({
 
   React.useEffect(() => {
     if (isOpen) {
-      contentTranslateY.value = 12;
-      contentOpacity.value = 0.6;
-      contentTranslateY.value = withSpring(0, { damping: 24, stiffness: 240 });
+      contentTranslateX.value = 24;
+      contentOpacity.value = 0.7;
+      contentTranslateX.value = withTiming(0, {
+        duration: 200,
+        easing: Easing.out(Easing.quad),
+      });
       contentOpacity.value = withTiming(1, { duration: 180 });
     }
   }, [selectedCategory]);
 
   const contentAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: contentTranslateY.value }],
+    transform: [{ translateX: contentTranslateX.value }],
     opacity: contentOpacity.value,
   }));
 
