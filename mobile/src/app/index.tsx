@@ -947,10 +947,16 @@ export default function HomeScreen() {
              then render them here exactly like Featured Stories.
         ────────────────────────────────────────────────────────────────────── */}
 
-        {/* ── 8. Browse by Vibe (First 4 stories + Continue Exploring card) ─ */}
+        {/* ── 8. Browse by Vibe (2x2 Grid Layout: 4 Stories + View More →) ── */}
         {websiteStories.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>BROWSE BY VIBE</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionHeader}>BROWSE BY VIBE</Text>
+              <Pressable onPress={() => setIsAllStoriesOpen(true)}>
+                <Text style={styles.viewAllText}>View All →</Text>
+              </Pressable>
+            </View>
+
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibePillScroll}>
               {vibeFilters.map((vibe) => (
                 <Pressable 
@@ -963,60 +969,55 @@ export default function HomeScreen() {
               ))}
             </ScrollView>
 
-            {/* Horizontal Story Stream (Max 4 stories + Continue Exploring card) */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-              {getFilteredVibeStories().length > 0 ? (
-                <React.Fragment>
-                  {getFilteredVibeStories().slice(0, 4).map((item: any, index: number) => {
-                    const coverUri = item.cover_image_mobile_url || item.cover_image_url || item.grid_image_url;
-                    const coverSrc = coverUri ? { uri: coverUri } : typeof item.img === 'string' ? { uri: item.img } : item.img || null;
-                    
-                    const titleText = item.title || '';
-                    const subText = item.subtitle || item.location || '';
+            {/* 2x2 Grid: 4 Stories on Screen */}
+            {getFilteredVibeStories().length > 0 ? (
+              <View style={styles.vibeGridContainer}>
+                {getFilteredVibeStories().slice(0, 4).map((item: any, index: number) => {
+                  const coverUri = item.cover_image_mobile_url || item.cover_image_url || item.grid_image_url;
+                  const coverSrc = coverUri ? { uri: coverUri } : typeof item.img === 'string' ? { uri: item.img } : item.img || null;
+                  
+                  const titleText = item.title || '';
+                  const subText = item.subtitle || item.location || '';
 
-                    return (
-                      <Pressable 
-                        key={item.id || index} 
-                        style={styles.vibeCardItem}
-                        onPress={() => handleStoryPress(item)}
-                      >
-                        {coverSrc ? (
-                          <Image source={coverSrc} style={styles.vibeCardImage} />
-                        ) : (
-                          <View style={[styles.vibeCardImage, { backgroundColor: '#18181b' }]} />
-                        )}
-                        <LinearGradient 
-                          colors={['transparent', 'rgba(18, 16, 14, 0.15)', 'rgba(18, 16, 14, 0.85)']} 
-                          locations={[0, 0.45, 1]} 
-                          style={styles.featuredOverlay} 
-                        />
-                        <View style={styles.vibeCardContent}>
-                          <Text style={styles.vibeCardTitle} numberOfLines={1}>{titleText}</Text>
-                          <Text style={styles.vibeCardSubtext} numberOfLines={1}>{subText}</Text>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                  {getFilteredVibeStories().length > 4 && (
-                    <Pressable
-                      style={styles.continueExploringCard}
-                      onPress={() => setIsAllStoriesOpen(true)}
+                  return (
+                    <Pressable 
+                      key={item.id || index} 
+                      style={styles.vibeGridCard}
+                      onPress={() => handleStoryPress(item)}
                     >
-                      <Text style={styles.continueExploringIcon}>✨</Text>
-                      <Text style={styles.continueExploringTitle}>Continue Exploring</Text>
-                      <Text style={styles.continueExploringSub}>
-                        +{getFilteredVibeStories().length - 4} more stories in {selectedVibe}
-                      </Text>
-                      <Text style={styles.continueExploringCta}>View All Stories →</Text>
+                      {coverSrc ? (
+                        <Image source={coverSrc} style={styles.vibeCardImage} />
+                      ) : (
+                        <View style={[styles.vibeCardImage, { backgroundColor: '#18181b' }]} />
+                      )}
+                      <LinearGradient 
+                        colors={['transparent', 'rgba(18, 16, 14, 0.15)', 'rgba(18, 16, 14, 0.85)']} 
+                        locations={[0, 0.45, 1]} 
+                        style={styles.featuredOverlay} 
+                      />
+                      <View style={styles.vibeCardContent}>
+                        <Text style={styles.vibeCardTitle} numberOfLines={1}>{titleText}</Text>
+                        <Text style={styles.vibeCardSubtext} numberOfLines={1}>{subText}</Text>
+                      </View>
                     </Pressable>
-                  )}
-                </React.Fragment>
-              ) : (
-                <View style={styles.emptyVibeContainer}>
-                  <Text style={styles.emptyVibeText}>No stories found under "{selectedVibe}".</Text>
-                </View>
-              )}
-            </ScrollView>
+                  );
+                })}
+              </View>
+            ) : (
+              <View style={styles.emptyVibeContainer}>
+                <Text style={styles.emptyVibeText}>No stories found under "{selectedVibe}".</Text>
+              </View>
+            )}
+
+            {/* View More → Button */}
+            {getFilteredVibeStories().length > 0 && (
+              <Pressable 
+                style={styles.viewMoreGridBtn}
+                onPress={() => setIsAllStoriesOpen(true)}
+              >
+                <Text style={styles.viewMoreGridText}>View More →</Text>
+              </Pressable>
+            )}
           </View>
         )}
 
@@ -1409,6 +1410,39 @@ const styles = StyleSheet.create({
   },
   vibeTextActive: {
     color: '#ffffff',
+  },
+  vibeGridContainer: {
+    paddingHorizontal: 24,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 12,
+    marginTop: 8,
+  },
+  vibeGridCard: {
+    width: (width - 60) / 2,
+    aspectRatio: 3 / 4,
+    backgroundColor: '#1c1a18',
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 6,
+  },
+  viewMoreGridBtn: {
+    alignSelf: 'center',
+    marginTop: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+    backgroundColor: '#fbfaf8',
+    borderWidth: 1,
+    borderColor: '#e8e4de',
+  },
+  viewMoreGridText: {
+    fontFamily: FONT_JOST_MEDIUM,
+    fontSize: 11,
+    letterSpacing: 2,
+    color: '#1c1a18',
+    textTransform: 'uppercase',
   },
   vibeGalleryGrid: {
     flexDirection: 'row',
