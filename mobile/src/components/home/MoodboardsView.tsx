@@ -9,6 +9,7 @@ import {
   Pressable,
   Dimensions,
   FlatList,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -101,10 +102,23 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId }: Moo
         const found = CURATED_MOODBOARDS.find((b) => b.id === selectedBoardId);
         setActiveBoard(found || CURATED_MOODBOARDS[0]);
       } else {
-        setActiveBoard(null);
       }
     }
   }, [isOpen, selectedBoardId]);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const onBackPress = () => {
+      if (activeBoard !== null) {
+        setActiveBoard(null);
+        return true;
+      }
+      onClose();
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [isOpen, activeBoard, onClose]);
 
   return (
     <Modal

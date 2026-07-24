@@ -10,6 +10,7 @@ import {
   StatusBar,
   FlatList,
   Share,
+  BackHandler,
   Image as RNImage,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -348,10 +349,64 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     };
   }, []);
 
+  // Android hardware back button handler
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const onBackPress = () => {
+      if (activeImageIndex !== null) {
+        closeLightbox();
+        return true;
+      }
+      onClose();
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [isOpen, activeImageIndex, closeLightbox, onClose]);
+
+  // Native iOS Left-Edge Swipe Back Gesture
+  const touchStartedOnLeftEdge = useSharedValue(false);
+  const screenSwipeX = useSharedValue(0);
+
+  const edgeSwipeGesture = Gesture.Pan()
+    .activeOffsetX(15)
+    .failOffsetY([-25, 25])
+    .onStart((e) => {
+      'worklet';
+      touchStartedOnLeftEdge.value = e.x <= 45;
+    })
+    .onUpdate((e) => {
+      'worklet';
+      if (!touchStartedOnLeftEdge.value || activeImageIndex !== null) return;
+      if (e.translationX > 0) {
+        screenSwipeX.value = e.translationX;
+      }
+    })
+    .onEnd((e) => {
+      'worklet';
+      if (!touchStartedOnLeftEdge.value || activeImageIndex !== null) return;
+      if (e.translationX > width * 0.25 || e.velocityX > 400) {
+        screenSwipeX.value = withTiming(width, { duration: 240, easing: Easing.out(Easing.quad) }, (finished) => {
+          if (finished) {
+            runOnJS(onClose)();
+            screenSwipeX.value = 0;
+          }
+        });
+      } else {
+        screenSwipeX.value = withSpring(0, { damping: 25, stiffness: 200 });
+      }
+      touchStartedOnLeftEdge.value = false;
+    });
+
+  const screenSwipeAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: screenSwipeX.value }],
+  }));
+
   React.useEffect(() => {
     if (isOpen) {
       setActiveTab('ALL');
       setActiveImageIndex(null);
+      screenSwipeX.value = 0;
       savesService.getSavedPhotos().then((items) => {
         const urls = new Set(items.map((i) => i.photoUrl));
         setSavedUrls(urls);
@@ -546,16 +601,18 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
       statusBarTranslucent={true}
     >
       <GestureHandlerRootView style={styles.container}>
-        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+        <GestureDetector gesture={edgeSwipeGesture}>
+          <Animated.View style={[{ flex: 1 }, screenSwipeAnimatedStyle]}>
+            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-        {/* Borderless Editorial Back Button */}
-        <Pressable
-          style={[styles.editorialBackButton, { top: Math.max(insets.top + 10, 42) }]}
-          onPress={onClose}
-          hitSlop={16}
-        >
-          <Text style={styles.editorialBackText}>← BACK</Text>
-        </Pressable>
+            {/* Borderless Editorial Back Button */}
+            <Pressable
+              style={[styles.editorialBackButton, { top: Math.max(insets.top + 10, 42) }]}
+              onPress={onClose}
+              hitSlop={16}
+            >
+              <Text style={styles.editorialBackText}>← BACK</Text>
+            </Pressable>
 
         <ScrollView
           ref={mainScrollRef}
@@ -673,6 +730,8 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
             )}
           </View>
         </ScrollView>
+      </Animated.View>
+    </GestureDetector>
 
         {/* ── Option 1: Minimalist Editorial Lightbox (Vogue / Kinfolk Style) ── */}
         {activeImageIndex !== null && (

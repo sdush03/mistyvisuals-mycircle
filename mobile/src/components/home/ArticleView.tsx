@@ -8,12 +8,15 @@ import {
   Image, 
   Pressable,
   StatusBar,
-  Dimensions
+  Dimensions,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, Easing, runOnJS } from 'react-native-reanimated';
 import { FONT_MONTSERRAT_REGULAR, FONT_JOST_SEMIBOLD } from '../../constants/fonts';
 
-const { height: screenHeight } = Dimensions.get('screen');
+const { width: screenWidth, height: screenHeight } = Dimensions.get('screen');
 
 interface Article {
   id: string;
@@ -61,6 +64,61 @@ const formatDateText = (rawDate?: string): string => {
 
 export default function ArticleView({ isOpen, onClose, article }: ArticleViewProps) {
   const insets = useSafeAreaInsets();
+  // Android hardware back button handler
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const onBackPress = () => {
+      onClose();
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [isOpen, onClose]);
+
+  // Native iOS Left-Edge Swipe Back Gesture
+  const touchStartedOnLeftEdge = useSharedValue(false);
+  const screenSwipeX = useSharedValue(0);
+
+  const edgeSwipeGesture = Gesture.Pan()
+    .activeOffsetX(15)
+    .failOffsetY([-25, 25])
+    .onStart((e) => {
+      'worklet';
+      touchStartedOnLeftEdge.value = e.x <= 45;
+    })
+    .onUpdate((e) => {
+      'worklet';
+      if (!touchStartedOnLeftEdge.value) return;
+      if (e.translationX > 0) {
+        screenSwipeX.value = e.translationX;
+      }
+    })
+    .onEnd((e) => {
+      'worklet';
+      if (!touchStartedOnLeftEdge.value) return;
+      if (e.translationX > screenWidth * 0.25 || e.velocityX > 400) {
+        screenSwipeX.value = withTiming(screenWidth, { duration: 240, easing: Easing.out(Easing.quad) }, (finished) => {
+          if (finished) {
+            runOnJS(onClose)();
+            screenSwipeX.value = 0;
+          }
+        });
+      } else {
+        screenSwipeX.value = withSpring(0, { damping: 25, stiffness: 200 });
+      }
+      touchStartedOnLeftEdge.value = false;
+    });
+
+  const screenSwipeAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: screenSwipeX.value }],
+  }));
+
+  React.useEffect(() => {
+    if (isOpen) {
+      screenSwipeX.value = 0;
+    }
+  }, [isOpen]);
+
   if (!article) return null;
 
   const categoryText = (article.category || '').toUpperCase();
@@ -77,17 +135,19 @@ export default function ArticleView({ isOpen, onClose, article }: ArticleViewPro
       onRequestClose={onClose}
       statusBarTranslucent={true}
     >
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <GestureHandlerRootView style={styles.container}>
+        <GestureDetector gesture={edgeSwipeGesture}>
+          <Animated.View style={[{ flex: 1 }, screenSwipeAnimatedStyle]}>
+            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-        {/* Borderless Editorial Back Button */}
-        <Pressable 
-          style={[styles.editorialBackButton, { top: Math.max(insets.top + 16, 48) }]} 
-          onPress={onClose}
-          hitSlop={16}
-        >
-          <Text style={styles.editorialBackText}>← BACK</Text>
-        </Pressable>
+            {/* Borderless Editorial Back Button */}
+            <Pressable 
+              style={[styles.editorialBackButton, { top: Math.max(insets.top + 16, 48) }]} 
+              onPress={onClose}
+              hitSlop={16}
+            >
+              <Text style={styles.editorialBackText}>← BACK</Text>
+            </Pressable>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Cover Image */}
@@ -135,8 +195,10 @@ export default function ArticleView({ isOpen, onClose, article }: ArticleViewPro
             <Text style={styles.footerTagline}>FINE ART WEDDING PHOTOGRAPHY & FILMS</Text>
           </View>
         </ScrollView>
-      </View>
-    </Modal>
+      </Animated.View>
+    </GestureDetector>
+  </GestureHandlerRootView>
+</Modal>
   );
 }
 

@@ -9,6 +9,7 @@ import {
   Pressable,
   Dimensions,
   Linking,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -45,6 +46,18 @@ const extractYouTubeId = (film: Film | null): string | null => {
 export default function FilmPlayerModal({ isOpen, onClose, film }: FilmPlayerModalProps) {
   const insets = useSafeAreaInsets();
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // Android hardware back button handler
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const onBackPress = () => {
+      setIsPlaying(false);
+      onClose();
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [isOpen, onClose]);
 
   if (!film) return null;
 

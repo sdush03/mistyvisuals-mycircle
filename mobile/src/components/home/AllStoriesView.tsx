@@ -8,6 +8,7 @@ import {
   Image,
   Pressable,
   Dimensions,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -30,6 +31,17 @@ export default function AllStoriesView({
 }: AllStoriesViewProps) {
   const insets = useSafeAreaInsets();
   const [selectedVibe, setSelectedVibe] = useState(initialVibe);
+
+  // Android hardware back button handler
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const onBackPress = () => {
+      onClose();
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [isOpen, onClose]);
 
   React.useEffect(() => {
     if (isOpen && initialVibe) {
