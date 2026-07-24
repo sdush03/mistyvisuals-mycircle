@@ -156,9 +156,25 @@ export default function CollectionGridView({
   // Dynamic Category filters
   const categories = React.useMemo(() => {
     const categoriesSet = new Set<string>();
+    const presetCategories = [
+      'Day Wedding', 'Destination', 'Intimate', 'Luxury',
+      'Haldi Poses', 'Bridal Entry', 'Decor', 'Pre-Wedding'
+    ];
+
     items.forEach((item) => {
       const cats = (item.category || '').split(',').map((c) => c.trim()).filter(Boolean);
       cats.forEach((c) => categoriesSet.add(c));
+
+      const title = (item.title || '').toLowerCase();
+      const loc = (item.location || '').toLowerCase();
+      const sub = (item.subtext || '').toLowerCase();
+
+      presetCategories.forEach((preset) => {
+        const pLower = preset.toLowerCase();
+        if (title.includes(pLower) || loc.includes(pLower) || sub.includes(pLower)) {
+          categoriesSet.add(preset);
+        }
+      });
     });
     if (categoriesSet.size === 0) return ['All'];
     return ['All', ...Array.from(categoriesSet).sort()];
@@ -247,12 +263,12 @@ export default function CollectionGridView({
 
   const handleBackPress = React.useCallback(() => {
     translateX.value = 0;
-    if (selectedCategory !== 'All' && categoryCards.length > 0) {
+    if (selectedCategory !== 'All') {
       setSelectedCategory('All');
     } else {
       onClose();
     }
-  }, [selectedCategory, categoryCards, onClose, translateX]);
+  }, [selectedCategory, onClose, translateX]);
 
   // iOS native-feel Edge Swipe Back gesture (swipe right from left 65px edge)
   const edgeSwipeGesture = Gesture.Pan()
