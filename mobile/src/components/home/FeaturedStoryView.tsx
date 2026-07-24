@@ -605,13 +605,14 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     <Modal
       visible={isOpen}
       animationType="none"
-      presentationStyle="fullScreen"
+      transparent={true}
+      presentationStyle="overFullScreen"
       onRequestClose={handleCloseScreen}
       statusBarTranslucent={true}
     >
       <GestureHandlerRootView style={styles.container}>
         <GestureDetector gesture={edgeSwipeGesture}>
-          <Animated.View style={[{ flex: 1 }, screenSwipeAnimatedStyle]}>
+          <Animated.View style={[{ flex: 1, backgroundColor: '#ffffff' }, screenSwipeAnimatedStyle]}>
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
             {/* Borderless Editorial Back Button */}
@@ -981,7 +982,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: 'transparent',
   },
   editorialBackButton: {
     position: 'absolute',
