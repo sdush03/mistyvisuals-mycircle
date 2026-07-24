@@ -17,6 +17,13 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as SecureStore from 'expo-secure-store';
 import { useAuthStore } from '../store/authStore';
 import api from '../services/api';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  Easing,
+  runOnJS,
+} from 'react-native-reanimated';
 import {
   FONT_FUTURA,
   FONT_FUTURA_BOLD,
@@ -48,10 +55,28 @@ export default function JoinCelebrationModal({
 
   const setEventDetails = useAuthStore((state) => state.setEventDetails);
 
-  // Load recently joined events when modal opens
+  const [modalVisible, setModalVisible] = useState(visible);
+  const backdropOpacity = useSharedValue(0);
+  const sheetTranslateY = useSharedValue(height);
+
   useEffect(() => {
     if (visible) {
+      setModalVisible(true);
+      backdropOpacity.value = withTiming(1, { duration: 250 });
+      sheetTranslateY.value = withTiming(0, {
+        duration: 280,
+        easing: Easing.out(Easing.poly(3)),
+      });
       loadRecentEvents();
+    } else if (modalVisible) {
+      backdropOpacity.value = withTiming(0, { duration: 200 });
+      sheetTranslateY.value = withTiming(
+        height,
+        { duration: 220, easing: Easing.in(Easing.poly(3)) },
+        () => {
+          runOnJS(setModalVisible)(false);
+        }
+      );
     }
   }, [visible]);
 
@@ -102,30 +127,37 @@ export default function JoinCelebrationModal({
     }
   };
 
-  const parseAndJoinUrl = async (text: string) => {
-    const trimmed = text.trim();
+  const parseAndJoinUrl = async (inputStr: string) => {
+    const trimmed = inputStr.trim();
     if (!trimmed) return;
 
-    // 1. Check if full URL
-    try {
-      if (trimmed.includes('http://') || trimmed.includes('https://') || trimmed.includes('mycircle://')) {
-        const urlObj = new URL(trimmed.replace('mycircle://', 'https://'));
-        const pathSegments = urlObj.pathname.split('/').filter(Boolean);
-        const slug = pathSegments[0];
-        const passcode = urlObj.searchParams.get('code') || urlObj.searchParams.get('passcode');
+    // 1. Check if full URL containing /celebration/ or /gallery/
+    let extractedSlug: string | null = null;
+    let extractedPasscode: string | null = null;
 
-        if (slug) {
-          handleJoin(slug, passcode);
-          return;
+    try {
+      if (trimmed.includes('http://') || trimmed.includes('https://') || trimmed.includes('/celebration/') || trimmed.includes('/gallery/')) {
+        const urlObj = new URL(trimmed.startsWith('http') ? trimmed : `https://mistyvisuals.com${trimmed.startsWith('/') ? '' : '/'}${trimmed}`);
+        const pathParts = urlObj.pathname.split('/').filter(Boolean);
+        
+        const celIndex = pathParts.findIndex(p => p === 'celebration' || p === 'gallery' || p === 'event');
+        if (celIndex !== -1 && pathParts[celIndex + 1]) {
+          extractedSlug = pathParts[celIndex + 1];
         }
+
+        extractedPasscode = urlObj.searchParams.get('code') || urlObj.searchParams.get('passcode') || urlObj.searchParams.get('pin');
       }
     } catch (e) {
-      console.warn('URL parsing failed, treating as code/slug', e);
+      console.warn('URL parsing fallback:', e);
     }
 
-    // 2. Check 6-char alphanumeric invite code
-    const codePattern = /^[A-Z0-9]{6}$/i;
-    if (codePattern.test(trimmed)) {
+    if (extractedSlug) {
+      handleJoin(extractedSlug, extractedPasscode);
+      return;
+    }
+
+    // 2. Check if it looks like a short invite code (e.g. 6 chars like "AB1234")
+    if (trimmed.length <= 10 && !trimmed.includes('/')) {
       try {
         setIsSubmitting(true);
         const res = await api.get(`/api/gallery/public/lookup-code/${trimmed.toUpperCase()}`);
@@ -150,20 +182,44 @@ export default function JoinCelebrationModal({
   };
 
   const handleClose = () => {
-    setShowScanner(false);
-    setEventInput('');
-    onClose();
+    backdropOpacity.value = withTiming(0, { duration: 200 });
+    sheetTranslateY.value = withTiming(
+      height,
+      { duration: 220, easing: Easing.in(Easing.poly(3)) },
+      () => {
+        runOnJS(setShowScanner)(false);
+        runOnJS(setEventInput)('');
+        runOnJS(setModalVisible)(false);
+        runOnJS(onClose)();
+      }
+    );
   };
+
+  const backdropAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: backdropOpacity.value,
+  }));
+
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetTranslateY.value }],
+  }));
+
+  if (!modalVisible) return null;
 
   return (
     <Modal
-      visible={visible}
-      animationType="slide"
+      visible={modalVisible}
+      animationType="none"
       transparent={true}
       onRequestClose={handleClose}
     >
-      <SafeAreaView style={styles.modalBackdrop}>
-        <View style={styles.modalCardContainer}>
+      <View style={styles.modalOverlayContainer}>
+        {/* Fade-in dark backdrop */}
+        <Animated.View style={[styles.modalBackdrop, backdropAnimatedStyle]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        </Animated.View>
+
+        {/* Slide-up lower sheet modal */}
+        <Animated.View style={[styles.modalCardContainer, sheetAnimatedStyle]}>
           {/* Header */}
           <View style={styles.modalHeader}>
             <View>
@@ -273,17 +329,20 @@ export default function JoinCelebrationModal({
               )}
             </ScrollView>
           )}
-        </View>
-      </SafeAreaView>
+        </Animated.View>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalBackdrop: {
+  modalOverlayContainer: {
     flex: 1,
-    backgroundColor: 'rgba(18, 16, 14, 0.75)',
     justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(18, 16, 14, 0.75)',
   },
   modalCardContainer: {
     backgroundColor: '#ffffff',
