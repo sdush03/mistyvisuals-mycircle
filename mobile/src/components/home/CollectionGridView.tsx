@@ -292,10 +292,11 @@ export default function CollectionGridView({
     }
     if (selectedCategory !== 'All') {
       setSelectedCategory('All');
+      translateX.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
     } else {
       performCloseAnimation();
     }
-  }, [activeStoryModalItem, selectedCategory, performCloseAnimation]);
+  }, [activeStoryModalItem, selectedCategory, performCloseAnimation, translateX]);
 
   // iOS native-feel Edge Swipe Back gesture (swipe right from left 65px edge)
   const edgeSwipeGesture = Gesture.Pan()
