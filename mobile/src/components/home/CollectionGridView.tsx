@@ -176,7 +176,7 @@ export default function CollectionGridView({
       let chosenUriKey: string | null = null;
 
       for (const item of cat.items) {
-        const coverUri = item.horizontalCoverImage || item.coverImage;
+        const coverUri = item.coverImage || item.horizontalCoverImage;
         const coverSrc = coverUri ? (typeof coverUri === 'string' ? { uri: coverUri } : coverUri) : null;
         const uriKey = typeof coverSrc === 'object' && coverSrc?.uri ? coverSrc.uri : (typeof coverSrc === 'string' ? coverSrc : null);
 
@@ -189,7 +189,7 @@ export default function CollectionGridView({
 
       if (!chosenCoverSrc && cat.items.length > 0) {
         const firstItem = cat.items[0];
-        const coverUri = firstItem.horizontalCoverImage || firstItem.coverImage;
+        const coverUri = firstItem.coverImage || firstItem.horizontalCoverImage;
         chosenCoverSrc = coverUri ? (typeof coverUri === 'string' ? { uri: coverUri } : coverUri) : null;
         chosenUriKey = typeof chosenCoverSrc === 'object' && chosenCoverSrc?.uri ? chosenCoverSrc.uri : (typeof chosenCoverSrc === 'string' ? chosenCoverSrc : null);
       }
