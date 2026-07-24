@@ -950,12 +950,7 @@ export default function HomeScreen() {
         {/* ── 8. Browse by Vibe (2x2 Grid Layout: 4 Stories + View More →) ── */}
         {websiteStories.length > 0 && (
           <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionHeader}>BROWSE BY VIBE</Text>
-              <Pressable onPress={() => setIsAllStoriesOpen(true)}>
-                <Text style={styles.viewAllText}>View All →</Text>
-              </Pressable>
-            </View>
+            <Text style={styles.sectionHeader}>BROWSE BY VIBE</Text>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibePillScroll}>
               {vibeFilters.map((vibe) => (
