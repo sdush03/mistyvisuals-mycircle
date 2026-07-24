@@ -977,33 +977,41 @@ export default function HomeScreen() {
 
             {/* 2x2 Grid of Vibe Category Cards */}
             <View style={styles.vibeGridContainer}>
-              {vibeCategoryCards.map((card, index) => (
-                <Pressable
-                  key={card.name || index}
-                  style={styles.vibeGridCard}
-                  onPress={() => {
-                    setSelectedVibe(card.name);
-                    setIsAllStoriesOpen(true);
-                  }}
-                >
-                  {card.coverImage ? (
-                    <Image source={card.coverImage} style={styles.vibeCardImage} />
-                  ) : (
-                    <View style={[styles.vibeCardImage, { backgroundColor: '#18181b' }]} />
-                  )}
-                  <LinearGradient 
-                    colors={['transparent', 'rgba(18, 16, 14, 0.2)', 'rgba(18, 16, 14, 0.85)']} 
-                    locations={[0, 0.4, 1]} 
-                    style={styles.featuredOverlay} 
-                  />
-                  <View style={styles.vibeCardContent}>
-                    <Text style={styles.vibeCardTitle} numberOfLines={1}>{card.name.toUpperCase()}</Text>
-                    <Text style={styles.vibeCardSubtext} numberOfLines={1}>
-                      {card.count > 0 ? `${card.count} ${card.count === 1 ? 'STORY' : 'STORIES'}` : 'EXPLORE VIBE'}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
+              {vibeCategoryCards.map((card, index) => {
+                const formattedTitle = card.name
+                  .split(' ')
+                  .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+                  .join(' ');
+                const subtext = card.count > 0
+                  ? `${card.count} ${card.count === 1 ? 'Story' : 'Stories'} →`
+                  : 'Explore Vibe →';
+
+                return (
+                  <Pressable
+                    key={card.name || index}
+                    style={styles.vibeGridCard}
+                    onPress={() => {
+                      setSelectedVibe(card.name);
+                      setIsAllStoriesOpen(true);
+                    }}
+                  >
+                    {card.coverImage ? (
+                      <Image source={card.coverImage} style={styles.vibeCardImage} />
+                    ) : (
+                      <View style={[styles.vibeCardImage, { backgroundColor: '#18181b' }]} />
+                    )}
+                    <LinearGradient 
+                      colors={['transparent', 'rgba(18, 16, 14, 0.2)', 'rgba(18, 16, 14, 0.85)']} 
+                      locations={[0, 0.4, 1]} 
+                      style={styles.featuredOverlay} 
+                    />
+                    <View style={styles.vibeCardContent}>
+                      <Text style={styles.vibeCardTitle} numberOfLines={1}>{formattedTitle}</Text>
+                      <Text style={styles.vibeCardSubtext} numberOfLines={1}>{subtext}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
             </View>
 
             {/* View More → Button */}
