@@ -114,14 +114,22 @@ export default function MoodboardsView({
       const rawImages = board.images || [];
       const galleryImages = (Array.isArray(rawImages) ? rawImages : []).map((imgUrl: any, idx: number) => {
         const uri = typeof imgUrl === 'string' ? imgUrl : (imgUrl.uri || imgUrl.url || imgUrl.src);
+
+        // Derive dynamic staggered aspect ratios matching Featured Story grid
+        const isHorizontal = idx % 5 === 0;
+        const verticalRatios = [2 / 3, 3 / 4, 4 / 5];
+        const vertRatio = verticalRatios[idx % 3];
+        const finalAspect = isHorizontal ? 3 / 2 : vertRatio;
+
         return {
           originalIndex: idx,
           id: `inspo-${board.id || idx}-${idx}`,
           uri: uri,
           fullUri: uri,
-          aspectRatio: 3 / 4,
+          aspectRatio: finalAspect,
+          isHorizontal: isHorizontal,
           caption: board.title,
-          category: board.category || 'INSPIRATION',
+          category: (board.category || 'INSPIRATION').trim(),
         };
       });
 
