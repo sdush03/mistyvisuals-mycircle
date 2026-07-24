@@ -15,6 +15,7 @@ import {
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 // @ts-ignore
 import { AntDesign, Feather, Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
@@ -1306,14 +1307,22 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                         const handleToggleCurrentPhotoSave = async () => {
                           if (!currentUrlForSave) return;
                           if (isCurrentPhotoSaved) {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            try {
+                              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            } catch {
+                              // Ignore if haptics unavailable
+                            }
                             const updated = new Set(savedUrls);
                             updated.delete(currentUrlForSave);
                             setSavedUrls(updated);
                             showToast("Removed from Moodboard");
                             await savesService.unsavePhoto(currentUrlForSave);
                           } else {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            try {
+                              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            } catch {
+                              // Ignore if haptics unavailable
+                            }
                             const updated = new Set(savedUrls);
                             updated.add(currentUrlForSave);
                             setSavedUrls(updated);
