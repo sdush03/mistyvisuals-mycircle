@@ -151,12 +151,10 @@ export default function CollectionGridView({
     });
   }, [items, selectedCategory]);
 
-  // Generate visual Category Cards for the "All" view mode with priority cover deduplication
+  // Generate visual Category Cards for the "All" view mode
   const categoryCards = React.useMemo(() => {
     const validCategories = categories.filter((c) => c !== 'All');
-
-    // 1. Group items by category
-    const catMap = validCategories.map((catName) => {
+    return validCategories.map((catName) => {
       const catLower = catName.toLowerCase();
       const catItems = items.filter((item) => {
         const dbCategories = (item.category || '').split(',').map((c) => c.trim().toLowerCase());
@@ -165,66 +163,26 @@ export default function CollectionGridView({
         const loc = (item.location || '').toLowerCase();
         return title.includes(catLower) || loc.includes(catLower);
       });
-      return {
-        name: catName,
-        count: catItems.length,
-        items: catItems,
-      };
-    });
 
-    // 2. Sort categories by item count ASCENDING (single-item categories assign covers first)
-    const sortedCategories = [...catMap].sort((a, b) => a.count - b.count);
-    const assignedCoversMap = new Map<string, any>();
-    const usedCoverUris = new Set<string>();
+      const firstItem = catItems[0];
+      const coverSrc = firstItem
+        ? firstItem.horizontalCoverImage || firstItem.coverImage
+        : null;
 
-    sortedCategories.forEach((cat) => {
-      let chosenCoverSrc: any = null;
-      let chosenUriKey: string | null = null;
-
-      for (const item of cat.items) {
-        const coverSrc = item.horizontalCoverImage || item.coverImage;
-        const uriKey = typeof coverSrc === 'object' && coverSrc?.uri
-          ? coverSrc.uri
-          : (typeof coverSrc === 'string' ? coverSrc : null);
-
-        if (coverSrc && uriKey && !usedCoverUris.has(uriKey)) {
-          chosenCoverSrc = coverSrc;
-          chosenUriKey = uriKey;
-          break;
-        }
-      }
-
-      if (!chosenCoverSrc && cat.items.length > 0) {
-        const firstItem = cat.items[0];
-        const coverSrc = firstItem.horizontalCoverImage || firstItem.coverImage;
-        chosenCoverSrc = coverSrc;
-        chosenUriKey = typeof coverSrc === 'object' && coverSrc?.uri
-          ? coverSrc.uri
-          : (typeof coverSrc === 'string' ? coverSrc : null);
-      }
-
-      if (chosenUriKey) {
-        usedCoverUris.add(chosenUriKey);
-      }
-      assignedCoversMap.set(cat.name, chosenCoverSrc);
-    });
-
-    // 3. Return category cards in original category order
-    return catMap.map((cat) => {
-      const formattedTitle = cat.name
+      const formattedTitle = catName
         .split(' ')
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
         .join(' ');
 
-      const count = cat.count;
+      const count = catItems.length;
       const subtext = count > 0 ? `${count} ${count === 1 ? 'Collection' : 'Collections'} →` : 'Explore Category →';
 
       return {
-        name: cat.name,
+        name: catName,
         title: formattedTitle,
         count,
         subtext,
-        coverImage: assignedCoversMap.get(cat.name) || null,
+        coverImage: coverSrc,
       };
     });
   }, [categories, items]);
@@ -264,6 +222,13 @@ export default function CollectionGridView({
                   <Text style={styles.bannerDescription}>{headerDescription}</Text>
                 ) : null}
               </View>
+
+              {/* Back to All Categories link when viewing a specific category */}
+              {selectedCategory !== 'All' && (
+                <Pressable style={styles.backToCategoriesLink} onPress={() => setSelectedCategory('All')}>
+                  <Text style={styles.backToCategoriesText}>← ALL CATEGORIES</Text>
+                </Pressable>
+              )}
 
               {filteredItems.length === 0 ? (
                 <View style={styles.emptyContainer}>
@@ -454,35 +419,17 @@ const styles = StyleSheet.create({
     color: '#7a756d',
     textAlign: 'center',
   },
-  vibeBarContainer: {
-    paddingVertical: 8,
+  backToCategoriesLink: {
+    alignSelf: 'center',
     marginBottom: 20,
-    backgroundColor: '#ffffff',
+    paddingVertical: 4,
+    paddingHorizontal: 12,
   },
-  vibeScroll: {
-    paddingHorizontal: 20,
-    gap: 10,
-  },
-  vibePill: {
-    paddingVertical: 7,
-    paddingHorizontal: 18,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e8e4de',
-    backgroundColor: '#ffffff',
-  },
-  vibePillActive: {
-    backgroundColor: '#181614',
-    borderColor: '#181614',
-  },
-  vibeText: {
-    fontFamily: FONT_JOST_REGULAR,
-    fontSize: 12,
-    color: '#60646c',
-  },
-  vibeTextActive: {
-    color: '#ffffff',
+  backToCategoriesText: {
     fontFamily: FONT_JOST_SEMIBOLD,
+    fontSize: 11,
+    letterSpacing: 2,
+    color: '#9a7d52',
   },
   featuredSection: {
     paddingHorizontal: 20,
