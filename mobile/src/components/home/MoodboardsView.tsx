@@ -111,6 +111,32 @@ export default function MoodboardsView({
       const photoCount = Array.isArray(board.images) ? board.images.length : 0;
       const subtext = photoCount > 0 ? `${photoCount} ${photoCount === 1 ? 'Photo' : 'Photos'} →` : 'Explore Collection →';
 
+      const rawImages = board.images || [];
+      const galleryImages = (Array.isArray(rawImages) ? rawImages : []).map((imgUrl: any, idx: number) => {
+        const uri = typeof imgUrl === 'string' ? imgUrl : (imgUrl.uri || imgUrl.url || imgUrl.src);
+        return {
+          originalIndex: idx,
+          id: `inspo-${board.id || idx}-${idx}`,
+          uri: uri,
+          fullUri: uri,
+          aspectRatio: 3 / 4,
+          caption: board.title,
+          category: board.category || 'INSPIRATION',
+        };
+      });
+
+      const formattedBoard = {
+        id: String(board.id),
+        title: board.title,
+        subtitle: board.category || 'FINE ART INSPIRATION',
+        location: 'CURATED COLLECTION',
+        date: 'INSPIRATION',
+        coverImage: typeof verticalCover === 'string' ? { uri: verticalCover } : verticalCover,
+        description: board.description || '',
+        images: galleryImages,
+        tabs: [board.category || 'INSPIRATION'],
+      };
+
       return {
         id: board.id,
         title: board.title,
@@ -118,7 +144,7 @@ export default function MoodboardsView({
         subtext: subtext,
         coverImage: verticalCover,
         horizontalCoverImage: horizontalCover,
-        rawItem: board,
+        rawItem: formattedBoard,
       };
     });
   }, [displayBoards]);
