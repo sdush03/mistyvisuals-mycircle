@@ -159,12 +159,13 @@ export default function CollectionGridView({
   }, [categories, items]);
 
   const handleBackPress = React.useCallback(() => {
+    translateX.value = 0;
     if (selectedCategory !== 'All' && categoryCards.length > 0) {
       setSelectedCategory('All');
     } else {
       onClose();
     }
-  }, [selectedCategory, categoryCards, onClose]);
+  }, [selectedCategory, categoryCards, onClose, translateX]);
 
   // iOS native-feel Edge Swipe Back gesture (swipe right from left 65px edge)
   const edgeSwipeGesture = Gesture.Pan()
