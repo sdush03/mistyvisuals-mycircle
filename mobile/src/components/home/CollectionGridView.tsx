@@ -231,11 +231,6 @@ export default function CollectionGridView({
                           style={styles.overlay}
                         />
 
-                        {/* Top-right Bookmark Badge */}
-                        <View style={styles.bookmarkBadge}>
-                          <Text style={styles.bookmarkIcon}>🏷️</Text>
-                        </View>
-
                         <View style={styles.featuredInfo}>
                           <Text style={styles.featuredTitle} numberOfLines={1}>
                             {(featuredItem.title || '')
@@ -416,20 +411,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
-  },
-  bookmarkBadge: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(18, 16, 14, 0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bookmarkIcon: {
-    fontSize: 13,
   },
   featuredInfo: {
     position: 'absolute',
