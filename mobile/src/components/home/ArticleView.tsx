@@ -72,7 +72,6 @@ export default function ArticleView({ isOpen, onClose, article }: ArticleViewPro
     screenSwipeX.value = withTiming(screenWidth, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
       if (finished) {
         runOnJS(onClose)();
-        screenSwipeX.value = 0;
       }
     });
   }, [onClose]);
@@ -109,7 +108,6 @@ export default function ArticleView({ isOpen, onClose, article }: ArticleViewPro
         screenSwipeX.value = withTiming(screenWidth, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
           if (finished) {
             runOnJS(onClose)();
-            screenSwipeX.value = 0;
           }
         });
       } else {
@@ -124,7 +122,9 @@ export default function ArticleView({ isOpen, onClose, article }: ArticleViewPro
 
   React.useEffect(() => {
     if (isOpen) {
-      screenSwipeX.value = 0;
+      // Slide in from right on open
+      screenSwipeX.value = screenWidth;
+      screenSwipeX.value = withTiming(0, { duration: 260, easing: Easing.out(Easing.quad) });
     }
   }, [isOpen]);
 

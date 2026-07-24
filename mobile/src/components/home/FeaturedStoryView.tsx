@@ -361,7 +361,6 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     screenSwipeX.value = withTiming(width, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
       if (finished) {
         runOnJS(onClose)();
-        screenSwipeX.value = 0;
       }
     });
   }, [activeImageIndex, closeLightbox, onClose, width]);
@@ -398,7 +397,6 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
         screenSwipeX.value = withTiming(width, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
           if (finished) {
             runOnJS(onClose)();
-            screenSwipeX.value = 0;
           }
         });
       } else {
@@ -415,7 +413,9 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     if (isOpen) {
       setActiveTab('ALL');
       setActiveImageIndex(null);
-      screenSwipeX.value = 0;
+      // Slide in from right on open
+      screenSwipeX.value = width;
+      screenSwipeX.value = withTiming(0, { duration: 260, easing: Easing.out(Easing.quad) });
       savesService.getSavedPhotos().then((items) => {
         const urls = new Set(items.map((i) => i.photoUrl));
         setSavedUrls(urls);
