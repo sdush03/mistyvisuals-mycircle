@@ -67,11 +67,64 @@ export default function CollectionGridView({
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [activeStoryModalItem, setActiveStoryModalItem] = useState<any | null>(null);
 
-  const handleItemClick = (item: CollectionItem) => {
+  const handleItemClick = async (item: CollectionItem) => {
     if (onSelectItem) {
       onSelectItem(item);
     }
-    setActiveStoryModalItem(item.rawItem);
+
+    const raw = item.rawItem;
+    if (!raw) return;
+
+    // If it's already a moodboard or story with populated images array
+    if (Array.isArray(raw.images) && raw.images.length > 0) {
+      setActiveStoryModalItem(raw);
+      return;
+    }
+
+    // Show initial story metadata immediately
+    setActiveStoryModalItem(raw);
+
+    // Fetch full gallery photos payload if slug is present
+    if (raw.slug) {
+      try {
+        const res = await fetch(`https://www.mistyvisuals.com/api/website/stories/${raw.slug}`);
+        if (res.ok) {
+          const fullStory = await res.json();
+          const rawImages = fullStory.images || fullStory.gallery || fullStory.photos || [];
+
+          const galleryImages = (Array.isArray(rawImages) ? rawImages : []).map((img: any, idx: number) => {
+            const uri = typeof img === 'string' ? img : (img.url || img.src || img.image_url || img.uri);
+            const caption = typeof img === 'object' ? (img.caption || img.title || img.alt || fullStory.title) : fullStory.title;
+            return {
+              id: `story-photo-${fullStory.id || raw.slug}-${idx}`,
+              uri: uri,
+              caption: caption,
+              category: (img.category || img.tab || fullStory.category || 'GALLERY').trim(),
+              aspectRatio: img.aspect_ratio || img.aspectRatio || 1,
+              originalIndex: idx,
+            };
+          });
+
+          const coverUri = fullStory.cover_image_mobile_url || fullStory.cover_image_url || fullStory.grid_image_url;
+
+          const parsedStory = {
+            ...raw,
+            id: String(fullStory.id || raw.id),
+            title: fullStory.title || raw.title,
+            subtitle: fullStory.subtitle || fullStory.category || raw.subtitle,
+            location: fullStory.location || raw.location,
+            date: fullStory.date || raw.date,
+            coverImage: coverUri ? { uri: coverUri } : raw.coverImage,
+            description: fullStory.description || fullStory.subtitle || raw.description,
+            images: galleryImages,
+          };
+
+          setActiveStoryModalItem(parsedStory);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch story gallery photos:', err);
+      }
+    }
   };
 
   const translateX = useSharedValue(0);
