@@ -478,38 +478,6 @@ export default function CollectionGridView({
                   ) : null}
                 </View>
 
-                {/* Category Filter Pills (Horizontal Scroll) */}
-                {categories.length > 2 && (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.filterPillsContainer}
-                  >
-                    {categories.map((cat) => {
-                      const isActive = (selectedCategory || 'All').toLowerCase() === cat.toLowerCase();
-                      const formattedPill = cat
-                        .split(' ')
-                        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-                        .join(' ');
-
-                      return (
-                        <Pressable
-                          key={cat}
-                          style={[styles.filterPill, isActive && styles.filterPillActive]}
-                          onPress={() => {
-                            if (isActive) return;
-                            selectCategoryWithPush(cat);
-                          }}
-                        >
-                          <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
-                            {formattedPill}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-                )}
-
                 {filteredItems.length === 0 ? (
                   <View style={styles.emptyContainer}>
                     <Text style={styles.emptyText}>No items found under "{selectedCategory}".</Text>
