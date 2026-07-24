@@ -196,13 +196,12 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
   const dragTranslateX = useSharedValue(0);
   const dragScale = useSharedValue(1);
 
-  const activePointerId1 = useSharedValue(-1);
-  const activePointerId2 = useSharedValue(-1);
-
-  const lastTouchX1 = useSharedValue(0);
-  const lastTouchY1 = useSharedValue(0);
-  const lastTouchX2 = useSharedValue(0);
-  const lastTouchY2 = useSharedValue(0);
+  const touch1Id = useSharedValue(-1);
+  const touch2Id = useSharedValue(-1);
+  const touch1X = useSharedValue(0);
+  const touch1Y = useSharedValue(0);
+  const touch2X = useSharedValue(0);
+  const touch2Y = useSharedValue(0);
   const initialDist = useSharedValue(0);
   const initialScaleOnPinch = useSharedValue(1);
 
@@ -211,23 +210,24 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
       'worklet';
       runOnJS(onInteractionStart)();
       if (e.allTouches.length === 1) {
-        const p1 = e.allTouches[0];
-        activePointerId1.value = p1.id;
-        lastTouchX1.value = p1.x;
-        lastTouchY1.value = p1.y;
+        const t1 = e.allTouches[0];
+        touch1Id.value = t1.id;
+        touch1X.value = t1.x;
+        touch1Y.value = t1.y;
+        touch2Id.value = -1;
         if (pinchScale.value > 1.01) {
           manager.activate();
         }
       } else if (e.allTouches.length >= 2) {
-        const p1 = e.allTouches[0];
-        const p2 = e.allTouches[1];
-        activePointerId1.value = p1.id;
-        activePointerId2.value = p2.id;
-        lastTouchX1.value = p1.x;
-        lastTouchY1.value = p1.y;
-        lastTouchX2.value = p2.x;
-        lastTouchY2.value = p2.y;
-        initialDist.value = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const t1 = e.allTouches[0];
+        const t2 = e.allTouches[1];
+        touch1Id.value = t1.id;
+        touch1X.value = t1.x;
+        touch1Y.value = t1.y;
+        touch2Id.value = t2.id;
+        touch2X.value = t2.x;
+        touch2Y.value = t2.y;
+        initialDist.value = Math.hypot(t2.x - t1.x, t2.y - t1.y);
         initialScaleOnPinch.value = pinchScale.value;
         manager.activate();
       }
@@ -243,20 +243,15 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
         }
 
         manager.activate();
-        let p1 = e.allTouches[0];
-        for (let i = 0; i < e.allTouches.length; i++) {
-          if (e.allTouches[i].id === activePointerId1.value) {
-            p1 = e.allTouches[i];
-            break;
-          }
-        }
-        activePointerId1.value = p1.id;
+        const t1 = e.allTouches[0];
+        touch1Id.value = t1.id;
+        touch2Id.value = -1;
 
-        const dx = p1.x - lastTouchX1.value;
-        const dy = p1.y - lastTouchY1.value;
+        const dx = t1.x - touch1X.value;
+        const dy = t1.y - touch1Y.value;
 
-        lastTouchX1.value = p1.x;
-        lastTouchY1.value = p1.y;
+        touch1X.value = t1.x;
+        touch1Y.value = t1.y;
 
         const imgWidth = width;
         const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
@@ -275,34 +270,34 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
         zoomTranslateX.value = targetX;
         zoomTranslateY.value = targetY;
       } else if (e.allTouches.length >= 2) {
-        let p1 = e.allTouches[0];
-        let p2 = e.allTouches[1];
-        for (let i = 0; i < e.allTouches.length; i++) {
-          if (e.allTouches[i].id === activePointerId1.value) p1 = e.allTouches[i];
-          else if (e.allTouches[i].id === activePointerId2.value) p2 = e.allTouches[i];
+        let t1 = e.allTouches[0];
+        let t2 = e.allTouches[1];
+        if (e.allTouches[0].id === touch2Id.value || e.allTouches[1].id === touch1Id.value) {
+          t1 = e.allTouches[1];
+          t2 = e.allTouches[0];
         }
-        activePointerId1.value = p1.id;
-        activePointerId2.value = p2.id;
+        touch1Id.value = t1.id;
+        touch2Id.value = t2.id;
 
-        const currentDist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const currentDist = Math.hypot(t2.x - t1.x, t2.y - t1.y);
 
         if (initialDist.value > 0) {
           const scaleFactor = currentDist / initialDist.value;
           pinchScale.value = Math.max(1, Math.min(initialScaleOnPinch.value * scaleFactor, 4.5));
         }
 
-        const midX = (p1.x + p2.x) / 2;
-        const midY = (p1.y + p2.y) / 2;
-        const lastMidX = (lastTouchX1.value + lastTouchX2.value) / 2;
-        const lastMidY = (lastTouchY1.value + lastTouchY2.value) / 2;
+        const currentMidX = (t1.x + t2.x) / 2;
+        const currentMidY = (t1.y + t2.y) / 2;
+        const prevMidX = (touch1X.value + touch2X.value) / 2;
+        const prevMidY = (touch1Y.value + touch2Y.value) / 2;
 
-        const dx = midX - lastMidX;
-        const dy = midY - lastMidY;
+        const dx = currentMidX - prevMidX;
+        const dy = currentMidY - prevMidY;
 
-        lastTouchX1.value = p1.x;
-        lastTouchY1.value = p1.y;
-        lastTouchX2.value = p2.x;
-        lastTouchY2.value = p2.y;
+        touch1X.value = t1.x;
+        touch1Y.value = t1.y;
+        touch2X.value = t2.x;
+        touch2Y.value = t2.y;
 
         const s = pinchScale.value;
         if (s > 1.01) {
@@ -323,14 +318,15 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
       'worklet';
       if (e.allTouches.length === 1) {
         const remaining = e.allTouches[0];
-        activePointerId1.value = remaining.id;
-        lastTouchX1.value = remaining.x;
-        lastTouchY1.value = remaining.y;
+        touch1Id.value = remaining.id;
+        touch1X.value = remaining.x;
+        touch1Y.value = remaining.y;
+        touch2Id.value = -1;
       } else if (e.allTouches.length === 0) {
         manager.end();
         runOnJS(onInteractionEnd)();
-        activePointerId1.value = -1;
-        activePointerId2.value = -1;
+        touch1Id.value = -1;
+        touch2Id.value = -1;
         const s = pinchScale.value;
         if (s <= 1.01) {
           resetZoom();
