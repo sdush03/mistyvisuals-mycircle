@@ -39,7 +39,8 @@ export default function AllStoriesView({
     <CollectionGridView
       isOpen={isOpen}
       onClose={onClose}
-      headerTitle="WEDDING STORIES"
+      headerTitle="Portfolio"
+      headerDescription="Unscripted moments and intentional design. A closer look into the unique celebrations we’ve had the honor of documenting."
       sectionHeadingPrefix="STORIES"
       items={collectionItems}
       initialCategory={initialVibe}

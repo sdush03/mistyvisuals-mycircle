@@ -165,7 +165,8 @@ export default function MoodboardsView({
     <CollectionGridView
       isOpen={isOpen}
       onClose={onClose}
-      headerTitle="FINE ART INSPIRATIONS"
+      headerTitle="Inspirations"
+      headerDescription="Curated moodboards, aesthetic details, and fine art inspiration for modern wedding celebrations."
       sectionHeadingPrefix="INSPIRATIONS"
       items={collectionItems}
       initialCategory={selectedCategoryName || 'All'}

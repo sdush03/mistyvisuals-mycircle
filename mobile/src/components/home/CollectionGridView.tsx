@@ -43,6 +43,7 @@ interface CollectionGridViewProps {
   isOpen: boolean;
   onClose: () => void;
   headerTitle: string;
+  headerDescription?: string;
   sectionHeadingPrefix?: string;
   items: CollectionItem[];
   initialCategory?: string;
@@ -53,6 +54,7 @@ export default function CollectionGridView({
   isOpen,
   onClose,
   headerTitle,
+  headerDescription,
   sectionHeadingPrefix = 'COLLECTIONS',
   items,
   initialCategory = 'All',
@@ -187,6 +189,14 @@ export default function CollectionGridView({
 
             {/* Grid Content */}
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+              {/* Editorial Title & Description Banner */}
+              <View style={styles.titleSection}>
+                <Text style={styles.bannerTitle}>{headerTitle}</Text>
+                {headerDescription ? (
+                  <Text style={styles.bannerDescription}>{headerDescription}</Text>
+                ) : null}
+              </View>
+
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionHeading}>
                   {selectedCategory === 'All'
@@ -323,6 +333,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 60,
+  },
+  titleSection: {
+    marginBottom: 20,
+  },
+  bannerTitle: {
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 26,
+    color: '#1c1a18',
+    letterSpacing: 0.2,
+    marginBottom: 6,
+  },
+  bannerDescription: {
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#666666',
   },
   sectionHeaderRow: {
     flexDirection: 'row',
