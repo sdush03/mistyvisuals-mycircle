@@ -348,6 +348,40 @@ export default function CollectionGridView({
       .join(' ');
   }, [selectedCategory, headerTitle]);
 
+  const contentTranslateY = useSharedValue(35);
+  const contentOpacity = useSharedValue(0);
+  const backButtonOpacity = useSharedValue(0);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      contentTranslateY.value = withSpring(0, { damping: 22, stiffness: 220 });
+      contentOpacity.value = withTiming(1, { duration: 250 });
+      backButtonOpacity.value = withTiming(1, { duration: 200 });
+    } else {
+      contentTranslateY.value = 35;
+      contentOpacity.value = 0;
+      backButtonOpacity.value = 0;
+    }
+  }, [isOpen]);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      contentTranslateY.value = 12;
+      contentOpacity.value = 0.6;
+      contentTranslateY.value = withSpring(0, { damping: 24, stiffness: 240 });
+      contentOpacity.value = withTiming(1, { duration: 180 });
+    }
+  }, [selectedCategory]);
+
+  const contentAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: contentTranslateY.value }],
+    opacity: contentOpacity.value,
+  }));
+
+  const backButtonAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: backButtonOpacity.value,
+  }));
+
   const featuredItem = filteredItems.length > 0 ? filteredItems[0] : null;
   const gridItems = filteredItems.length > 1 ? filteredItems.slice(1) : (filteredItems.length === 1 ? [] : []);
 
@@ -358,18 +392,20 @@ export default function CollectionGridView({
   return (
     <Modal
       visible={isOpen}
-      animationType="slide"
+      animationType="fade"
       presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
       <GestureHandlerRootView style={{ flex: 1 }}>
         <GestureDetector gesture={edgeSwipeGesture}>
           <Animated.View style={[styles.container, animatedStyle]}>
-            {/* Clean Top Header Bar */}
+            {/* Clean Top Header Bar (Static Logo, Fading Back Arrow) */}
             <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
-              <Pressable style={styles.backButton} onPress={handleBackPress}>
-                <Text style={styles.backIcon}>←</Text>
-              </Pressable>
+              <Animated.View style={backButtonAnimatedStyle}>
+                <Pressable style={styles.backButton} onPress={handleBackPress}>
+                  <Text style={styles.backIcon}>←</Text>
+                </Pressable>
+              </Animated.View>
               <Image
                 source={require('@/assets/images/logo-black.png')}
                 style={styles.headerLogo}
@@ -378,15 +414,16 @@ export default function CollectionGridView({
               <View style={{ width: 40 }} />
             </View>
 
-            {/* Main Content Area */}
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-              {/* Centered Editorial Title & Description Banner */}
-              <View style={styles.titleSection}>
-                <Text style={styles.bannerTitle}>{currentDisplayTitle}</Text>
-                {headerDescription ? (
-                  <Text style={styles.bannerDescription}>{headerDescription}</Text>
-                ) : null}
-              </View>
+            {/* Main Content Area (Smooth Spring & Fade Entrance) */}
+            <Animated.View style={[{ flex: 1 }, contentAnimatedStyle]}>
+              <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                {/* Centered Editorial Title & Description Banner */}
+                <View style={styles.titleSection}>
+                  <Text style={styles.bannerTitle}>{currentDisplayTitle}</Text>
+                  {headerDescription ? (
+                    <Text style={styles.bannerDescription}>{headerDescription}</Text>
+                  ) : null}
+                </View>
 
               {filteredItems.length === 0 ? (
                 <View style={styles.emptyContainer}>
@@ -519,6 +556,7 @@ export default function CollectionGridView({
                 </>
               )}
             </ScrollView>
+          </Animated.View>
 
             <FeaturedStoryView
               isOpen={activeStoryModalItem !== null}
