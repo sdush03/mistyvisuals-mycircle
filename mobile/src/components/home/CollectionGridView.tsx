@@ -827,7 +827,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   brandFooterTitle: {
-    fontFamily: FONT_FUTURA_BOLD,
+    fontFamily: FONT_FUTURA,
     fontSize: 11,
     letterSpacing: 3,
     color: '#1c1a18',
