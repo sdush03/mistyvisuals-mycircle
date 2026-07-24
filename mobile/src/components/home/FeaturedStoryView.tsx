@@ -858,12 +858,12 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     if (toastTimeoutRef.current) {
       clearTimeout(toastTimeoutRef.current);
     }
+    pauseAutoHideTimer();
     setShowControls(true);
-    resetAutoHideTimer();
     setToastMessage(msg);
+
     toastTranslateY.value = -150;
     toastOpacity.value = 0;
-
     toastTranslateY.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
     toastOpacity.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) });
 
@@ -872,9 +872,10 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
       toastOpacity.value = withTiming(0, { duration: 200 });
       setTimeout(() => {
         setToastMessage(null);
+        resetAutoHideTimer();
       }, 250);
     }, 2200);
-  }, [resetAutoHideTimer]);
+  }, [pauseAutoHideTimer, resetAutoHideTimer]);
 
   React.useEffect(() => {
     return () => {
