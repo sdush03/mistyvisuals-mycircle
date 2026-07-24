@@ -52,6 +52,7 @@ import FeaturedStoryView from '../components/home/FeaturedStoryView';
 import ArticleView from '../components/home/ArticleView';
 import MoodboardsView from '../components/home/MoodboardsView';
 import AllStoriesView from '../components/home/AllStoriesView';
+import { formatUniversalGalleryImages } from '@/utils/masonryHelper';
 import JoinCelebrationModal from '../components/JoinCelebrationModal';
 import {
   FONT_FUTURA,
@@ -224,40 +225,8 @@ export default function HomeScreen() {
 
   // Helper to parse full story API payload into cached gallery format
   const parseFullStoryPayload = useCallback((fullStory: any, fallbackStory?: any) => {
-    const photos = fullStory.photos || [];
-    const galleryImages = photos.map((p: any, idx: number) => {
-      const thumbUri = p.file_url_thumb || p.file_url_mobile || p.thumbnail_url || p.thumbnailUrl || p.mobile_url || p.thumb_url || p.preview_url || p.r2Url || p.file_url || '';
-      const fullUri = p.file_url || p.r2Url || p.file_url_mobile || p.file_url_thumb || p.thumbnail_url || '';
-      
-      let originalAspect: number | null = null;
-      if (p.aspect_ratio || p.aspectRatio) {
-        originalAspect = Number(p.aspect_ratio || p.aspectRatio);
-      } else if (p.width && p.height && Number(p.height) > 0) {
-        originalAspect = Number(p.width) / Number(p.height);
-      }
-
-      const isHorizontal = originalAspect ? originalAspect > 1.05 : false;
-
-      const verticalRatios = [2/3, 3/4, 4/5];
-      const vertRatio = verticalRatios[idx % 3];
-
-      const finalAspect = isHorizontal 
-        ? (originalAspect && originalAspect > 1.0 ? originalAspect : 3/2) 
-        : (originalAspect && originalAspect <= 1.0 ? originalAspect : vertRatio);
-
-      return { 
-        originalIndex: idx,
-        id: p.id || `photo-${idx}`,
-        uri: thumbUri,
-        fullUri: fullUri,
-        blurUri: p.blur_data_url || p.blurDataUrl || p.cover_blur_data_url || null,
-        width: p.width ? Number(p.width) : null,
-        height: p.height ? Number(p.height) : null,
-        aspectRatio: finalAspect,
-        isHorizontal: isHorizontal,
-        category: p.tab_name || p.tabName || p.category || p.tag || p.tagName || p.tab || p.event_name || p.eventName || p.folder_name || p.sub_folder || null
-      };
-    });
+    const photos = fullStory.photos || fullStory.images || fullStory.gallery || [];
+    const galleryImages = formatUniversalGalleryImages(photos, fullStory.title || (fallbackStory && fallbackStory.title), fullStory.category || 'GALLERY');
 
     const rawTabs = fullStory.tabs || fullStory.categories || fullStory.category || [];
     const parsedTabs = Array.isArray(rawTabs) 
