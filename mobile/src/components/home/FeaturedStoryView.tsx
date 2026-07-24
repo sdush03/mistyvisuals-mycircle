@@ -613,8 +613,8 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 
   const locationText = (story.location || '').toUpperCase();
   const titleText = story.title || '';
-  const dateText = formatDateText(story.date);
   const subtitleText = story.subtitle || '';
+  const dateText = formatDateText(story.date);
   const descriptionText = story.description || '';
 
   return (
@@ -680,12 +680,10 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
           </View>
 
           {/* Editorial Content */}
-          {(subtitleText || descriptionText) ? (
-            <View style={styles.editorialContainer}>
-              {subtitleText ? <Text style={styles.subtitleText}>{subtitleText}</Text> : null}
-              {descriptionText ? <Text style={styles.descriptionText}>{descriptionText}</Text> : null}
-            </View>
-          ) : null}
+          <View style={styles.editorialContainer}>
+            {subtitleText ? <Text style={styles.subtitleText}>{subtitleText}</Text> : null}
+            {descriptionText ? <Text style={styles.descriptionText}>{descriptionText}</Text> : null}
+          </View>
 
           {/* Photo Gallery Grid */}
           <View style={styles.galleryContainer}>
@@ -1087,11 +1085,12 @@ const styles = StyleSheet.create({
   },
   subtitleText: {
     fontFamily: FONT_JOST_MEDIUM,
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#1c1a18',
+    fontSize: 14,
+    letterSpacing: 1.5,
+    color: '#9a7d52',
     textAlign: 'center',
-    marginBottom: 6,
+    textTransform: 'uppercase',
+    marginBottom: 8,
   },
   descriptionText: {
     fontFamily: FONT_JOST_REGULAR,
