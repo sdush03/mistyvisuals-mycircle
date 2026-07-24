@@ -163,275 +163,312 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
   heartPopScale,
   heartPopOpacity,
 }: LightboxImageItemProps) {
-  const pinchScale = useSharedValue(1);
-  const savedScale = useSharedValue(1);
-  const zoomTranslateX = useSharedValue(0);
-  const zoomTranslateY = useSharedValue(0);
-  const savedZoomX = useSharedValue(0);
-  const savedZoomY = useSharedValue(0);
+  // ── Single Shared Transform State (scale, translateX, translateY) ──────
+  const scale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
 
-  const lastPinchTime = useSharedValue(0);
+  // React state for strict gesture enablement (State 1: NORMAL vs State 2: ZOOMED)
+  const [isZoomedState, setIsZoomedState] = useState(false);
 
-  const onZoomChangeRef = useRef(onZoomChange);
-  onZoomChangeRef.current = onZoomChange;
-
-  // Single Authoritative State Synchronizer between UI thread pinchScale & React viewer mode
+  // Sync scale.value > 1.01 to React state & notify parent FlatList
   useAnimatedReaction(
-    () => pinchScale.value > 1.01,
+    () => scale.value > 1.01,
     (isZoomed, previous) => {
       if (isZoomed !== previous && previous !== null && previous !== undefined) {
-        runOnJS(onZoomChangeRef.current)(isZoomed);
+        runOnJS(setIsZoomedState)(isZoomed);
+        runOnJS(onZoomChange)(isZoomed);
       }
     },
-    []
+    [onZoomChange]
   );
+
+  // Gesture interaction tracking values
+  const startScale = useSharedValue(1);
+  const startTx = useSharedValue(0);
+  const startTy = useSharedValue(0);
+  const startFocalX = useSharedValue(0);
+  const startFocalY = useSharedValue(0);
+  const isPinching = useSharedValue(false);
+
+  // Re-anchored pan baseline values
+  const panAnchorX = useSharedValue(0);
+  const panAnchorY = useSharedValue(0);
+  const panStartTx = useSharedValue(0);
+  const panStartTy = useSharedValue(0);
+
+  // Continuity & pointer tracking state
+  const activePointerCount = useSharedValue(0);
+  const needsPanReset = useSharedValue(false);
+
+  // Container & viewport dimensions for unscaled image bounds calculation
+  const containerW = width;
+  const containerH = screenHeight * 0.82; // 82% stack height per layout styles
 
   const heartPopAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: heartPopScale.value }],
     opacity: heartPopOpacity.value,
   }));
 
-  const resetZoom = useCallback(() => {
+  /**
+   * Apple Photos Centering & Boundary Clamping Algorithm
+   * Calculated dynamically from actual scaled image dimensions vs viewport bounds.
+   */
+  const getTargetTransform = (s: number, tx: number, ty: number) => {
     'worklet';
-    savedScale.value = 1;
-    savedZoomX.value = 0;
-    savedZoomY.value = 0;
-    zoomTranslateX.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) });
-    zoomTranslateY.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) });
-    pinchScale.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.quad) });
-  }, []);
+    const targetScale = Math.min(Math.max(s, 1.0), 5.0);
 
+    if (targetScale <= 1.01) {
+      return { scale: 1, translateX: 0, translateY: 0 };
+    }
 
-  const dragTranslateY = useSharedValue(0);
-  const dragTranslateX = useSharedValue(0);
-  const dragScale = useSharedValue(1);
+    const scaledW = containerW * targetScale;
+    const scaledH = containerH * targetScale;
+    const viewportW = width;
+    const viewportH = screenHeight;
 
-  const touch1Id = useSharedValue(-1);
-  const touch2Id = useSharedValue(-1);
-  const touch1X = useSharedValue(0);
-  const touch1Y = useSharedValue(0);
-  const touch2X = useSharedValue(0);
-  const touch2Y = useSharedValue(0);
-  const initialDist = useSharedValue(0);
-  const initialScaleOnPinch = useSharedValue(1);
+    let targetTx = 0;
+    if (scaledW <= viewportW) {
+      targetTx = 0;
+    } else {
+      const maxTx = (scaledW - viewportW) / 2;
+      targetTx = Math.min(Math.max(tx, -maxTx), maxTx);
+    }
 
-  const manualGesture = Gesture.Manual()
-    .onTouchesDown((e, manager) => {
+    let targetTy = 0;
+    if (scaledH <= viewportH) {
+      targetTy = 0;
+    } else {
+      const maxTy = (scaledH - viewportH) / 2;
+      targetTy = Math.min(Math.max(ty, -maxTy), maxTy);
+    }
+
+    return { scale: targetScale, translateX: targetTx, translateY: targetTy };
+  };
+
+  /**
+   * Calculates elastic bounds during active dragging/pinching overscroll.
+   */
+  const applyElasticBounds = (s: number, tx: number, ty: number) => {
+    'worklet';
+    const currentScale = Math.min(Math.max(s, 0.8), 5.5);
+
+    const scaledW = containerW * currentScale;
+    const scaledH = containerH * currentScale;
+    const viewportW = width;
+    const viewportH = screenHeight;
+
+    let clampedTx = tx;
+    if (scaledW <= viewportW) {
+      const maxElastic = viewportW * 0.25;
+      clampedTx = Math.min(Math.max(tx, -maxElastic), maxElastic) * 0.35;
+    } else {
+      const maxTx = (scaledW - viewportW) / 2;
+      if (tx > maxTx) {
+        clampedTx = maxTx + (tx - maxTx) * 0.35;
+      } else if (tx < -maxTx) {
+        clampedTx = -maxTx + (tx + maxTx) * 0.35;
+      }
+    }
+
+    let clampedTy = ty;
+    if (scaledH <= viewportH) {
+      const maxElastic = viewportH * 0.25;
+      clampedTy = Math.min(Math.max(ty, -maxElastic), maxElastic) * 0.35;
+    } else {
+      const maxTy = (scaledH - viewportH) / 2;
+      if (ty > maxTy) {
+        clampedTy = maxTy + (ty - maxTy) * 0.35;
+      } else if (ty < -maxTy) {
+        clampedTy = -maxTy + (ty + maxTy) * 0.35;
+      }
+    }
+
+    return { scale: currentScale, translateX: clampedTx, translateY: clampedTy };
+  };
+
+  /**
+   * Smooth spring-back to valid target bounds on final release (when 0 pointers remain).
+   */
+  const finishGesture = () => {
+    'worklet';
+    isPinching.value = false;
+    const target = getTargetTransform(scale.value, translateX.value, translateY.value);
+    scale.value = withSpring(target.scale, { damping: 28, stiffness: 220, mass: 0.5 });
+    translateX.value = withSpring(target.translateX, { damping: 28, stiffness: 220, mass: 0.5 });
+    translateY.value = withSpring(target.translateY, { damping: 28, stiffness: 220, mass: 0.5 });
+  };
+
+  // ── PINCH GESTURE (Native Focal-Point Zoom 1x–5x) ─────────────────────────
+  const pinchGesture = Gesture.Pinch()
+    .onStart((e) => {
       'worklet';
+      isPinching.value = true;
+      needsPanReset.value = true;
       runOnJS(onInteractionStart)();
-      if (e.allTouches.length === 1) {
-        const t1 = e.allTouches[0];
-        touch1Id.value = t1.id;
-        touch1X.value = t1.x;
-        touch1Y.value = t1.y;
-        touch2Id.value = -1;
-        if (pinchScale.value > 1.01) {
-          manager.activate();
-        }
-      } else if (e.allTouches.length >= 2) {
-        const t1 = e.allTouches[0];
-        const t2 = e.allTouches[1];
-        touch1Id.value = t1.id;
-        touch1X.value = t1.x;
-        touch1Y.value = t1.y;
-        touch2Id.value = t2.id;
-        touch2X.value = t2.x;
-        touch2Y.value = t2.y;
-        initialDist.value = Math.hypot(t2.x - t1.x, t2.y - t1.y);
-        initialScaleOnPinch.value = pinchScale.value;
-        manager.activate();
+      startScale.value = scale.value;
+      startTx.value = translateX.value;
+      startTy.value = translateY.value;
+      startFocalX.value = e.focalX - width / 2;
+      startFocalY.value = e.focalY - screenHeight / 2;
+    })
+    .onUpdate((e) => {
+      'worklet';
+      const currentFocalX = e.focalX - width / 2;
+      const currentFocalY = e.focalY - screenHeight / 2;
+
+      const rawScale = startScale.value * e.scale;
+      const r = rawScale / Math.max(0.001, startScale.value);
+
+      const rawTx = startTx.value * r + startFocalX.value * (1 - r) + (currentFocalX - startFocalX.value);
+      const rawTy = startTy.value * r + startFocalY.value * (1 - r) + (currentFocalY - startFocalY.value);
+
+      const bounds = applyElasticBounds(rawScale, rawTx, rawTy);
+      scale.value = bounds.scale;
+      translateX.value = bounds.translateX;
+      translateY.value = bounds.translateY;
+    })
+    .onEnd(() => {
+      'worklet';
+      isPinching.value = false;
+      needsPanReset.value = true;
+      runOnJS(onInteractionEnd)();
+      if (scale.value <= 1.001 || activePointerCount.value === 0) {
+        finishGesture();
       }
     })
-    .onTouchesMove((e, manager) => {
+    .onFinalize(() => {
       'worklet';
-      runOnJS(onInteractionStart)();
-      if (e.allTouches.length === 1) {
-        const s = pinchScale.value;
-        if (s <= 1.01) {
-          manager.fail();
-          return;
-        }
-
-        manager.activate();
-        const t1 = e.allTouches[0];
-        touch1Id.value = t1.id;
-        touch2Id.value = -1;
-
-        const dx = t1.x - touch1X.value;
-        const dy = t1.y - touch1Y.value;
-
-        touch1X.value = t1.x;
-        touch1Y.value = t1.y;
-
-        const imgWidth = width;
-        const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
-        const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2);
-        const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
-
-        let targetX = zoomTranslateX.value + dx;
-        let targetY = zoomTranslateY.value + dy;
-
-        if (targetX > maxTx) targetX = maxTx + (targetX - maxTx) * 0.25;
-        else if (targetX < -maxTx) targetX = -maxTx + (targetX - (-maxTx)) * 0.25;
-
-        if (targetY > maxTy) targetY = maxTy + (targetY - maxTy) * 0.25;
-        else if (targetY < -maxTy) targetY = -maxTy + (targetY - (-maxTy)) * 0.25;
-
-        zoomTranslateX.value = targetX;
-        zoomTranslateY.value = targetY;
-      } else if (e.allTouches.length >= 2) {
-        let t1 = e.allTouches[0];
-        let t2 = e.allTouches[1];
-        if (e.allTouches[0].id === touch2Id.value || e.allTouches[1].id === touch1Id.value) {
-          t1 = e.allTouches[1];
-          t2 = e.allTouches[0];
-        }
-        touch1Id.value = t1.id;
-        touch2Id.value = t2.id;
-
-        const currentDist = Math.hypot(t2.x - t1.x, t2.y - t1.y);
-
-        if (initialDist.value > 0) {
-          const scaleFactor = currentDist / initialDist.value;
-          pinchScale.value = Math.max(1, Math.min(initialScaleOnPinch.value * scaleFactor, 4.5));
-        }
-
-        const currentMidX = (t1.x + t2.x) / 2;
-        const currentMidY = (t1.y + t2.y) / 2;
-        const prevMidX = (touch1X.value + touch2X.value) / 2;
-        const prevMidY = (touch1Y.value + touch2Y.value) / 2;
-
-        const dx = currentMidX - prevMidX;
-        const dy = currentMidY - prevMidY;
-
-        touch1X.value = t1.x;
-        touch1Y.value = t1.y;
-        touch2X.value = t2.x;
-        touch2Y.value = t2.y;
-
-        const s = pinchScale.value;
-        if (s > 1.01) {
-          const imgWidth = width;
-          const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
-          const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2);
-          const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
-
-          let targetX = zoomTranslateX.value + dx;
-          let targetY = zoomTranslateY.value + dy;
-
-          zoomTranslateX.value = Math.min(Math.max(targetX, -maxTx), maxTx);
-          zoomTranslateY.value = Math.min(Math.max(targetY, -maxTy), maxTy);
-        }
-      }
-    })
-    .onTouchesUp((e, manager) => {
-      'worklet';
-      if (e.allTouches.length === 1) {
-        const remaining = e.allTouches[0];
-        touch1Id.value = remaining.id;
-        touch1X.value = remaining.x;
-        touch1Y.value = remaining.y;
-        touch2Id.value = -1;
-      } else if (e.allTouches.length === 0) {
-        manager.end();
-        runOnJS(onInteractionEnd)();
-        touch1Id.value = -1;
-        touch2Id.value = -1;
-        const s = pinchScale.value;
-        if (s <= 1.01) {
-          resetZoom();
-        } else {
-          savedScale.value = s;
-          const imgWidth = width;
-          const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
-          const maxTx = Math.max(0, (imgWidth * (s - 1)) / 2);
-          const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
-          const clampedX = Math.min(Math.max(zoomTranslateX.value, -maxTx), maxTx);
-          const clampedY = Math.min(Math.max(zoomTranslateY.value, -maxTy), maxTy);
-          zoomTranslateX.value = withTiming(clampedX, { duration: 180, easing: Easing.out(Easing.quad) });
-          zoomTranslateY.value = withTiming(clampedY, { duration: 180, easing: Easing.out(Easing.quad) });
-          savedZoomX.value = clampedX;
-          savedZoomY.value = clampedY;
-        }
+      isPinching.value = false;
+      needsPanReset.value = true;
+      if (scale.value <= 1.001 || activePointerCount.value === 0) {
+        finishGesture();
       }
     });
 
-  const swipeDownPanGesture = Gesture.Pan()
+  // ── IMAGE PAN GESTURE (ENABLED ONLY IN STATE 2: ZOOMED) ───────────────────
+  // When scale == 1 (State 1: NORMAL), enabled is FALSE.
+  // FlatList receives 100% of horizontal swipe events natively without any competing image pan handler!
+  const panZoomGesture = Gesture.Pan()
+    .enabled(isZoomedState)
     .minPointers(1)
-    .maxPointers(1)
-    .activeOffsetY(18)
-    .failOffsetY(-10)
-    .failOffsetX([-40, 40])
-    .onTouchesDown((e, state) => {
+    .maxPointers(2)
+    .onTouchesDown((e) => {
       'worklet';
-      if (e.numberOfTouches > 1) {
-        state.fail();
+      activePointerCount.value = e.numberOfTouches;
+      needsPanReset.value = true;
+    })
+    .onTouchesUp((e) => {
+      'worklet';
+      activePointerCount.value = e.numberOfTouches;
+      needsPanReset.value = true;
+      if (scale.value <= 1.001 || (e.numberOfTouches === 0 && !isPinching.value)) {
+        finishGesture();
+      }
+    })
+    .onTouchesCancelled((e) => {
+      'worklet';
+      activePointerCount.value = e.numberOfTouches;
+      needsPanReset.value = true;
+      if (scale.value <= 1.001 || (e.numberOfTouches === 0 && !isPinching.value)) {
+        finishGesture();
       }
     })
     .onStart(() => {
       'worklet';
+      if (scale.value <= 1.001) return;
       runOnJS(onInteractionStart)();
-      dragTranslateY.value = 0;
-      dragTranslateX.value = 0;
-      dragScale.value = 1;
     })
     .onUpdate((e) => {
       'worklet';
-      runOnJS(onInteractionStart)();
-      if (Date.now() - lastPinchTime.value < 400) return;
-      const s = pinchScale.value;
-      const imgWidth = width;
-      const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
-      const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
-      const atTop = s <= 1.01 || savedZoomY.value >= (maxTy - 12);
+      if (isPinching.value) return;
+      if (scale.value <= 1.001) return;
 
-      if (e.translationY > 0 && e.translationY > Math.abs(e.translationX) && atTop) {
-        dragTranslateY.value = e.translationY;
-        dragTranslateX.value = e.translationX * 0.2;
+      if (needsPanReset.value) {
+        panAnchorX.value = e.absoluteX;
+        panAnchorY.value = e.absoluteY;
+        panStartTx.value = translateX.value;
+        panStartTy.value = translateY.value;
+        needsPanReset.value = false;
+        return;
+      }
+
+      const dx = e.absoluteX - panAnchorX.value;
+      const dy = e.absoluteY - panAnchorY.value;
+
+      const rawTx = panStartTx.value + dx;
+      const rawTy = panStartTy.value + dy;
+
+      const bounds = applyElasticBounds(scale.value, rawTx, rawTy);
+      translateX.value = bounds.translateX;
+      translateY.value = bounds.translateY;
+    })
+    .onEnd(() => {
+      'worklet';
+      runOnJS(onInteractionEnd)();
+      if (scale.value <= 1.001 || activePointerCount.value === 0) {
+        finishGesture();
+      }
+    });
+
+  // ── SWIPE DOWN TO DISMISS (ENABLED ONLY IN STATE 1: NORMAL) ───────────────
+  const swipeDownPanGesture = Gesture.Pan()
+    .enabled(!isZoomedState)
+    .minPointers(1)
+    .maxPointers(1)
+    .activeOffsetY(15)
+    .failOffsetY(-10)
+    .failOffsetX([-20, 20])
+    .onStart(() => {
+      'worklet';
+      if (scale.value > 1.001) return;
+      runOnJS(onInteractionStart)();
+    })
+    .onUpdate((e) => {
+      'worklet';
+      if (scale.value > 1.001 || isPinching.value) return;
+
+      if (e.translationY > 0 && e.translationY > Math.abs(e.translationX)) {
+        translateY.value = e.translationY;
+        translateX.value = e.translationX * 0.2;
         const progress = Math.min(e.translationY / 400, 1);
-        dragScale.value = 1 - progress * 0.35;
+        scale.value = 1 - progress * 0.35;
         expandProgress.value = 1 - progress * 0.7;
       }
     })
     .onEnd((e) => {
       'worklet';
       runOnJS(onInteractionEnd)();
-      if (Date.now() - lastPinchTime.value < 400) {
-        dragTranslateY.value = 0;
-        dragTranslateX.value = 0;
-        dragScale.value = 1;
+      if (scale.value > 1.001 || isPinching.value) {
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        scale.value = withSpring(1);
         return;
       }
-      const s = pinchScale.value;
-      const imgWidth = width;
-      const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
-      const maxTy = Math.max(0, (imgHeight * (s - 1)) / 2);
-      const atTop = s <= 1.01 || savedZoomY.value >= (maxTy - 12);
 
-      const isDownwardDrag = e.translationY > 110 && e.translationY > Math.abs(e.translationX) * 1.5 && atTop;
-      const isDownwardFlick = e.translationY > 40 && e.velocityY > 800 && e.velocityY > Math.abs(e.velocityX) * 1.5 && atTop;
+      const isDownwardDrag = e.translationY > 110 && e.translationY > Math.abs(e.translationX) * 1.5;
+      const isDownwardFlick = e.translationY > 40 && e.velocityY > 800 && e.velocityY > Math.abs(e.velocityX) * 1.5;
 
       if (isDownwardDrag || isDownwardFlick) {
-        dragTranslateY.value = withSpring(0, { damping: 28, mass: 1, stiffness: 190 });
-        dragTranslateX.value = withSpring(0, { damping: 28, mass: 1, stiffness: 190 });
-        dragScale.value = withSpring(1, { damping: 28, mass: 1, stiffness: 190 });
-        zoomTranslateX.value = withSpring(0, { damping: 28, mass: 1, stiffness: 190 });
-        zoomTranslateY.value = withSpring(0, { damping: 28, mass: 1, stiffness: 190 });
+        translateX.value = withSpring(0, { damping: 28, mass: 1, stiffness: 190 });
+        translateY.value = withSpring(0, { damping: 28, mass: 1, stiffness: 190 });
+        scale.value = withSpring(1, { damping: 28, mass: 1, stiffness: 190 });
         runOnJS(onCloseLightbox)();
       } else {
-        dragTranslateY.value = withSpring(0, { damping: 20, mass: 1, stiffness: 150 });
-        dragTranslateX.value = withSpring(0, { damping: 20, mass: 1, stiffness: 150 });
-        dragScale.value = withSpring(1, { damping: 20, mass: 1, stiffness: 150 });
+        translateX.value = withSpring(0, { damping: 20, mass: 1, stiffness: 150 });
+        translateY.value = withSpring(0, { damping: 20, mass: 1, stiffness: 150 });
+        scale.value = withSpring(1, { damping: 20, mass: 1, stiffness: 150 });
         expandProgress.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) });
       }
     });
 
+  // ── TAP GESTURES (Single tap toggles controls, Double tap focal zoom) ─────
   const singleTapGesture = Gesture.Tap()
     .numberOfTaps(1)
     .maxDuration(250)
     .onEnd(() => {
       'worklet';
-      if (pinchScale.value > 1.01) return;
+      if (scale.value > 1.01) return;
       runOnJS(onToggleControls)();
     });
 
@@ -440,49 +477,42 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     .maxDelay(250)
     .onEnd((e) => {
       'worklet';
-      if (pinchScale.value > 1.01) {
-        resetZoom();
+      if (scale.value > 1.01) {
+        finishGesture();
+        scale.value = withTiming(1, { duration: 250, easing: Easing.out(Easing.quad) });
+        translateX.value = withTiming(0, { duration: 250, easing: Easing.out(Easing.quad) });
+        translateY.value = withTiming(0, { duration: 250, easing: Easing.out(Easing.quad) });
       } else {
         const targetScale = 2.5;
-        const imgWidth = width;
-        const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
-        const centerX = width / 2;
-        const centerY = screenHeight / 2;
+        const focalX = e.x - width / 2;
+        const focalY = e.y - screenHeight / 2;
 
-        const targetX = (centerX - e.x) * (targetScale - 1);
-        const targetY = (centerY - e.y) * (targetScale - 1);
+        const rawTx = focalX * (1 - targetScale);
+        const rawTy = focalY * (1 - targetScale);
 
-        const maxTx = Math.max(0, (imgWidth * (targetScale - 1)) / 2);
-        const maxTy = Math.max(0, (imgHeight * (targetScale - 1)) / 2);
+        const target = getTargetTransform(targetScale, rawTx, rawTy);
 
-        const clampedX = Math.min(Math.max(targetX, -maxTx), maxTx);
-        const clampedY = Math.min(Math.max(targetY, -maxTy), maxTy);
-
-        savedScale.value = targetScale;
-        zoomTranslateX.value = withTiming(clampedX, { duration: 250, easing: Easing.out(Easing.quad) });
-        zoomTranslateY.value = withTiming(clampedY, { duration: 250, easing: Easing.out(Easing.quad) });
-        pinchScale.value = withTiming(targetScale, { duration: 250, easing: Easing.out(Easing.quad) }, (finished) => {
-          if (finished) {
-            savedZoomX.value = clampedX;
-            savedZoomY.value = clampedY;
-          }
-        });
+        scale.value = withTiming(target.scale, { duration: 250, easing: Easing.out(Easing.quad) });
+        translateX.value = withTiming(target.translateX, { duration: 250, easing: Easing.out(Easing.quad) });
+        translateY.value = withTiming(target.translateY, { duration: 250, easing: Easing.out(Easing.quad) });
       }
     });
 
   const tapGestures = Gesture.Exclusive(doubleTapGesture, singleTapGesture);
 
+  const imageGestures = Gesture.Simultaneous(pinchGesture, panZoomGesture);
+
   const composedGesture = Gesture.Simultaneous(
-    manualGesture,
+    imageGestures,
     swipeDownPanGesture,
     tapGestures
   );
 
   const imageZoomAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: zoomTranslateX.value + dragTranslateX.value },
-      { translateY: zoomTranslateY.value + dragTranslateY.value },
-      { scale: pinchScale.value * dragScale.value },
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
     ],
   }));
 
@@ -491,7 +521,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
 
   return (
     <GestureDetector gesture={composedGesture}>
-      <View style={{ width, height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width, height: '100%', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
         <Animated.View style={[styles.lightboxImageStack, imageZoomAnimatedStyle]}>
           {/* Layer 1: Instant grid thumbnail from memory cache */}
           {thumbnailUri && (
@@ -581,7 +611,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   }, [galleryImages, activeTab]);
 
   // Keep ref synced to showControls so callbacks always inspect the instant state
-  const autoHideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const autoHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pauseAutoHideTimer = useCallback(() => {
     if (autoHideTimeoutRef.current) {
@@ -981,6 +1011,18 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 
   const flatListRef = useRef<FlatList>(null);
 
+  // Fires immediately when ≥50% of the next photo enters the viewport,
+  // so the counter and heart update without waiting for momentum to settle.
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 });
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: any[] }) => {
+    if (viewableItems.length > 0) {
+      const newIdx = viewableItems[0].index;
+      if (typeof newIdx === 'number') {
+        setActiveImageIndex(newIdx);
+      }
+    }
+  });
+
   // Stable navigate ref — always points to latest closure without recreating gestures
   const navigateRef = useRef((dir: 'next' | 'prev') => {});
   navigateRef.current = (dir: 'next' | 'prev') => {
@@ -1025,17 +1067,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   };
   const toggleSave = useCallback(() => toggleSaveRef.current(), []);
 
-  // Timestamp double-tap fallback for 100% reliable double-tap detection
-  const lastTapRef = useRef<number>(0);
-  const handleImagePress = () => {
-    const now = Date.now();
-    if (lastTapRef.current && (now - lastTapRef.current) < 350) {
-      toggleSave();
-      lastTapRef.current = 0;
-    } else {
-      lastTapRef.current = now;
-    }
-  };
+
 
   const renderLightboxItem = useCallback(({ item }: { item: any }) => (
     <LightboxImageItem
@@ -1295,13 +1327,11 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                         setShowControls(true);
                         pauseAutoHideTimer();
                       }}
-                      onMomentumScrollEnd={(e) => {
+                      onMomentumScrollEnd={() => {
                         resetAutoHideTimer();
-                        const newIdx = Math.round(e.nativeEvent.contentOffset.x / (width + 18));
-                        if (newIdx >= 0 && newIdx < filteredGalleryImages.length) {
-                          setActiveImageIndex(newIdx);
-                        }
                       }}
+                      viewabilityConfig={viewabilityConfig.current}
+                      onViewableItemsChanged={onViewableItemsChanged.current}
                       keyExtractor={(item, index) => item.id || `lightbox-${index}`}
                       ItemSeparatorComponent={() => <View style={{ width: 18, backgroundColor: '#000000' }} />}
                       renderItem={renderLightboxItem}
