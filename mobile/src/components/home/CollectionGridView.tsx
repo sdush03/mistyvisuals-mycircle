@@ -151,10 +151,11 @@ export default function CollectionGridView({
     });
   }, [items, selectedCategory]);
 
-  // Generate visual Category Cards for the "All" view mode
+  // Generate visual Category Cards for the "All" view mode with priority cover deduplication
   const categoryCards = React.useMemo(() => {
     const validCategories = categories.filter((c) => c !== 'All');
-    return validCategories.map((catName) => {
+
+    const categoryList = validCategories.map((catName) => {
       const catLower = catName.toLowerCase();
       const catItems = items.filter((item) => {
         const dbCategories = (item.category || '').split(',').map((c) => c.trim().toLowerCase());
@@ -163,26 +164,55 @@ export default function CollectionGridView({
         const loc = (item.location || '').toLowerCase();
         return title.includes(catLower) || loc.includes(catLower);
       });
+      return { name: catName, count: catItems.length, items: catItems };
+    });
 
-      const firstItem = catItems[0];
-      const coverSrc = firstItem
-        ? firstItem.horizontalCoverImage || firstItem.coverImage
-        : null;
+    const sortedCategories = [...categoryList].sort((a, b) => a.count - b.count);
+    const assignedCoversMap = new Map<string, any>();
+    const usedCoverUris = new Set<string>();
 
-      const formattedTitle = catName
+    sortedCategories.forEach((cat) => {
+      let chosenCoverSrc: any = null;
+      let chosenUriKey: string | null = null;
+
+      for (const item of cat.items) {
+        const coverUri = item.horizontalCoverImage || item.coverImage;
+        const coverSrc = coverUri ? (typeof coverUri === 'string' ? { uri: coverUri } : coverUri) : null;
+        const uriKey = typeof coverSrc === 'object' && coverSrc?.uri ? coverSrc.uri : (typeof coverSrc === 'string' ? coverSrc : null);
+
+        if (coverSrc && uriKey && !usedCoverUris.has(uriKey)) {
+          chosenCoverSrc = coverSrc;
+          chosenUriKey = uriKey;
+          break;
+        }
+      }
+
+      if (!chosenCoverSrc && cat.items.length > 0) {
+        const firstItem = cat.items[0];
+        const coverUri = firstItem.horizontalCoverImage || firstItem.coverImage;
+        chosenCoverSrc = coverUri ? (typeof coverUri === 'string' ? { uri: coverUri } : coverUri) : null;
+        chosenUriKey = typeof chosenCoverSrc === 'object' && chosenCoverSrc?.uri ? chosenCoverSrc.uri : (typeof chosenCoverSrc === 'string' ? chosenCoverSrc : null);
+      }
+
+      if (chosenUriKey) {
+        usedCoverUris.add(chosenUriKey);
+      }
+      assignedCoversMap.set(cat.name, chosenCoverSrc);
+    });
+
+    return categoryList.map((cat) => {
+      const formattedTitle = cat.name
         .split(' ')
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
         .join(' ');
-
-      const count = catItems.length;
-      const subtext = count > 0 ? `${count} ${count === 1 ? 'Collection' : 'Collections'} →` : 'Explore Category →';
+      const subtext = cat.count > 0 ? `${cat.count} ${cat.count === 1 ? 'Collection' : 'Collections'} →` : 'Explore Category →';
 
       return {
-        name: catName,
+        name: cat.name,
         title: formattedTitle,
-        count,
+        count: cat.count,
         subtext,
-        coverImage: coverSrc,
+        coverImage: assignedCoversMap.get(cat.name) || null,
       };
     });
   }, [categories, items]);
