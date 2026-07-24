@@ -152,12 +152,16 @@ export default function CollectionGridView({
       <GestureHandlerRootView style={{ flex: 1 }}>
         <GestureDetector gesture={edgeSwipeGesture}>
           <Animated.View style={[styles.container, animatedStyle]}>
-            {/* Top Navigation Bar */}
+            {/* Global Brand Header with Back Button */}
             <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
               <Pressable style={styles.backButton} onPress={onClose}>
                 <Text style={styles.backText}>← BACK</Text>
               </Pressable>
-              <Text style={styles.headerTitle}>{headerTitle.toUpperCase()}</Text>
+              <Image
+                source={require('@/assets/images/logo-black.png')}
+                style={styles.headerLogo}
+                resizeMode="contain"
+              />
               <View style={{ width: 60 }} />
             </View>
 
@@ -279,12 +283,10 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     color: '#1c1a18',
   },
-  headerTitle: {
-    fontFamily: FONT_JOST_MEDIUM,
-    fontSize: 11,
-    letterSpacing: 2.5,
-    color: '#1c1a18',
-    textAlign: 'center',
+  headerLogo: {
+    height: 38,
+    width: 135,
+    tintColor: '#000000',
   },
   vibeBarContainer: {
     paddingVertical: 12,
