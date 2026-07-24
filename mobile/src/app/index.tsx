@@ -616,6 +616,39 @@ export default function HomeScreen() {
     return ['All', ...Array.from(categoriesSet).sort()];
   }, [websiteStories, websiteInspirations]);
 
+  // Vibe Category Cards for 2x2 grid (Option A)
+  const vibeCategoryCards = React.useMemo(() => {
+    const defaultCategories = ['Destination', 'Intimate', 'Luxury', 'Traditional'];
+    const categoryMap = new Map<string, { name: string; count: number; coverImage: any }>();
+
+    [...websiteStories, ...websiteInspirations].forEach((item: any) => {
+      const cats = (item.category || '').split(',').map((c: string) => c.trim()).filter(Boolean);
+      const coverUri = item.cover_image_mobile_url || item.cover_image_url || item.coverImageMobile || item.coverImage || item.grid_image_url;
+      const coverSrc = coverUri ? { uri: coverUri } : typeof item.img === 'string' ? { uri: item.img } : item.img || null;
+
+      cats.forEach((catName: string) => {
+        if (!categoryMap.has(catName)) {
+          categoryMap.set(catName, { name: catName, count: 1, coverImage: coverSrc });
+        } else {
+          const existing = categoryMap.get(catName)!;
+          existing.count += 1;
+          if (!existing.coverImage && coverSrc) {
+            existing.coverImage = coverSrc;
+          }
+        }
+      });
+    });
+
+    // Ensure default categories exist if not enough DB categories
+    defaultCategories.forEach((catName) => {
+      if (!categoryMap.has(catName)) {
+        categoryMap.set(catName, { name: catName, count: 0, coverImage: null });
+      }
+    });
+
+    return Array.from(categoryMap.values()).slice(0, 4);
+  }, [websiteStories, websiteInspirations]);
+
   // Helper to filter website portfolio stories by selected Vibe
   const getFilteredVibeStories = () => {
     const sourceStories = websiteStories;
@@ -946,72 +979,52 @@ export default function HomeScreen() {
              then render them here exactly like Featured Stories.
         ────────────────────────────────────────────────────────────────────── */}
 
-        {/* ── 8. Browse by Vibe (2x2 Grid Layout: 4 Stories + View More →) ── */}
-        {websiteStories.length > 0 && (
+        {/* ── 8. Browse by Vibe (2x2 Visual Vibe Category Cards Grid) ─────── */}
+        {(websiteStories.length > 0 || websiteInspirations.length > 0) && (
           <View style={styles.section}>
             <Text style={styles.sectionHeader}>BROWSE BY VIBE</Text>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibePillScroll}>
-              {vibeFilters.map((vibe) => (
-                <Pressable 
-                  key={vibe} 
-                  style={[styles.vibePill, selectedVibe === vibe && styles.vibePillActive]}
-                  onPress={() => setSelectedVibe(vibe)}
+            {/* 2x2 Grid of Vibe Category Cards */}
+            <View style={styles.vibeGridContainer}>
+              {vibeCategoryCards.map((card, index) => (
+                <Pressable
+                  key={card.name || index}
+                  style={styles.vibeGridCard}
+                  onPress={() => {
+                    setSelectedVibe(card.name);
+                    setIsAllStoriesOpen(true);
+                  }}
                 >
-                  <Text style={[styles.vibeText, selectedVibe === vibe && styles.vibeTextActive]}>{vibe}</Text>
+                  {card.coverImage ? (
+                    <Image source={card.coverImage} style={styles.vibeCardImage} />
+                  ) : (
+                    <View style={[styles.vibeCardImage, { backgroundColor: '#18181b' }]} />
+                  )}
+                  <LinearGradient 
+                    colors={['transparent', 'rgba(18, 16, 14, 0.2)', 'rgba(18, 16, 14, 0.85)']} 
+                    locations={[0, 0.4, 1]} 
+                    style={styles.featuredOverlay} 
+                  />
+                  <View style={styles.vibeCardContent}>
+                    <Text style={styles.vibeCardTitle} numberOfLines={1}>{card.name.toUpperCase()}</Text>
+                    <Text style={styles.vibeCardSubtext} numberOfLines={1}>
+                      {card.count > 0 ? `${card.count} STORIES & INSPO` : 'EXPLORE VIBE'}
+                    </Text>
+                  </View>
                 </Pressable>
               ))}
-            </ScrollView>
-
-            {/* 2x2 Grid: 4 Stories on Screen */}
-            {getFilteredVibeStories().length > 0 ? (
-              <View style={styles.vibeGridContainer}>
-                {getFilteredVibeStories().slice(0, 4).map((item: any, index: number) => {
-                  const coverUri = item.cover_image_mobile_url || item.cover_image_url || item.grid_image_url;
-                  const coverSrc = coverUri ? { uri: coverUri } : typeof item.img === 'string' ? { uri: item.img } : item.img || null;
-                  
-                  const titleText = item.title || '';
-                  const subText = item.subtitle || item.location || '';
-
-                  return (
-                    <Pressable 
-                      key={item.id || index} 
-                      style={styles.vibeGridCard}
-                      onPress={() => handleStoryPress(item)}
-                    >
-                      {coverSrc ? (
-                        <Image source={coverSrc} style={styles.vibeCardImage} />
-                      ) : (
-                        <View style={[styles.vibeCardImage, { backgroundColor: '#18181b' }]} />
-                      )}
-                      <LinearGradient 
-                        colors={['transparent', 'rgba(18, 16, 14, 0.15)', 'rgba(18, 16, 14, 0.85)']} 
-                        locations={[0, 0.45, 1]} 
-                        style={styles.featuredOverlay} 
-                      />
-                      <View style={styles.vibeCardContent}>
-                        <Text style={styles.vibeCardTitle} numberOfLines={1}>{titleText}</Text>
-                        <Text style={styles.vibeCardSubtext} numberOfLines={1}>{subText}</Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ) : (
-              <View style={styles.emptyVibeContainer}>
-                <Text style={styles.emptyVibeText}>No stories found under "{selectedVibe}".</Text>
-              </View>
-            )}
+            </View>
 
             {/* View More → Button */}
-            {getFilteredVibeStories().length > 0 && (
-              <Pressable 
-                style={styles.viewMoreGridBtn}
-                onPress={() => setIsAllStoriesOpen(true)}
-              >
-                <Text style={styles.viewAllText}>View More →</Text>
-              </Pressable>
-            )}
+            <Pressable 
+              style={styles.viewMoreGridBtn}
+              onPress={() => {
+                setSelectedVibe('All');
+                setIsAllStoriesOpen(true);
+              }}
+            >
+              <Text style={styles.viewAllText}>View More →</Text>
+            </Pressable>
           </View>
         )}
 
