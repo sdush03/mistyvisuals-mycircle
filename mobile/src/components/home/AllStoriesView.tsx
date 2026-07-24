@@ -41,7 +41,7 @@ export default function AllStoriesView({
       onClose={onClose}
       headerTitle="Portfolio"
       headerDescription="Unscripted moments and intentional design. A closer look into the unique celebrations we’ve had the honor of documenting."
-      sectionHeadingPrefix="STORIES"
+      sectionHeadingPrefix="COLLECTIONS"
       items={collectionItems}
       initialCategory={initialVibe}
       onSelectItem={(item) => {

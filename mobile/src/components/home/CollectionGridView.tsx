@@ -21,7 +21,6 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import {
-  FONT_MONTSERRAT_REGULAR,
   FONT_JOST_REGULAR,
   FONT_JOST_MEDIUM,
   FONT_JOST_SEMIBOLD,
@@ -144,6 +143,9 @@ export default function CollectionGridView({
     });
   }, [items, selectedCategory]);
 
+  const featuredItem = filteredItems.length > 0 ? filteredItems[0] : null;
+  const gridItems = filteredItems.length > 1 ? filteredItems.slice(1) : (filteredItems.length === 1 ? [] : []);
+
   return (
     <Modal
       visible={isOpen}
@@ -154,42 +156,22 @@ export default function CollectionGridView({
       <GestureHandlerRootView style={{ flex: 1 }}>
         <GestureDetector gesture={edgeSwipeGesture}>
           <Animated.View style={[styles.container, animatedStyle]}>
-            {/* Global Brand Header with Back Button */}
+            {/* Clean Top Header Bar */}
             <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
               <Pressable style={styles.backButton} onPress={onClose}>
-                <Text style={styles.backText}>← BACK</Text>
+                <Text style={styles.backIcon}>←</Text>
               </Pressable>
               <Image
                 source={require('@/assets/images/logo-black.png')}
                 style={styles.headerLogo}
                 resizeMode="contain"
               />
-              <View style={{ width: 60 }} />
+              <View style={{ width: 40 }} />
             </View>
 
-            {/* Category Filter Pills */}
-            {categories.length > 1 && (
-              <View style={styles.vibeBarContainer}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibeScroll}>
-                  {categories.map((cat) => {
-                    const active = cat === selectedCategory;
-                    return (
-                      <Pressable
-                        key={cat}
-                        style={[styles.vibePill, active && styles.vibePillActive]}
-                        onPress={() => setSelectedCategory(cat)}
-                      >
-                        <Text style={[styles.vibeText, active && styles.vibeTextActive]}>{cat}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            )}
-
-            {/* Grid Content */}
+            {/* Main Content Area */}
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-              {/* Editorial Title & Description Banner */}
+              {/* Centered Editorial Title & Description Banner */}
               <View style={styles.titleSection}>
                 <Text style={styles.bannerTitle}>{headerTitle}</Text>
                 {headerDescription ? (
@@ -197,68 +179,128 @@ export default function CollectionGridView({
                 ) : null}
               </View>
 
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionHeading}>
-                  {selectedCategory === 'All'
-                    ? `ALL ${sectionHeadingPrefix.toUpperCase()}`
-                    : `${selectedCategory.toUpperCase()} ${sectionHeadingPrefix.toUpperCase()}`}
-                </Text>
-                <Text style={styles.countText}>{filteredItems.length} ITEMS</Text>
-              </View>
+              {/* Category Filter Pills */}
+              {categories.length > 1 && (
+                <View style={styles.vibeBarContainer}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibeScroll}>
+                    {categories.map((cat) => {
+                      const active = cat === selectedCategory;
+                      return (
+                        <Pressable
+                          key={cat}
+                          style={[styles.vibePill, active && styles.vibePillActive]}
+                          onPress={() => setSelectedCategory(cat)}
+                        >
+                          <Text style={[styles.vibeText, active && styles.vibeTextActive]}>{cat}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
 
               {filteredItems.length === 0 ? (
                 <View style={styles.emptyContainer}>
                   <Text style={styles.emptyText}>No items found under "{selectedCategory}".</Text>
                 </View>
               ) : (
-                <View style={styles.grid}>
-                  {filteredItems.map((item) => {
-                    const formattedTitle = (item.title || '')
-                      .split(' ')
-                      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-                      .join(' ');
-                    const imageSource = item.coverImage
-                      ? typeof item.coverImage === 'string'
-                        ? { uri: item.coverImage }
-                        : item.coverImage
-                      : null;
-
-                    return (
+                <>
+                  {/* FEATURED Section */}
+                  {featuredItem && (
+                    <View style={styles.featuredSection}>
+                      <Text style={styles.sectionHeading}>FEATURED</Text>
                       <Pressable
-                        key={item.id}
-                        style={styles.card}
-                        onPress={() => onSelectItem(item)}
+                        style={styles.featuredCard}
+                        onPress={() => onSelectItem(featuredItem)}
                       >
-                        {imageSource ? (
-                          <Image source={imageSource} style={styles.cover} />
+                        {featuredItem.coverImage ? (
+                          <Image
+                            source={
+                              typeof featuredItem.coverImage === 'string'
+                                ? { uri: featuredItem.coverImage }
+                                : featuredItem.coverImage
+                            }
+                            style={styles.featuredCover}
+                          />
                         ) : (
-                          <View style={[styles.cover, { backgroundColor: '#18181b' }]} />
+                          <View style={[styles.featuredCover, { backgroundColor: '#18181b' }]} />
                         )}
                         <LinearGradient
                           colors={['transparent', 'rgba(18, 16, 14, 0.2)', 'rgba(18, 16, 14, 0.88)']}
-                          locations={[0, 0.45, 1]}
+                          locations={[0, 0.4, 1]}
                           style={styles.overlay}
                         />
-                        <View style={styles.info}>
-                          {item.category ? (
-                            <Text style={styles.category} numberOfLines={1}>
-                              {item.category.toUpperCase()}
-                            </Text>
-                          ) : null}
-                          <Text style={styles.title} numberOfLines={1}>
-                            {formattedTitle}
+
+                        {/* Top-right Bookmark Badge */}
+                        <View style={styles.bookmarkBadge}>
+                          <Text style={styles.bookmarkIcon}>🏷️</Text>
+                        </View>
+
+                        <View style={styles.featuredInfo}>
+                          <Text style={styles.featuredTitle} numberOfLines={1}>
+                            {(featuredItem.title || '')
+                              .split(' ')
+                              .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+                              .join(' ')}
                           </Text>
-                          <View style={styles.bottomRow}>
-                            <Text style={styles.subtext} numberOfLines={1}>
-                              {item.subtext || item.location || 'Collection'}
-                            </Text>
-                            <Text style={styles.ctaText}>View →</Text>
-                          </View>
+                          <Text style={styles.featuredSubtext} numberOfLines={1}>
+                            {featuredItem.subtext || featuredItem.location || 'Collection'}
+                          </Text>
                         </View>
                       </Pressable>
-                    );
-                  })}
-                </View>
+                    </View>
+                  )}
+
+                  {/* ALL COLLECTIONS Grid Section */}
+                  <View style={styles.gridSection}>
+                    <Text style={styles.sectionHeading}>
+                      {selectedCategory === 'All'
+                        ? `ALL ${sectionHeadingPrefix.toUpperCase()}`
+                        : `${selectedCategory.toUpperCase()} ${sectionHeadingPrefix.toUpperCase()}`}
+                    </Text>
+
+                    <View style={styles.grid}>
+                      {(gridItems.length > 0 ? gridItems : (featuredItem ? [] : filteredItems)).map((item) => {
+                        const formattedTitle = (item.title || '')
+                          .split(' ')
+                          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+                          .join(' ');
+                        const imageSource = item.coverImage
+                          ? typeof item.coverImage === 'string'
+                            ? { uri: item.coverImage }
+                            : item.coverImage
+                          : null;
+
+                        return (
+                          <Pressable
+                            key={item.id}
+                            style={styles.card}
+                            onPress={() => onSelectItem(item)}
+                          >
+                            {imageSource ? (
+                              <Image source={imageSource} style={styles.cover} />
+                            ) : (
+                              <View style={[styles.cover, { backgroundColor: '#18181b' }]} />
+                            )}
+                            <LinearGradient
+                              colors={['transparent', 'rgba(18, 16, 14, 0.2)', 'rgba(18, 16, 14, 0.88)']}
+                              locations={[0, 0.45, 1]}
+                              style={styles.overlay}
+                            />
+                            <View style={styles.info}>
+                              <Text style={styles.title} numberOfLines={2}>
+                                {formattedTitle}
+                              </Text>
+                              <Text style={styles.subtext} numberOfLines={1}>
+                                {item.subtext || item.location || 'Collection'}
+                              </Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </>
               )}
             </ScrollView>
           </Animated.View>
@@ -278,95 +320,136 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0ede8',
+    paddingBottom: 10,
     backgroundColor: '#ffffff',
   },
   backButton: {
     paddingVertical: 6,
-    paddingRight: 12,
+    paddingRight: 16,
   },
-  backText: {
-    fontFamily: FONT_JOST_SEMIBOLD,
-    fontSize: 11,
-    letterSpacing: 1.5,
+  backIcon: {
+    fontSize: 20,
     color: '#1c1a18',
+    fontWeight: '300',
   },
   headerLogo: {
     height: 38,
     width: 135,
     tintColor: '#000000',
   },
+  scrollContent: {
+    paddingBottom: 60,
+  },
+  titleSection: {
+    alignItems: 'center',
+    paddingHorizontal: 28,
+    paddingTop: 12,
+    paddingBottom: 18,
+  },
+  bannerTitle: {
+    fontFamily: 'serif',
+    fontSize: 34,
+    fontWeight: '300',
+    color: '#1c1a18',
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: 0.2,
+  },
+  bannerDescription: {
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#7a756d',
+    textAlign: 'center',
+  },
   vibeBarContainer: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0ede8',
-    backgroundColor: '#fbfaf8',
+    paddingVertical: 8,
+    marginBottom: 20,
+    backgroundColor: '#ffffff',
   },
   vibeScroll: {
     paddingHorizontal: 20,
-    gap: 8,
+    gap: 10,
   },
   vibePill: {
-    paddingVertical: 6,
-    paddingHorizontal: 16,
+    paddingVertical: 7,
+    paddingHorizontal: 18,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#e8e4de',
     backgroundColor: '#ffffff',
   },
   vibePillActive: {
-    backgroundColor: '#1c1a18',
-    borderColor: '#1c1a18',
+    backgroundColor: '#181614',
+    borderColor: '#181614',
   },
   vibeText: {
     fontFamily: FONT_JOST_REGULAR,
-    fontSize: 11,
+    fontSize: 12,
     color: '#60646c',
   },
   vibeTextActive: {
     color: '#ffffff',
     fontFamily: FONT_JOST_SEMIBOLD,
   },
-  scrollContent: {
+  featuredSection: {
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 60,
-  },
-  titleSection: {
-    marginBottom: 20,
-  },
-  bannerTitle: {
-    fontFamily: FONT_MONTSERRAT_REGULAR,
-    fontSize: 26,
-    color: '#1c1a18',
-    letterSpacing: 0.2,
-    marginBottom: 6,
-  },
-  bannerDescription: {
-    fontFamily: FONT_JOST_REGULAR,
-    fontSize: 13,
-    lineHeight: 20,
-    color: '#666666',
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 24,
   },
   sectionHeading: {
     fontFamily: FONT_JOST_MEDIUM,
     fontSize: 11,
-    letterSpacing: 2.5,
-    color: '#9a7d52',
+    letterSpacing: 2,
+    color: '#a0988e',
+    marginBottom: 12,
+    textTransform: 'uppercase',
   },
-  countText: {
+  featuredCard: {
+    width: '100%',
+    aspectRatio: 16 / 10,
+    borderRadius: 14,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#1c1a18',
+  },
+  featuredCover: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  bookmarkBadge: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(18, 16, 14, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookmarkIcon: {
+    fontSize: 13,
+  },
+  featuredInfo: {
+    position: 'absolute',
+    bottom: 16,
+    left: 18,
+    right: 18,
+  },
+  featuredTitle: {
+    fontFamily: 'serif',
+    fontSize: 20,
+    color: '#ffffff',
+    marginBottom: 2,
+  },
+  featuredSubtext: {
     fontFamily: FONT_JOST_REGULAR,
-    fontSize: 10,
-    letterSpacing: 1,
-    color: '#8c867e',
+    fontSize: 12,
+    color: '#d0c8be',
+  },
+  gridSection: {
+    paddingHorizontal: 20,
   },
   grid: {
     flexDirection: 'row',
@@ -375,8 +458,8 @@ const styles = StyleSheet.create({
   },
   card: {
     width: (width - 54) / 2,
-    height: 240,
-    borderRadius: 4,
+    aspectRatio: 3 / 4,
+    borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
     backgroundColor: '#1c1a18',
@@ -395,36 +478,16 @@ const styles = StyleSheet.create({
     left: 14,
     right: 14,
   },
-  category: {
-    fontFamily: FONT_JOST_SEMIBOLD,
-    fontSize: 8.5,
-    letterSpacing: 1.8,
-    color: '#a07850',
-    marginBottom: 4,
-  },
   title: {
-    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontFamily: 'serif',
     fontSize: 16,
     color: '#ffffff',
     marginBottom: 2,
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    marginTop: 2,
+    lineHeight: 20,
   },
   subtext: {
     fontFamily: FONT_JOST_REGULAR,
-    fontSize: 10.5,
-    color: '#e5dfd5',
-    flex: 1,
-    marginRight: 6,
-  },
-  ctaText: {
-    fontFamily: FONT_JOST_REGULAR,
-    fontSize: 10.5,
-    letterSpacing: 0.5,
+    fontSize: 11,
     color: '#d0c8be',
   },
   emptyContainer: {
