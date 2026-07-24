@@ -615,29 +615,63 @@ export default function HomeScreen() {
     return ['All', ...Array.from(categoriesSet).sort()];
   }, [websiteStories]);
 
-  // Vibe Category Cards for 2x2 grid (100% dynamic from DB stories categories)
+  // Vibe Category Cards for 2x2 grid (100% dynamic with unique cover deduplication)
   const vibeCategoryCards = React.useMemo(() => {
-    const categoryMap = new Map<string, { name: string; count: number; coverImage: any }>();
+    const categoryMap = new Map<string, { name: string; count: number; items: any[] }>();
 
+    // 1. Group stories by category
     websiteStories.forEach((item: any) => {
       const cats = (item.category || '').split(',').map((c: string) => c.trim()).filter(Boolean);
-      const coverUri = item.cover_image_mobile_url || item.cover_image_url || item.grid_image_url;
-      const coverSrc = coverUri ? { uri: coverUri } : typeof item.img === 'string' ? { uri: item.img } : item.img || null;
-
       cats.forEach((catName: string) => {
         if (!categoryMap.has(catName)) {
-          categoryMap.set(catName, { name: catName, count: 1, coverImage: coverSrc });
+          categoryMap.set(catName, { name: catName, count: 1, items: [item] });
         } else {
           const existing = categoryMap.get(catName)!;
           existing.count += 1;
-          if (!existing.coverImage && coverSrc) {
-            existing.coverImage = coverSrc;
-          }
+          existing.items.push(item);
         }
       });
     });
 
-    return Array.from(categoryMap.values()).slice(0, 4);
+    const categoryList = Array.from(categoryMap.values()).slice(0, 4);
+    const usedCoverUris = new Set<string>();
+
+    // 2. Assign unique covers across cards
+    return categoryList.map((cat) => {
+      let chosenCoverSrc: any = null;
+      let chosenUriKey: string | null = null;
+
+      // Try to find a story in this category with a cover URI not used by previous cards
+      for (const item of cat.items) {
+        const coverUri = item.cover_image_mobile_url || item.cover_image_url || item.grid_image_url;
+        const coverSrc = coverUri ? { uri: coverUri } : typeof item.img === 'string' ? { uri: item.img } : item.img || null;
+        const uriKey = typeof coverSrc === 'object' && coverSrc?.uri ? coverSrc.uri : (typeof coverSrc === 'string' ? coverSrc : null);
+
+        if (coverSrc && uriKey && !usedCoverUris.has(uriKey)) {
+          chosenCoverSrc = coverSrc;
+          chosenUriKey = uriKey;
+          break;
+        }
+      }
+
+      // Fallback: if all covers in this category were used by previous cards, pick the first available cover
+      if (!chosenCoverSrc && cat.items.length > 0) {
+        const firstItem = cat.items[0];
+        const coverUri = firstItem.cover_image_mobile_url || firstItem.cover_image_url || firstItem.grid_image_url;
+        chosenCoverSrc = coverUri ? { uri: coverUri } : typeof firstItem.img === 'string' ? { uri: firstItem.img } : firstItem.img || null;
+        chosenUriKey = typeof chosenCoverSrc === 'object' && chosenCoverSrc?.uri ? chosenCoverSrc.uri : (typeof chosenCoverSrc === 'string' ? chosenCoverSrc : null);
+      }
+
+      if (chosenUriKey) {
+        usedCoverUris.add(chosenUriKey);
+      }
+
+      return {
+        name: cat.name,
+        count: cat.count,
+        coverImage: chosenCoverSrc,
+      };
+    });
   }, [websiteStories]);
 
   // Helper to filter website portfolio stories by selected Vibe
