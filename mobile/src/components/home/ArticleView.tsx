@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { 
   StyleSheet, 
   View, 
@@ -64,20 +64,29 @@ const formatDateText = (rawDate?: string): string => {
 
 export default function ArticleView({ isOpen, onClose, article }: ArticleViewProps) {
   const insets = useSafeAreaInsets();
+  // Native iOS Left-Edge Swipe Back Gesture
+  const touchStartedOnLeftEdge = useSharedValue(false);
+  const screenSwipeX = useSharedValue(0);
+
+  const handleCloseScreen = useCallback(() => {
+    screenSwipeX.value = withTiming(screenWidth, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
+      if (finished) {
+        runOnJS(onClose)();
+        screenSwipeX.value = 0;
+      }
+    });
+  }, [onClose]);
+
   // Android hardware back button handler
   React.useEffect(() => {
     if (!isOpen) return;
     const onBackPress = () => {
-      onClose();
+      handleCloseScreen();
       return true;
     };
     const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => subscription.remove();
-  }, [isOpen, onClose]);
-
-  // Native iOS Left-Edge Swipe Back Gesture
-  const touchStartedOnLeftEdge = useSharedValue(false);
-  const screenSwipeX = useSharedValue(0);
+  }, [isOpen, handleCloseScreen]);
 
   const edgeSwipeGesture = Gesture.Pan()
     .activeOffsetX(15)
@@ -97,7 +106,7 @@ export default function ArticleView({ isOpen, onClose, article }: ArticleViewPro
       'worklet';
       if (!touchStartedOnLeftEdge.value) return;
       if (e.translationX > screenWidth * 0.25 || e.velocityX > 400) {
-        screenSwipeX.value = withTiming(screenWidth, { duration: 240, easing: Easing.out(Easing.quad) }, (finished) => {
+        screenSwipeX.value = withTiming(screenWidth, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
           if (finished) {
             runOnJS(onClose)();
             screenSwipeX.value = 0;
@@ -130,9 +139,9 @@ export default function ArticleView({ isOpen, onClose, article }: ArticleViewPro
   return (
     <Modal
       visible={isOpen}
-      animationType="slide"
+      animationType="none"
       presentationStyle="fullScreen"
-      onRequestClose={onClose}
+      onRequestClose={handleCloseScreen}
       statusBarTranslucent={true}
     >
       <GestureHandlerRootView style={styles.container}>
@@ -143,7 +152,7 @@ export default function ArticleView({ isOpen, onClose, article }: ArticleViewPro
             {/* Borderless Editorial Back Button */}
             <Pressable 
               style={[styles.editorialBackButton, { top: Math.max(insets.top + 16, 48) }]} 
-              onPress={onClose}
+              onPress={handleCloseScreen}
               hitSlop={16}
             >
               <Text style={styles.editorialBackText}>← BACK</Text>

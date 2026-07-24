@@ -349,24 +349,33 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     };
   }, []);
 
+  // Native iOS Left-Edge Swipe Back Gesture
+  const touchStartedOnLeftEdge = useSharedValue(false);
+  const screenSwipeX = useSharedValue(0);
+
+  const handleCloseScreen = useCallback(() => {
+    if (activeImageIndex !== null) {
+      closeLightbox();
+      return;
+    }
+    screenSwipeX.value = withTiming(width, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
+      if (finished) {
+        runOnJS(onClose)();
+        screenSwipeX.value = 0;
+      }
+    });
+  }, [activeImageIndex, closeLightbox, onClose, width]);
+
   // Android hardware back button handler
   React.useEffect(() => {
     if (!isOpen) return;
     const onBackPress = () => {
-      if (activeImageIndex !== null) {
-        closeLightbox();
-        return true;
-      }
-      onClose();
+      handleCloseScreen();
       return true;
     };
     const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => subscription.remove();
-  }, [isOpen, activeImageIndex, closeLightbox, onClose]);
-
-  // Native iOS Left-Edge Swipe Back Gesture
-  const touchStartedOnLeftEdge = useSharedValue(false);
-  const screenSwipeX = useSharedValue(0);
+  }, [isOpen, handleCloseScreen]);
 
   const edgeSwipeGesture = Gesture.Pan()
     .activeOffsetX(15)
@@ -386,7 +395,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
       'worklet';
       if (!touchStartedOnLeftEdge.value || activeImageIndex !== null) return;
       if (e.translationX > width * 0.25 || e.velocityX > 400) {
-        screenSwipeX.value = withTiming(width, { duration: 240, easing: Easing.out(Easing.quad) }, (finished) => {
+        screenSwipeX.value = withTiming(width, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
           if (finished) {
             runOnJS(onClose)();
             screenSwipeX.value = 0;
@@ -595,9 +604,9 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   return (
     <Modal
       visible={isOpen}
-      animationType="slide"
+      animationType="none"
       presentationStyle="fullScreen"
-      onRequestClose={onClose}
+      onRequestClose={handleCloseScreen}
       statusBarTranslucent={true}
     >
       <GestureHandlerRootView style={styles.container}>
@@ -608,7 +617,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
             {/* Borderless Editorial Back Button */}
             <Pressable
               style={[styles.editorialBackButton, { top: Math.max(insets.top + 10, 42) }]}
-              onPress={onClose}
+              onPress={handleCloseScreen}
               hitSlop={16}
             >
               <Text style={styles.editorialBackText}>← BACK</Text>
