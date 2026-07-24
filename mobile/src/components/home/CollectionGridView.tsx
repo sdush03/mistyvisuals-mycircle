@@ -69,6 +69,7 @@ export default function CollectionGridView({
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [activeStoryModalItem, setActiveStoryModalItem] = useState<any | null>(null);
   const isClickBusyRef = useRef(false);
+  const storyDetailsCacheRef = useRef<Record<string, any>>({});
 
   const handleItemClick = async (item: CollectionItem) => {
     if (isClickBusyRef.current || activeStoryModalItem !== null) return;
@@ -78,13 +79,22 @@ export default function CollectionGridView({
     const raw = item.rawItem;
     if (!raw) return;
 
+    // 0ms instant load if pre-cached in memory
+    if (raw.slug && storyDetailsCacheRef.current[raw.slug]) {
+      setActiveStoryModalItem(storyDetailsCacheRef.current[raw.slug]);
+      return;
+    }
+
     // If it's already a moodboard or story with populated images array
     if (Array.isArray(raw.images) && raw.images.length > 0) {
       setActiveStoryModalItem(raw);
       return;
     }
 
-    // Fetch full gallery photos payload if slug is present
+    // 0ms INSTANT OPEN with existing story metadata while fetching full photos in background
+    setActiveStoryModalItem(raw);
+
+    // Fetch full gallery photos payload in background if slug is present
     if (raw.slug) {
       try {
         const res = await fetch(`https://www.mistyvisuals.com/api/website/stories/${raw.slug}`);
@@ -144,16 +154,13 @@ export default function CollectionGridView({
             tabs: parsedTabs,
           };
 
+          storyDetailsCacheRef.current[raw.slug] = parsedStory;
           setActiveStoryModalItem(parsedStory);
-          return;
         }
       } catch (err) {
         console.warn('Failed to fetch story gallery photos:', err);
       }
     }
-
-    // Fallback if fetch failed or no slug
-    setActiveStoryModalItem(raw);
   };
 
   const translateX = useSharedValue(0);
