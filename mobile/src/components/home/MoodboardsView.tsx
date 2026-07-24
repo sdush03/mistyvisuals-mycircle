@@ -20,6 +20,7 @@ export interface Moodboard {
   title: string;
   subtitle?: string;
   description?: string;
+  category?: string;
   coverImage?: any;
   coverImageMobile?: any;
   images?: any[];
@@ -37,6 +38,7 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId, inspi
   const insets = useSafeAreaInsets();
   const [activeBoard, setActiveBoard] = useState<Moodboard | null>(null);
   const [fetchedBoards, setFetchedBoards] = useState<Moodboard[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState('All');
 
   // Fetch dynamic inspirations from backend API if not passed via props
   React.useEffect(() => {
@@ -57,6 +59,25 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId, inspi
   }, [isOpen, inspirations]);
 
   const displayBoards = fetchedBoards.length > 0 ? fetchedBoards : (inspirations || []);
+
+  const categories = React.useMemo(() => {
+    const catsSet = new Set<string>();
+    displayBoards.forEach((b: any) => {
+      const cats = (b.category || '').split(',').map((c: string) => c.trim()).filter(Boolean);
+      cats.forEach((c: string) => catsSet.add(c));
+    });
+    if (catsSet.size === 0) return [];
+    return ['All', ...Array.from(catsSet).sort()];
+  }, [displayBoards]);
+
+  const filteredBoards = React.useMemo(() => {
+    if (selectedCategory === 'All') return displayBoards;
+    const catLower = selectedCategory.toLowerCase();
+    return displayBoards.filter((b: any) => {
+      const bCats = (b.category || '').split(',').map((c: string) => c.trim().toLowerCase());
+      return bCats.includes(catLower);
+    });
+  }, [displayBoards, selectedCategory]);
 
   // Set default active board on open if specified
   React.useEffect(() => {
@@ -122,7 +143,7 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId, inspi
               <Text style={styles.backLinkText}>← ALL INSPIRATIONS</Text>
             </Pressable>
 
-            <Text style={styles.boardCategory}>INSPIRATION COLLECTION</Text>
+            <Text style={styles.boardCategory}>{(activeBoard.category || 'INSPIRATION COLLECTION').toUpperCase()}</Text>
             <Text style={styles.boardTitle}>{activeBoard.title}</Text>
             {activeBoard.subtitle ? <Text style={styles.boardSubtitle}>{activeBoard.subtitle}</Text> : null}
             {activeBoard.description ? <Text style={styles.boardDescription}>{activeBoard.description}</Text> : null}
@@ -149,13 +170,28 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId, inspi
               </Text>
             </View>
 
-            {displayBoards.length === 0 ? (
+            {/* Category Filter Pills */}
+            {categories.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibePillScroll}>
+                {categories.map((cat) => (
+                  <Pressable
+                    key={cat}
+                    style={[styles.vibePill, selectedCategory === cat && styles.vibePillActive]}
+                    onPress={() => setSelectedCategory(cat)}
+                  >
+                    <Text style={[styles.vibeText, selectedCategory === cat && styles.vibeTextActive]}>{cat}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+
+            {filteredBoards.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyText}>No published inspiration collections available.</Text>
+                <Text style={styles.emptyText}>No published inspiration collections available in this category.</Text>
               </View>
             ) : (
               <View style={styles.boardsList}>
-                {displayBoards.map((board) => {
+                {filteredBoards.map((board) => {
                   const coverSrc = board.coverImageMobile || board.coverImage;
                   return (
                     <Pressable
@@ -169,6 +205,9 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId, inspi
                       />
                       <View style={styles.boardOverlay} />
                       <View style={styles.boardCardContent}>
+                        {board.category ? (
+                          <Text style={styles.boardCardCategory}>{(board.category || '').toUpperCase()}</Text>
+                        ) : null}
                         <Text style={styles.boardCardTitle}>{board.title}</Text>
                         {board.subtitle ? <Text style={styles.boardCardSub}>{board.subtitle}</Text> : null}
                         <Text style={styles.boardCardCta}>Explore Collection →</Text>
@@ -369,5 +408,39 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  boardCardCategory: {
+    fontFamily: 'System',
+    fontSize: 8.5,
+    fontWeight: '600',
+    letterSpacing: 1.8,
+    color: '#e2d5c3',
+    marginBottom: 4,
+  },
+  vibePillScroll: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    gap: 8,
+  },
+  vibePill: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: '#f5f3ef',
+    borderWidth: 1,
+    borderColor: '#e8e4de',
+  },
+  vibePillActive: {
+    backgroundColor: '#1c1a18',
+    borderColor: '#1c1a18',
+  },
+  vibeText: {
+    fontFamily: 'System',
+    fontSize: 11,
+    color: '#666666',
+  },
+  vibeTextActive: {
+    color: '#ffffff',
+    fontWeight: '600',
   },
 });
