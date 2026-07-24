@@ -210,7 +210,6 @@ export default function CollectionGridView({
                   {/* FEATURED Section */}
                   {featuredItem && (
                     <View style={styles.featuredSection}>
-                      <Text style={styles.sectionHeading}>FEATURED</Text>
                       <Pressable
                         style={styles.featuredCard}
                         onPress={() => onSelectItem(featuredItem)}
@@ -250,12 +249,6 @@ export default function CollectionGridView({
 
                   {/* ALL COLLECTIONS Grid Section */}
                   <View style={styles.gridSection}>
-                    <Text style={styles.sectionHeading}>
-                      {selectedCategory === 'All'
-                        ? `ALL ${sectionHeadingPrefix.toUpperCase()}`
-                        : `${selectedCategory.toUpperCase()} ${sectionHeadingPrefix.toUpperCase()}`}
-                    </Text>
-
                     <View style={styles.grid}>
                       {(gridItems.length > 0 ? gridItems : (featuredItem ? [] : filteredItems)).map((item) => {
                         const formattedTitle = (item.title || '')
