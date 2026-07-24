@@ -151,10 +151,12 @@ export default function CollectionGridView({
     });
   }, [items, selectedCategory]);
 
-  // Generate visual Category Cards for the "All" view mode
+  // Generate visual Category Cards for the "All" view mode with priority cover deduplication
   const categoryCards = React.useMemo(() => {
     const validCategories = categories.filter((c) => c !== 'All');
-    return validCategories.map((catName) => {
+
+    // 1. Group items by category
+    const catMap = validCategories.map((catName) => {
       const catLower = catName.toLowerCase();
       const catItems = items.filter((item) => {
         const dbCategories = (item.category || '').split(',').map((c) => c.trim().toLowerCase());
@@ -163,26 +165,66 @@ export default function CollectionGridView({
         const loc = (item.location || '').toLowerCase();
         return title.includes(catLower) || loc.includes(catLower);
       });
+      return {
+        name: catName,
+        count: catItems.length,
+        items: catItems,
+      };
+    });
 
-      const firstItem = catItems[0];
-      const coverSrc = firstItem
-        ? firstItem.horizontalCoverImage || firstItem.coverImage
-        : null;
+    // 2. Sort categories by item count ASCENDING (single-item categories assign covers first)
+    const sortedCategories = [...catMap].sort((a, b) => a.count - b.count);
+    const assignedCoversMap = new Map<string, any>();
+    const usedCoverUris = new Set<string>();
 
-      const formattedTitle = catName
+    sortedCategories.forEach((cat) => {
+      let chosenCoverSrc: any = null;
+      let chosenUriKey: string | null = null;
+
+      for (const item of cat.items) {
+        const coverSrc = item.horizontalCoverImage || item.coverImage;
+        const uriKey = typeof coverSrc === 'object' && coverSrc?.uri
+          ? coverSrc.uri
+          : (typeof coverSrc === 'string' ? coverSrc : null);
+
+        if (coverSrc && uriKey && !usedCoverUris.has(uriKey)) {
+          chosenCoverSrc = coverSrc;
+          chosenUriKey = uriKey;
+          break;
+        }
+      }
+
+      if (!chosenCoverSrc && cat.items.length > 0) {
+        const firstItem = cat.items[0];
+        const coverSrc = firstItem.horizontalCoverImage || firstItem.coverImage;
+        chosenCoverSrc = coverSrc;
+        chosenUriKey = typeof coverSrc === 'object' && coverSrc?.uri
+          ? coverSrc.uri
+          : (typeof coverSrc === 'string' ? coverSrc : null);
+      }
+
+      if (chosenUriKey) {
+        usedCoverUris.add(chosenUriKey);
+      }
+      assignedCoversMap.set(cat.name, chosenCoverSrc);
+    });
+
+    // 3. Return category cards in original category order
+    return catMap.map((cat) => {
+      const formattedTitle = cat.name
         .split(' ')
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
         .join(' ');
 
-      const count = catItems.length;
+      const count = cat.count;
       const subtext = count > 0 ? `${count} ${count === 1 ? 'Collection' : 'Collections'} →` : 'Explore Category →';
 
       return {
-        name: catName,
+        name: cat.name,
         title: formattedTitle,
         count,
         subtext,
-        coverImage: coverSrc,
+        coverImage: assignedCoversMap.get(cat.name) || null,
       };
     });
   }, [categories, items]);
@@ -222,26 +264,6 @@ export default function CollectionGridView({
                   <Text style={styles.bannerDescription}>{headerDescription}</Text>
                 ) : null}
               </View>
-
-              {/* Category Filter Pills */}
-              {categories.length > 1 && (
-                <View style={styles.vibeBarContainer}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibeScroll}>
-                    {categories.map((cat) => {
-                      const active = cat === selectedCategory || cat.toLowerCase() === selectedCategory.toLowerCase();
-                      return (
-                        <Pressable
-                          key={cat}
-                          style={[styles.vibePill, active && styles.vibePillActive]}
-                          onPress={() => setSelectedCategory(cat)}
-                        >
-                          <Text style={[styles.vibeText, active && styles.vibeTextActive]}>{cat}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-                </View>
-              )}
 
               {filteredItems.length === 0 ? (
                 <View style={styles.emptyContainer}>
