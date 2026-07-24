@@ -138,7 +138,6 @@ interface LightboxImageItemProps {
   item: any;
   width: number;
   onDoubleTap: () => void;
-  onSingleTap: () => void;
   onNavigate: (direction: 'next' | 'prev') => void;
   onZoomChange: (isZoomed: boolean) => void;
   onToggleControls: () => void;
@@ -146,7 +145,8 @@ interface LightboxImageItemProps {
   onInteractionStart: () => void;
   onInteractionEnd: () => void;
   expandProgress: SharedValue<number>;
-  heartPopAnimatedStyle: any;
+  heartPopScale: SharedValue<number>;
+  heartPopOpacity: SharedValue<number>;
 }
 
 const LightboxImageItem = React.memo(function LightboxImageItem({
@@ -160,7 +160,8 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
   onInteractionStart,
   onInteractionEnd,
   expandProgress,
-  heartPopAnimatedStyle,
+  heartPopScale,
+  heartPopOpacity,
 }: LightboxImageItemProps) {
   const pinchScale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -171,16 +172,24 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
 
   const lastPinchTime = useSharedValue(0);
 
+  const onZoomChangeRef = useRef(onZoomChange);
+  onZoomChangeRef.current = onZoomChange;
+
   // Single Authoritative State Synchronizer between UI thread pinchScale & React viewer mode
   useAnimatedReaction(
     () => pinchScale.value > 1.01,
     (isZoomed, previous) => {
-      if (isZoomed !== previous) {
-        runOnJS(onZoomChange)(isZoomed);
+      if (isZoomed !== previous && previous !== null && previous !== undefined) {
+        runOnJS(onZoomChangeRef.current)(isZoomed);
       }
     },
-    [onZoomChange]
+    []
   );
+
+  const heartPopAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heartPopScale.value }],
+    opacity: heartPopOpacity.value,
+  }));
 
   const resetZoom = useCallback(() => {
     'worklet';
@@ -1026,6 +1035,34 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     }
   };
 
+  const renderLightboxItem = useCallback(({ item }: { item: any }) => (
+    <LightboxImageItem
+      item={item}
+      width={width}
+      onDoubleTap={toggleSave}
+      onNavigate={navigate}
+      onZoomChange={handleZoomChange}
+      onToggleControls={handleToggleControls}
+      onCloseLightbox={closeLightbox}
+      onInteractionStart={pauseAutoHideTimer}
+      onInteractionEnd={resetAutoHideTimer}
+      expandProgress={expandProgress}
+      heartPopScale={heartPopScale}
+      heartPopOpacity={heartPopOpacity}
+    />
+  ), [
+    toggleSave,
+    navigate,
+    handleZoomChange,
+    handleToggleControls,
+    closeLightbox,
+    pauseAutoHideTimer,
+    resetAutoHideTimer,
+    expandProgress,
+    heartPopScale,
+    heartPopOpacity,
+  ]);
+
   if (!story) return null;
 
   const locationText = (story.location || '').toUpperCase();
@@ -1265,22 +1302,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                       }}
                       keyExtractor={(item, index) => item.id || `lightbox-${index}`}
                       ItemSeparatorComponent={() => <View style={{ width: 18, backgroundColor: '#000000' }} />}
-                      renderItem={({ item }) => (
-                        <LightboxImageItem
-                          item={item}
-                          width={width}
-                          onDoubleTap={toggleSave}
-                          onSingleTap={handleToggleControls}
-                          onNavigate={navigate}
-                          onZoomChange={handleZoomChange}
-                          onToggleControls={handleToggleControls}
-                          onCloseLightbox={closeLightbox}
-                          onInteractionStart={pauseAutoHideTimer}
-                          onInteractionEnd={resetAutoHideTimer}
-                          expandProgress={expandProgress}
-                          heartPopAnimatedStyle={heartPopAnimatedStyle}
-                        />
-                      )}
+                      renderItem={renderLightboxItem}
                     />
                   </View>
                 </Animated.View>
