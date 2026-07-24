@@ -912,8 +912,10 @@ export default function HomeScreen() {
                         date: 'CURATED COLLECTION',
                         coverImage: coverSrc,
                         description: board.description || '',
-                        images: (board.images || []).map((imgUrl: any) =>
-                          typeof imgUrl === 'string' ? { uri: imgUrl, caption: board.title } : imgUrl
+                        images: (board.images || []).map((imgUrl: any, idx: number) =>
+                          typeof imgUrl === 'string'
+                            ? { id: `inspo_${board.id}_${idx}`, uri: imgUrl, caption: board.title, originalIndex: idx }
+                            : { ...imgUrl, id: imgUrl.id || `inspo_${board.id}_${idx}`, originalIndex: idx }
                         ),
                       });
                     }}
@@ -1061,8 +1063,10 @@ export default function HomeScreen() {
             date: 'CURATED COLLECTION',
             coverImage: board.coverImageMobile || board.coverImage || (board.images && board.images[0]),
             description: board.description || '',
-            images: (board.images || []).map((imgUrl: any) =>
-              typeof imgUrl === 'string' ? { uri: imgUrl, caption: board.title } : imgUrl
+            images: (board.images || []).map((imgUrl: any, idx: number) =>
+              typeof imgUrl === 'string'
+                ? { id: `inspo_${board.id}_${idx}`, uri: imgUrl, caption: board.title, originalIndex: idx }
+                : { ...imgUrl, id: imgUrl.id || `inspo_${board.id}_${idx}`, originalIndex: idx }
             ),
           });
         }}
