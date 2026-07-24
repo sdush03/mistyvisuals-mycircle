@@ -94,17 +94,35 @@ interface MoodboardsViewProps {
 export default function MoodboardsView({ isOpen, onClose, selectedBoardId }: MoodboardsViewProps) {
   const insets = useSafeAreaInsets();
   const [activeBoard, setActiveBoard] = useState<Moodboard | null>(null);
+  const [fetchedBoards, setFetchedBoards] = useState<Moodboard[]>([]);
+
+  // Fetch dynamic inspirations from backend API
+  React.useEffect(() => {
+    if (isOpen) {
+      fetch('https://www.mistyvisuals.com/api/app/inspirations')
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            setFetchedBoards(data);
+          }
+        })
+        .catch(() => {
+          /* Keep fallback static boards on error/offline */
+        });
+    }
+  }, [isOpen]);
+
+  const displayBoards = fetchedBoards.length > 0 ? fetchedBoards : CURATED_MOODBOARDS;
 
   // Set default active board on open if specified
   React.useEffect(() => {
     if (isOpen) {
       if (selectedBoardId) {
-        const found = CURATED_MOODBOARDS.find((b) => b.id === selectedBoardId);
-        setActiveBoard(found || CURATED_MOODBOARDS[0]);
-      } else {
+        const found = displayBoards.find((b) => b.id === selectedBoardId);
+        setActiveBoard(found || displayBoards[0]);
       }
     }
-  }, [isOpen, selectedBoardId]);
+  }, [isOpen, selectedBoardId, displayBoards]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -133,7 +151,7 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId }: Moo
           <Pressable style={styles.closeButton} onPress={onClose}>
             <Text style={styles.closeText}>✕ CLOSE</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>FINE ART MOODBOARDS</Text>
+          <Text style={styles.headerTitle}>FINE ART INSPIRATIONS</Text>
           <View style={{ width: 60 }} />
         </View>
 
@@ -141,19 +159,19 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId }: Moo
           /* Active Moodboard Detail View */
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <Pressable style={styles.backLink} onPress={() => setActiveBoard(null)}>
-              <Text style={styles.backLinkText}>← ALL MOODBOARDS</Text>
+              <Text style={styles.backLinkText}>← ALL INSPIRATIONS</Text>
             </Pressable>
 
             <Text style={styles.boardCategory}>INSPIRATION COLLECTION</Text>
             <Text style={styles.boardTitle}>{activeBoard.title}</Text>
-            <Text style={styles.boardSubtitle}>{activeBoard.subtitle}</Text>
-            <Text style={styles.boardDescription}>{activeBoard.description}</Text>
+            {activeBoard.subtitle ? <Text style={styles.boardSubtitle}>{activeBoard.subtitle}</Text> : null}
+            {activeBoard.description ? <Text style={styles.boardDescription}>{activeBoard.description}</Text> : null}
 
             <View style={styles.divider} />
 
             {/* Inspiration Grid */}
             <View style={styles.gridContainer}>
-              {activeBoard.images.map((img, idx) => (
+              {(activeBoard.images || []).map((img, idx) => (
                 <View key={idx} style={styles.gridCard}>
                   <Image source={typeof img === 'string' ? { uri: img } : img} style={styles.gridImage} />
                 </View>
@@ -165,24 +183,27 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId }: Moo
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <View style={styles.introContainer}>
               <Text style={styles.introTag}>INSPIRATION & STYLING</Text>
-              <Text style={styles.introHeading}>Curated Fine Art Moodboards</Text>
+              <Text style={styles.introHeading}>Curated Fine Art Inspirations</Text>
               <Text style={styles.introSub}>
                 Explore visual palettes, lighting directions, and editorial framing curated by Misty Visuals.
               </Text>
             </View>
 
             <View style={styles.boardsList}>
-              {CURATED_MOODBOARDS.map((board) => (
+              {displayBoards.map((board) => (
                 <Pressable
                   key={board.id}
                   style={styles.boardCard}
                   onPress={() => setActiveBoard(board)}
                 >
-                  <Image source={board.coverImage} style={styles.boardCover} />
+                  <Image
+                    source={typeof board.coverImage === 'string' ? { uri: board.coverImage } : board.coverImage}
+                    style={styles.boardCover}
+                  />
                   <View style={styles.boardOverlay} />
                   <View style={styles.boardCardContent}>
                     <Text style={styles.boardCardTitle}>{board.title}</Text>
-                    <Text style={styles.boardCardSub}>{board.subtitle}</Text>
+                    {board.subtitle ? <Text style={styles.boardCardSub}>{board.subtitle}</Text> : null}
                     <Text style={styles.boardCardCta}>Explore Collection →</Text>
                   </View>
                 </Pressable>
