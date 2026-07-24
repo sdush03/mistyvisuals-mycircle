@@ -69,12 +69,28 @@ export default function CollectionGridView({
   const touchStartX = useSharedValue(0);
   const isSwipeFromEdge = useSharedValue(false);
 
+  // Dynamic Category filters
+  const categories = React.useMemo(() => {
+    const categoriesSet = new Set<string>();
+    items.forEach((item) => {
+      const cats = (item.category || '').split(',').map((c) => c.trim()).filter(Boolean);
+      cats.forEach((c) => categoriesSet.add(c));
+    });
+    if (categoriesSet.size === 0) return ['All'];
+    return ['All', ...Array.from(categoriesSet).sort()];
+  }, [items]);
+
   React.useEffect(() => {
     if (isOpen) {
       translateX.value = 0;
-      setSelectedCategory(initialCategory || 'All');
+      if (initialCategory && initialCategory !== 'All') {
+        const found = categories.find((c) => c.toLowerCase() === initialCategory.toLowerCase());
+        setSelectedCategory(found || initialCategory);
+      } else {
+        setSelectedCategory('All');
+      }
     }
-  }, [isOpen, initialCategory]);
+  }, [isOpen, initialCategory, categories]);
 
   // iOS native-feel Edge Swipe Back gesture (swipe right from left 65px edge)
   const edgeSwipeGesture = Gesture.Pan()
@@ -122,17 +138,6 @@ export default function CollectionGridView({
     const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => subscription.remove();
   }, [isOpen, onClose]);
-
-  // Dynamic Category filters
-  const categories = React.useMemo(() => {
-    const categoriesSet = new Set<string>();
-    items.forEach((item) => {
-      const cats = (item.category || '').split(',').map((c) => c.trim()).filter(Boolean);
-      cats.forEach((c) => categoriesSet.add(c));
-    });
-    if (categoriesSet.size === 0) return ['All'];
-    return ['All', ...Array.from(categoriesSet).sort()];
-  }, [items]);
 
   const filteredItems = React.useMemo(() => {
     if (selectedCategory === 'All') return items;
@@ -187,7 +192,7 @@ export default function CollectionGridView({
                 <View style={styles.vibeBarContainer}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibeScroll}>
                     {categories.map((cat) => {
-                      const active = cat === selectedCategory;
+                      const active = cat === selectedCategory || cat.toLowerCase() === selectedCategory.toLowerCase();
                       return (
                         <Pressable
                           key={cat}

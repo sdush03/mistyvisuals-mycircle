@@ -1236,8 +1236,12 @@ export default function HomeScreen() {
 
       <AllStoriesView
         isOpen={isAllStoriesOpen}
-        onClose={() => setIsAllStoriesOpen(false)}
-        stories={getFilteredVibeStories()}
+        onClose={() => {
+          setIsAllStoriesOpen(false);
+          setSelectedVibe('All');
+        }}
+        stories={websiteStories}
+        initialVibe={selectedVibe}
         onSelectStory={(story) => handleStoryPress(story)}
       />
 
