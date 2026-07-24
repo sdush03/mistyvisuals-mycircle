@@ -50,6 +50,7 @@ interface CollectionGridViewProps {
   sectionHeadingPrefix?: string;
   items: CollectionItem[];
   initialCategory?: string;
+  customCategoryCards?: any[];
   onSelectItem: (item: CollectionItem) => void;
 }
 
@@ -61,6 +62,7 @@ export default function CollectionGridView({
   sectionHeadingPrefix = 'COLLECTIONS',
   items,
   initialCategory = 'All',
+  customCategoryCards,
   onSelectItem,
 }: CollectionGridViewProps) {
   const insets = useSafeAreaInsets();
@@ -342,6 +344,10 @@ export default function CollectionGridView({
   const featuredItem = filteredItems.length > 0 ? filteredItems[0] : null;
   const gridItems = filteredItems.length > 1 ? filteredItems.slice(1) : (filteredItems.length === 1 ? [] : []);
 
+  const categoryCardsToRender = customCategoryCards && customCategoryCards.length > 0
+    ? customCategoryCards
+    : categoryCards;
+
   return (
     <Modal
       visible={isOpen}
@@ -379,11 +385,11 @@ export default function CollectionGridView({
                 <View style={styles.emptyContainer}>
                   <Text style={styles.emptyText}>No items found under "{selectedCategory}".</Text>
                 </View>
-              ) : selectedCategory === 'All' && categoryCards.length > 0 ? (
+              ) : selectedCategory === 'All' && categoryCardsToRender.length > 0 ? (
                 /* Categories Overview Grid View */
                 <View style={styles.gridSection}>
                   <View style={styles.grid}>
-                    {categoryCards.map((catCard) => (
+                    {categoryCardsToRender.map((catCard) => (
                       <Pressable
                         key={catCard.name}
                         style={styles.card}
@@ -408,10 +414,10 @@ export default function CollectionGridView({
                         />
                         <View style={styles.info}>
                           <Text style={styles.title} numberOfLines={1}>
-                            {catCard.title}
+                            {catCard.title || catCard.name}
                           </Text>
                           <Text style={styles.subtext} numberOfLines={1}>
-                            {catCard.subtext}
+                            {catCard.subtext || (catCard.count ? `${catCard.count} Collections →` : 'Explore Category →')}
                           </Text>
                         </View>
                       </Pressable>

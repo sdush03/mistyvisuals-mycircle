@@ -1215,6 +1215,7 @@ export default function HomeScreen() {
         selectedBoardId={selectedMoodboardId}
         selectedCategoryName={selectedInspoCategory}
         inspirations={websiteInspirations}
+        categoryCards={inspoCategoryCards}
         onSelectInspiration={(board) => {
           setSelectedStory({
             id: String(board.id || board.slug),
@@ -1242,6 +1243,7 @@ export default function HomeScreen() {
         }}
         stories={websiteStories}
         initialVibe={selectedVibe}
+        categoryCards={vibeCategoryCards}
         onSelectStory={(story) => handleStoryPress(story)}
       />
 

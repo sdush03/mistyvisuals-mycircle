@@ -39,6 +39,7 @@ interface MoodboardsViewProps {
   selectedBoardId?: string | number | null;
   selectedCategoryName?: string;
   inspirations?: Moodboard[];
+  categoryCards?: any[];
   onSelectInspiration?: (board: Moodboard) => void;
 }
 
@@ -48,6 +49,7 @@ export default function MoodboardsView({
   selectedBoardId,
   selectedCategoryName,
   inspirations,
+  categoryCards,
   onSelectInspiration,
 }: MoodboardsViewProps) {
   const insets = useSafeAreaInsets();
@@ -171,6 +173,7 @@ export default function MoodboardsView({
       sectionHeadingPrefix="COLLECTIONS"
       items={collectionItems}
       initialCategory={selectedCategoryName || 'All'}
+      customCategoryCards={categoryCards}
       onSelectItem={(item) => handleCardPress(item.rawItem)}
     />
   );

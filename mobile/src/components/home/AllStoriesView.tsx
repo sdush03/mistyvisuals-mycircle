@@ -6,6 +6,7 @@ interface AllStoriesViewProps {
   onClose: () => void;
   stories: any[];
   initialVibe?: string;
+  categoryCards?: any[];
   onSelectStory: (story: any) => void;
 }
 
@@ -14,6 +15,7 @@ export default function AllStoriesView({
   onClose,
   stories,
   initialVibe = 'All',
+  categoryCards,
   onSelectStory,
 }: AllStoriesViewProps) {
   const collectionItems: CollectionItem[] = React.useMemo(() => {
@@ -51,6 +53,7 @@ export default function AllStoriesView({
       sectionHeadingPrefix="COLLECTIONS"
       items={collectionItems}
       initialCategory={initialVibe}
+      customCategoryCards={categoryCards}
       onSelectItem={(item) => {
         onSelectStory(item.rawItem);
       }}
