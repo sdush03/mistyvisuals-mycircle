@@ -617,6 +617,13 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   const dateText = formatDateText(story.date);
   const descriptionText = story.description || '';
 
+  const isSubtitleDuplicate = Boolean(
+    subtitleText &&
+    descriptionText &&
+    (subtitleText.trim().toLowerCase() === descriptionText.trim().toLowerCase() ||
+      descriptionText.trim().toLowerCase().startsWith(subtitleText.trim().toLowerCase()))
+  );
+
   return (
     <Modal
       visible={isOpen}
@@ -681,7 +688,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 
           {/* Editorial Content */}
           <View style={styles.editorialContainer}>
-            {subtitleText ? <Text style={styles.subtitleText}>{subtitleText}</Text> : null}
+            {subtitleText && !isSubtitleDuplicate ? <Text style={styles.subtitleText}>{subtitleText}</Text> : null}
             {descriptionText ? <Text style={styles.descriptionText}>{descriptionText}</Text> : null}
           </View>
 
@@ -1084,13 +1091,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#fbfaf8',
   },
   subtitleText: {
-    fontFamily: FONT_JOST_MEDIUM,
-    fontSize: 14,
-    letterSpacing: 1.5,
-    color: '#9a7d52',
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 15,
+    lineHeight: 26,
+    color: '#4a4540',
     textAlign: 'center',
-    textTransform: 'uppercase',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   descriptionText: {
     fontFamily: FONT_JOST_REGULAR,
