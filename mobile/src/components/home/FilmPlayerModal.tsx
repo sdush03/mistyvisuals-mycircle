@@ -13,6 +13,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import {
+  FONT_MONTSERRAT_REGULAR,
+  FONT_JOST_REGULAR,
+  FONT_JOST_MEDIUM,
+  FONT_JOST_SEMIBOLD,
+} from '../../constants/fonts';
 
 const { width } = Dimensions.get('window');
 
@@ -192,16 +198,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   closeText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 11,
-    fontWeight: '600',
     letterSpacing: 2,
     color: '#a07850',
   },
   headerTitle: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_MEDIUM,
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 3,
     color: '#ffffff',
     textAlign: 'center',
@@ -257,23 +261,21 @@ const styles = StyleSheet.create({
     paddingTop: 28,
   },
   categoryTag: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 10,
-    fontWeight: '600',
     letterSpacing: 3,
     color: '#a07850',
     marginBottom: 8,
   },
   filmTitle: {
-    fontFamily: 'serif',
-    fontSize: 28,
-    fontWeight: '300',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 24,
     color: '#ffffff',
-    lineHeight: 36,
+    lineHeight: 32,
     marginBottom: 8,
   },
   filmLocation: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 12,
     color: '#a0988e',
     letterSpacing: 1,
@@ -286,9 +288,9 @@ const styles = StyleSheet.create({
     marginVertical: 20,
   },
   filmDescription: {
-    fontFamily: 'serif',
-    fontSize: 15,
-    lineHeight: 24,
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 14,
+    lineHeight: 22,
     color: '#d0c8be',
     marginBottom: 28,
   },
@@ -299,10 +301,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ctaButtonText: {
-    fontFamily: 'System',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 2,
+    fontFamily: FONT_JOST_SEMIBOLD,
+    fontSize: 11,
+    letterSpacing: 2.5,
     color: '#ffffff',
   },
 });

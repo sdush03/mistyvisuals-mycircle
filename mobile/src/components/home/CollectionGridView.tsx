@@ -21,6 +21,8 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import {
+  FONT_MONTSERRAT_REGULAR,
+  FONT_MONTSERRAT_LIGHT,
   FONT_JOST_REGULAR,
   FONT_JOST_MEDIUM,
   FONT_JOST_SEMIBOLD,
@@ -342,9 +344,8 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
   },
   bannerTitle: {
-    fontFamily: 'serif',
-    fontSize: 34,
-    fontWeight: '300',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 32,
     color: '#1c1a18',
     textAlign: 'center',
     marginBottom: 8,
@@ -419,7 +420,7 @@ const styles = StyleSheet.create({
     right: 18,
   },
   featuredTitle: {
-    fontFamily: 'serif',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 20,
     color: '#ffffff',
     marginBottom: 2,
@@ -460,7 +461,7 @@ const styles = StyleSheet.create({
     right: 14,
   },
   title: {
-    fontFamily: 'serif',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 16,
     color: '#ffffff',
     marginBottom: 2,

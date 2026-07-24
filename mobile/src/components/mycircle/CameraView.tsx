@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, Pressable, ActivityIndicator, Alert, Image } fr
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
+import { FONT_JOST_SEMIBOLD } from '../../constants/fonts';
 
 interface CameraViewProps {
   onSuccess: () => void;
@@ -263,9 +264,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   skipBtnText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 13,
-    fontWeight: '600',
     color: '#8c867e',
     letterSpacing: 1,
   },

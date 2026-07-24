@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, Easing, runOnJS } from 'react-native-reanimated';
-import { FONT_MONTSERRAT_REGULAR, FONT_JOST_SEMIBOLD } from '../../constants/fonts';
+import { FONT_MONTSERRAT_REGULAR, FONT_JOST_REGULAR, FONT_JOST_SEMIBOLD } from '../../constants/fonts';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('screen');
 
@@ -267,11 +267,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   articleTitle: {
-    fontFamily: 'serif',
-    fontSize: 26,
-    fontWeight: '300',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 24,
     color: '#1c1a18',
-    lineHeight: 34,
+    lineHeight: 32,
     marginBottom: 16,
   },
   metaRow: {
@@ -298,12 +297,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   bodyParagraph: {
-    fontFamily: 'serif',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 15,
-    lineHeight: 27,
+    lineHeight: 25,
     color: '#3a3630',
     marginBottom: 20,
-    textAlign: 'justify',
   },
   firstParagraph: {
     fontSize: 17,
