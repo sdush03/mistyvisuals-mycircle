@@ -282,6 +282,10 @@ export default function CollectionGridView({
   }, [onClose, translateX]);
 
   const handleBackPress = React.useCallback(() => {
+    if (activeStoryModalItem !== null) {
+      setActiveStoryModalItem(null);
+      return;
+    }
     if (isDirectFromHomeRef.current) {
       performCloseAnimation();
       return;
@@ -291,7 +295,7 @@ export default function CollectionGridView({
     } else {
       performCloseAnimation();
     }
-  }, [selectedCategory, performCloseAnimation]);
+  }, [activeStoryModalItem, selectedCategory, performCloseAnimation]);
 
   // iOS native-feel Edge Swipe Back gesture (swipe right from left 65px edge)
   const edgeSwipeGesture = Gesture.Pan()
