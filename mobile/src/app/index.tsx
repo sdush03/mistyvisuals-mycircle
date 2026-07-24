@@ -977,7 +977,7 @@ export default function HomeScreen() {
                         id: String(board.id || board.slug),
                         title: board.title,
                         subtitle: board.subtitle || '',
-                        location: 'FINE ART INSPIRATION',
+                        location: (board.category || 'FINE ART INSPIRATION').toUpperCase(),
                         date: 'CURATED COLLECTION',
                         coverImage: coverSrc,
                         description: board.description || '',
@@ -1004,6 +1004,11 @@ export default function HomeScreen() {
                       style={styles.featuredOverlay}
                     />
                     <View style={styles.vibeCardContent}>
+                      {board.category ? (
+                        <Text style={styles.filmCategory} numberOfLines={1}>
+                          {board.category.toUpperCase()}
+                        </Text>
+                      ) : null}
                       <Text style={styles.vibeCardTitle} numberOfLines={1}>{formattedTitle}</Text>
                       <Text style={styles.vibeCardSubtext} numberOfLines={1}>{subtext}</Text>
                     </View>
