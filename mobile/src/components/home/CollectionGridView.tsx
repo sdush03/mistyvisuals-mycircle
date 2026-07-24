@@ -92,65 +92,6 @@ export default function CollectionGridView({
     }
   }, [isOpen, initialCategory, categories]);
 
-  // iOS native-feel Edge Swipe Back gesture (swipe right from left 65px edge)
-  const edgeSwipeGesture = Gesture.Pan()
-    .onBegin((e) => {
-      'worklet';
-      if (e.x <= 65) {
-        touchStartX.value = e.x;
-        isSwipeFromEdge.value = true;
-      } else {
-        isSwipeFromEdge.value = false;
-      }
-    })
-    .activeOffsetX(5)
-    .failOffsetY([-20, 20])
-    .onUpdate((e) => {
-      'worklet';
-      if (isSwipeFromEdge.value && e.translationX > 0) {
-        translateX.value = e.translationX;
-      }
-    })
-    .onEnd((e) => {
-      'worklet';
-      if (isSwipeFromEdge.value) {
-        if (e.translationX > 100 || e.velocityX > 500) {
-          translateX.value = withTiming(width, { duration: 200 }, () => {
-            runOnJS(onClose)();
-          });
-        } else {
-          translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
-        }
-      }
-    });
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }));
-
-  // Android hardware back button handler
-  React.useEffect(() => {
-    if (!isOpen) return;
-    const onBackPress = () => {
-      onClose();
-      return true;
-    };
-    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-    return () => subscription.remove();
-  }, [isOpen, onClose]);
-
-  const filteredItems = React.useMemo(() => {
-    if (selectedCategory === 'All') return items;
-    const catLower = selectedCategory.toLowerCase();
-    return items.filter((item) => {
-      const dbCategories = (item.category || '').split(',').map((c) => c.trim().toLowerCase());
-      if (dbCategories.includes(catLower)) return true;
-      const title = (item.title || '').toLowerCase();
-      const loc = (item.location || '').toLowerCase();
-      return title.includes(catLower) || loc.includes(catLower);
-    });
-  }, [items, selectedCategory]);
-
   // Generate visual Category Cards for the "All" view mode with priority cover deduplication
   const categoryCards = React.useMemo(() => {
     const validCategories = categories.filter((c) => c !== 'All');
@@ -217,6 +158,73 @@ export default function CollectionGridView({
     });
   }, [categories, items]);
 
+  const handleBackPress = React.useCallback(() => {
+    if (selectedCategory !== 'All' && categoryCards.length > 0) {
+      setSelectedCategory('All');
+    } else {
+      onClose();
+    }
+  }, [selectedCategory, categoryCards, onClose]);
+
+  // iOS native-feel Edge Swipe Back gesture (swipe right from left 65px edge)
+  const edgeSwipeGesture = Gesture.Pan()
+    .onBegin((e) => {
+      'worklet';
+      if (e.x <= 65) {
+        touchStartX.value = e.x;
+        isSwipeFromEdge.value = true;
+      } else {
+        isSwipeFromEdge.value = false;
+      }
+    })
+    .activeOffsetX(5)
+    .failOffsetY([-20, 20])
+    .onUpdate((e) => {
+      'worklet';
+      if (isSwipeFromEdge.value && e.translationX > 0) {
+        translateX.value = e.translationX;
+      }
+    })
+    .onEnd((e) => {
+      'worklet';
+      if (isSwipeFromEdge.value) {
+        if (e.translationX > 100 || e.velocityX > 500) {
+          translateX.value = withTiming(width, { duration: 200 }, () => {
+            runOnJS(handleBackPress)();
+          });
+        } else {
+          translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
+        }
+      }
+    });
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  // Android hardware back button handler
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const onBackPress = () => {
+      handleBackPress();
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [isOpen, handleBackPress]);
+
+  const filteredItems = React.useMemo(() => {
+    if (selectedCategory === 'All') return items;
+    const catLower = selectedCategory.toLowerCase();
+    return items.filter((item) => {
+      const dbCategories = (item.category || '').split(',').map((c) => c.trim().toLowerCase());
+      if (dbCategories.includes(catLower)) return true;
+      const title = (item.title || '').toLowerCase();
+      const loc = (item.location || '').toLowerCase();
+      return title.includes(catLower) || loc.includes(catLower);
+    });
+  }, [items, selectedCategory]);
+
   const currentDisplayTitle = React.useMemo(() => {
     if (selectedCategory === 'All' || !selectedCategory) {
       return headerTitle;
@@ -242,7 +250,7 @@ export default function CollectionGridView({
           <Animated.View style={[styles.container, animatedStyle]}>
             {/* Clean Top Header Bar */}
             <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
-              <Pressable style={styles.backButton} onPress={onClose}>
+              <Pressable style={styles.backButton} onPress={handleBackPress}>
                 <Text style={styles.backIcon}>←</Text>
               </Pressable>
               <Image
