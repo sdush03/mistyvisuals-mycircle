@@ -257,7 +257,7 @@ export default function CollectionGridView({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#12100e',
+    backgroundColor: '#ffffff',
   },
   header: {
     flexDirection: 'row',
@@ -266,8 +266,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#24211e',
-    backgroundColor: 'rgba(18, 16, 14, 0.96)',
+    borderBottomColor: '#f0ede8',
+    backgroundColor: '#ffffff',
   },
   backButton: {
     paddingVertical: 6,
@@ -277,20 +277,20 @@ const styles = StyleSheet.create({
     fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 11,
     letterSpacing: 1.5,
-    color: '#d0c8be',
+    color: '#1c1a18',
   },
   headerTitle: {
     fontFamily: FONT_JOST_MEDIUM,
     fontSize: 11,
     letterSpacing: 2.5,
-    color: '#9a7d52',
+    color: '#1c1a18',
     textAlign: 'center',
   },
   vibeBarContainer: {
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#24211e',
-    backgroundColor: '#161412',
+    borderBottomColor: '#f0ede8',
+    backgroundColor: '#fbfaf8',
   },
   vibeScroll: {
     paddingHorizontal: 20,
@@ -301,17 +301,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#2d2925',
-    backgroundColor: '#1c1a18',
+    borderColor: '#e8e4de',
+    backgroundColor: '#ffffff',
   },
   vibePillActive: {
-    backgroundColor: '#9a7d52',
-    borderColor: '#9a7d52',
+    backgroundColor: '#1c1a18',
+    borderColor: '#1c1a18',
   },
   vibeText: {
     fontFamily: FONT_JOST_REGULAR,
     fontSize: 11,
-    color: '#a0988e',
+    color: '#60646c',
   },
   vibeTextActive: {
     color: '#ffffff',
@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
     fontFamily: FONT_JOST_REGULAR,
     fontSize: 10,
     letterSpacing: 1,
-    color: '#7a756d',
+    color: '#8c867e',
   },
   grid: {
     flexDirection: 'row',
