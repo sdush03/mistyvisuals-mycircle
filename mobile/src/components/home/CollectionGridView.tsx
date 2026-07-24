@@ -321,9 +321,7 @@ export default function CollectionGridView({
       'worklet';
       if (isSwipeFromEdge.value) {
         if (e.translationX > 100 || e.velocityX > 500) {
-          translateX.value = withTiming(width, { duration: 200 }, () => {
-            runOnJS(handleBackPress)();
-          });
+          runOnJS(handleBackPress)();
         } else {
           translateX.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) });
         }
