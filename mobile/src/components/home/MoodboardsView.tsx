@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CollectionGridView, { CollectionItem } from './CollectionGridView';
+import { formatUniversalGalleryImages } from '../../utils/masonryHelper';
 import {
   FONT_MONTSERRAT_REGULAR,
   FONT_JOST_REGULAR,
@@ -111,27 +112,7 @@ export default function MoodboardsView({
       const photoCount = Array.isArray(board.images) ? board.images.length : 0;
       const subtext = photoCount > 0 ? `${photoCount} ${photoCount === 1 ? 'Photo' : 'Photos'} →` : 'Explore Collection →';
 
-      const rawImages = board.images || [];
-      const galleryImages = (Array.isArray(rawImages) ? rawImages : []).map((imgUrl: any, idx: number) => {
-        const uri = typeof imgUrl === 'string' ? imgUrl : (imgUrl.uri || imgUrl.url || imgUrl.src);
-
-        // Derive dynamic staggered aspect ratios matching Featured Story grid
-        const isHorizontal = idx % 5 === 0;
-        const verticalRatios = [2 / 3, 3 / 4, 4 / 5];
-        const vertRatio = verticalRatios[idx % 3];
-        const finalAspect = isHorizontal ? 3 / 2 : vertRatio;
-
-        return {
-          originalIndex: idx,
-          id: `inspo-${board.id || idx}-${idx}`,
-          uri: uri,
-          fullUri: uri,
-          aspectRatio: finalAspect,
-          isHorizontal: isHorizontal,
-          caption: board.title,
-          category: (board.category || 'INSPIRATION').trim(),
-        };
-      });
+      const galleryImages = formatUniversalGalleryImages(board.images || [], board.title, board.category || 'INSPIRATION');
 
       const formattedBoard = {
         id: String(board.id),
