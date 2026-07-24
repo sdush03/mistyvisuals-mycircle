@@ -898,14 +898,24 @@ export default function HomeScreen() {
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
               {websiteInspirations.slice(0, 6).map((board) => {
-                const coverSrc = board.coverImageMobile || board.coverImage;
+                const coverSrc = board.coverImageMobile || board.coverImage || (board.images && board.images[0]);
                 return (
                   <Pressable
                     key={board.id}
                     style={styles.moodboardCard}
                     onPress={() => {
-                      setSelectedMoodboardId(board.id);
-                      setIsMoodboardsOpen(true);
+                      setSelectedStory({
+                        id: String(board.id || board.slug),
+                        title: board.title,
+                        subtitle: board.subtitle || '',
+                        location: 'FINE ART INSPIRATION',
+                        date: 'CURATED COLLECTION',
+                        coverImage: coverSrc,
+                        description: board.description || '',
+                        images: (board.images || []).map((imgUrl: any) =>
+                          typeof imgUrl === 'string' ? { uri: imgUrl, caption: board.title } : imgUrl
+                        ),
+                      });
                     }}
                   >
                     <Image
@@ -1042,6 +1052,20 @@ export default function HomeScreen() {
         onClose={() => setIsMoodboardsOpen(false)}
         selectedBoardId={selectedMoodboardId}
         inspirations={websiteInspirations}
+        onSelectInspiration={(board) => {
+          setSelectedStory({
+            id: String(board.id || board.slug),
+            title: board.title,
+            subtitle: board.subtitle || '',
+            location: 'FINE ART INSPIRATION',
+            date: 'CURATED COLLECTION',
+            coverImage: board.coverImageMobile || board.coverImage || (board.images && board.images[0]),
+            description: board.description || '',
+            images: (board.images || []).map((imgUrl: any) =>
+              typeof imgUrl === 'string' ? { uri: imgUrl, caption: board.title } : imgUrl
+            ),
+          });
+        }}
       />
 
       <AllStoriesView

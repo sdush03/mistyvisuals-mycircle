@@ -30,9 +30,10 @@ interface MoodboardsViewProps {
   onClose: () => void;
   selectedBoardId?: string | number | null;
   inspirations?: Moodboard[];
+  onSelectInspiration?: (board: Moodboard) => void;
 }
 
-export default function MoodboardsView({ isOpen, onClose, selectedBoardId, inspirations }: MoodboardsViewProps) {
+export default function MoodboardsView({ isOpen, onClose, selectedBoardId, inspirations, onSelectInspiration }: MoodboardsViewProps) {
   const insets = useSafeAreaInsets();
   const [activeBoard, setActiveBoard] = useState<Moodboard | null>(null);
   const [fetchedBoards, setFetchedBoards] = useState<Moodboard[]>([]);
@@ -62,10 +63,17 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId, inspi
     if (isOpen) {
       if (selectedBoardId !== null && selectedBoardId !== undefined) {
         const found = displayBoards.find((b) => String(b.id) === String(selectedBoardId));
-        setActiveBoard(found || displayBoards[0] || null);
+        if (found) {
+          if (onSelectInspiration) {
+            onClose();
+            onSelectInspiration(found);
+          } else {
+            setActiveBoard(found);
+          }
+        }
       }
     }
-  }, [isOpen, selectedBoardId, displayBoards]);
+  }, [isOpen, selectedBoardId, displayBoards, onSelectInspiration, onClose]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -80,6 +88,15 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId, inspi
     const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => subscription.remove();
   }, [isOpen, activeBoard, onClose]);
+
+  const handleCardPress = (board: Moodboard) => {
+    if (onSelectInspiration) {
+      onClose();
+      onSelectInspiration(board);
+    } else {
+      setActiveBoard(board);
+    }
+  };
 
   return (
     <Modal
@@ -144,7 +161,7 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId, inspi
                     <Pressable
                       key={board.id}
                       style={styles.boardCard}
-                      onPress={() => setActiveBoard(board)}
+                      onPress={() => handleCardPress(board)}
                     >
                       <Image
                         source={typeof coverSrc === 'string' ? { uri: coverSrc } : coverSrc}
