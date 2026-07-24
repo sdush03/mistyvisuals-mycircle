@@ -271,6 +271,41 @@ export default function CollectionGridView({
     });
   }, [categories, items]);
 
+  const categoryTransitionTranslateX = useSharedValue(0);
+  const categoryTransitionOpacity = useSharedValue(1);
+
+  const categoryAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: categoryTransitionTranslateX.value }],
+    opacity: categoryTransitionOpacity.value,
+  }));
+
+  const selectCategoryWithPush = React.useCallback((catName: string) => {
+    categoryTransitionTranslateX.value = width * 0.35;
+    categoryTransitionOpacity.value = 0.5;
+    setSelectedCategory(catName);
+    categoryTransitionTranslateX.value = withTiming(0, {
+      duration: 250,
+      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+    });
+    categoryTransitionOpacity.value = withTiming(1, { duration: 200 });
+  }, [categoryTransitionTranslateX, categoryTransitionOpacity]);
+
+  const popToAllCategories = React.useCallback(() => {
+    categoryTransitionTranslateX.value = withTiming(
+      width * 0.35,
+      { duration: 180, easing: Easing.out(Easing.poly(3)) },
+      () => {
+        runOnJS(setSelectedCategory)('All');
+        categoryTransitionTranslateX.value = withTiming(0, {
+          duration: 200,
+          easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+        });
+        categoryTransitionOpacity.value = withTiming(1, { duration: 180 });
+      }
+    );
+    categoryTransitionOpacity.value = withTiming(0.5, { duration: 180 });
+  }, [categoryTransitionTranslateX, categoryTransitionOpacity]);
+
   const performCloseAnimation = React.useCallback(() => {
     translateX.value = withTiming(
       width,
@@ -291,12 +326,11 @@ export default function CollectionGridView({
       return;
     }
     if (selectedCategory !== 'All') {
-      setSelectedCategory('All');
-      translateX.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
+      popToAllCategories();
     } else {
       performCloseAnimation();
     }
-  }, [activeStoryModalItem, selectedCategory, performCloseAnimation, translateX]);
+  }, [activeStoryModalItem, selectedCategory, performCloseAnimation, popToAllCategories]);
 
   // iOS native-feel Edge Swipe Back gesture (swipe right from left 65px edge)
   const edgeSwipeGesture = Gesture.Pan()
@@ -395,8 +429,9 @@ export default function CollectionGridView({
               <View style={{ width: 40 }} />
             </View>
 
-            {/* Main Content Area */}
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            {/* Main Content Area (Native iOS Push/Pop Animation) */}
+            <Animated.View style={[{ flex: 1 }, categoryAnimatedStyle]}>
+              <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* Centered Editorial Title & Description Banner */}
                 <View style={styles.titleSection}>
                   <Text style={styles.bannerTitle}>{currentDisplayTitle}</Text>
@@ -405,20 +440,20 @@ export default function CollectionGridView({
                   ) : null}
                 </View>
 
-              {filteredItems.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No items found under "{selectedCategory}".</Text>
-                </View>
-              ) : selectedCategory === 'All' && categoryCardsToRender.length > 0 ? (
-                /* Categories Overview Grid View */
-                <View style={styles.gridSection}>
-                  <View style={styles.grid}>
-                    {categoryCardsToRender.map((catCard) => (
-                      <Pressable
-                        key={catCard.name}
-                        style={styles.card}
-                        onPress={() => setSelectedCategory(catCard.name)}
-                      >
+                {filteredItems.length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No items found under "{selectedCategory}".</Text>
+                  </View>
+                ) : selectedCategory === 'All' && categoryCardsToRender.length > 0 ? (
+                  /* Categories Overview Grid View */
+                  <View style={styles.gridSection}>
+                    <View style={styles.grid}>
+                      {categoryCardsToRender.map((catCard) => (
+                        <Pressable
+                          key={catCard.name}
+                          style={styles.card}
+                          onPress={() => selectCategoryWithPush(catCard.name)}
+                        >
                         {catCard.coverImage ? (
                           <Image
                             source={
@@ -536,6 +571,7 @@ export default function CollectionGridView({
                 </>
               )}
             </ScrollView>
+          </Animated.View>
 
             <FeaturedStoryView
               isOpen={activeStoryModalItem !== null}
