@@ -615,7 +615,7 @@ export default function HomeScreen() {
     return ['All', ...Array.from(categoriesSet).sort()];
   }, [websiteStories]);
 
-  // Vibe Category Cards for 2x2 grid (100% dynamic with unique cover deduplication)
+  // Vibe Category Cards for 2x2 grid (100% dynamic with priority-based unique cover deduplication)
   const vibeCategoryCards = React.useMemo(() => {
     const categoryMap = new Map<string, { name: string; count: number; items: any[] }>();
 
@@ -634,10 +634,14 @@ export default function HomeScreen() {
     });
 
     const categoryList = Array.from(categoryMap.values()).slice(0, 4);
+
+    // Sort processing priority by count ASCENDING so categories with fewer stories select their covers FIRST.
+    // This prevents multi-story categories (like Destination with 3 stories) from stealing the only cover of single-story categories (like Intimate).
+    const sortedCategories = [...categoryList].sort((a, b) => a.count - b.count);
+    const assignedCoversMap = new Map<string, any>();
     const usedCoverUris = new Set<string>();
 
-    // 2. Assign unique covers across cards
-    return categoryList.map((cat) => {
+    sortedCategories.forEach((cat) => {
       let chosenCoverSrc: any = null;
       let chosenUriKey: string | null = null;
 
@@ -665,13 +669,15 @@ export default function HomeScreen() {
       if (chosenUriKey) {
         usedCoverUris.add(chosenUriKey);
       }
-
-      return {
-        name: cat.name,
-        count: cat.count,
-        coverImage: chosenCoverSrc,
-      };
+      assignedCoversMap.set(cat.name, chosenCoverSrc);
     });
+
+    // Return in original category list order
+    return categoryList.map((cat) => ({
+      name: cat.name,
+      count: cat.count,
+      coverImage: assignedCoversMap.get(cat.name) || null,
+    }));
   }, [websiteStories]);
 
   // Helper to filter website portfolio stories by selected Vibe
