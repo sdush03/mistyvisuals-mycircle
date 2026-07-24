@@ -151,6 +151,42 @@ export default function CollectionGridView({
     });
   }, [items, selectedCategory]);
 
+  // Generate visual Category Cards for the "All" view mode
+  const categoryCards = React.useMemo(() => {
+    const validCategories = categories.filter((c) => c !== 'All');
+    return validCategories.map((catName) => {
+      const catLower = catName.toLowerCase();
+      const catItems = items.filter((item) => {
+        const dbCategories = (item.category || '').split(',').map((c) => c.trim().toLowerCase());
+        if (dbCategories.includes(catLower)) return true;
+        const title = (item.title || '').toLowerCase();
+        const loc = (item.location || '').toLowerCase();
+        return title.includes(catLower) || loc.includes(catLower);
+      });
+
+      const firstItem = catItems[0];
+      const coverSrc = firstItem
+        ? firstItem.horizontalCoverImage || firstItem.coverImage
+        : null;
+
+      const formattedTitle = catName
+        .split(' ')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+
+      const count = catItems.length;
+      const subtext = count > 0 ? `${count} ${count === 1 ? 'Collection' : 'Collections'} →` : 'Explore Category →';
+
+      return {
+        name: catName,
+        title: formattedTitle,
+        count,
+        subtext,
+        coverImage: coverSrc,
+      };
+    });
+  }, [categories, items]);
+
   const featuredItem = filteredItems.length > 0 ? filteredItems[0] : null;
   const gridItems = filteredItems.length > 1 ? filteredItems.slice(1) : (filteredItems.length === 1 ? [] : []);
 
@@ -210,6 +246,45 @@ export default function CollectionGridView({
               {filteredItems.length === 0 ? (
                 <View style={styles.emptyContainer}>
                   <Text style={styles.emptyText}>No items found under "{selectedCategory}".</Text>
+                </View>
+              ) : selectedCategory === 'All' && categoryCards.length > 0 ? (
+                /* Categories Overview Grid View */
+                <View style={styles.gridSection}>
+                  <View style={styles.grid}>
+                    {categoryCards.map((catCard) => (
+                      <Pressable
+                        key={catCard.name}
+                        style={styles.card}
+                        onPress={() => setSelectedCategory(catCard.name)}
+                      >
+                        {catCard.coverImage ? (
+                          <Image
+                            source={
+                              typeof catCard.coverImage === 'string'
+                                ? { uri: catCard.coverImage }
+                                : catCard.coverImage
+                            }
+                            style={styles.cover}
+                          />
+                        ) : (
+                          <View style={[styles.cover, { backgroundColor: '#18181b' }]} />
+                        )}
+                        <LinearGradient
+                          colors={['transparent', 'rgba(18, 16, 14, 0.2)', 'rgba(18, 16, 14, 0.88)']}
+                          locations={[0, 0.45, 1]}
+                          style={styles.overlay}
+                        />
+                        <View style={styles.info}>
+                          <Text style={styles.title} numberOfLines={1}>
+                            {catCard.title}
+                          </Text>
+                          <Text style={styles.subtext} numberOfLines={1}>
+                            {catCard.subtext}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ))}
+                  </View>
                 </View>
               ) : (
                 <>
