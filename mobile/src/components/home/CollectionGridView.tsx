@@ -332,6 +332,8 @@ export default function CollectionGridView({
     }
   }, [activeStoryModalItem, selectedCategory, performCloseAnimation, popToAllCategories]);
 
+  const isCategoryViewActive = selectedCategory !== 'All' && !isDirectFromHomeRef.current;
+
   // iOS native-feel Edge Swipe Back gesture (swipe right from left 65px edge)
   const edgeSwipeGesture = Gesture.Pan()
     .onBegin((e) => {
@@ -348,7 +350,11 @@ export default function CollectionGridView({
     .onUpdate((e) => {
       'worklet';
       if (isSwipeFromEdge.value && e.translationX > 0) {
-        translateX.value = e.translationX;
+        if (isCategoryViewActive) {
+          categoryTransitionTranslateX.value = e.translationX;
+        } else {
+          translateX.value = e.translationX;
+        }
       }
     })
     .onEnd((e) => {
@@ -357,7 +363,11 @@ export default function CollectionGridView({
         if (e.translationX > 100 || e.velocityX > 500) {
           runOnJS(handleBackPress)();
         } else {
-          translateX.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) });
+          if (isCategoryViewActive) {
+            categoryTransitionTranslateX.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) });
+          } else {
+            translateX.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) });
+          }
         }
       }
     });
