@@ -1201,7 +1201,7 @@ export default function HomeScreen() {
           setSelectedStory({
             id: String(board.id || board.slug),
             title: board.title,
-            subtitle: board.subtitle || '',
+            subtitle: board.subtitle || board.category || 'FINE ART INSPIRATION',
             location: 'FINE ART INSPIRATION',
             date: 'CURATED COLLECTION',
             coverImage: board.coverImageMobile || board.coverImage || (board.images && board.images[0]),

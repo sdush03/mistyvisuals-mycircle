@@ -117,7 +117,7 @@ export default function MoodboardsView({
       const formattedBoard = {
         id: String(board.id),
         title: board.title,
-        subtitle: board.category || 'FINE ART INSPIRATION',
+        subtitle: board.subtitle || board.category || 'FINE ART INSPIRATION',
         location: 'CURATED COLLECTION',
         date: 'INSPIRATION',
         coverImage: typeof verticalCover === 'string' ? { uri: verticalCover } : verticalCover,
@@ -130,7 +130,7 @@ export default function MoodboardsView({
         id: board.id,
         title: board.title,
         category: board.category,
-        subtext: subtext,
+        subtext: board.subtitle || subtext,
         coverImage: verticalCover,
         horizontalCoverImage: horizontalCover,
         rawItem: formattedBoard,
