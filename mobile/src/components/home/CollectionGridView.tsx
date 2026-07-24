@@ -187,7 +187,12 @@ export default function CollectionGridView({
 
   React.useEffect(() => {
     if (isOpen && !prevIsOpenRef.current) {
-      translateX.value = 0;
+      translateX.value = width;
+      translateX.value = withTiming(0, {
+        duration: 280,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      });
+
       if (initialCategory && initialCategory !== 'All') {
         isDirectFromHomeRef.current = true;
         const found = categories.find((c) => c.toLowerCase() === initialCategory.toLowerCase());
@@ -266,18 +271,27 @@ export default function CollectionGridView({
     });
   }, [categories, items]);
 
+  const performCloseAnimation = React.useCallback(() => {
+    translateX.value = withTiming(
+      width,
+      { duration: 240, easing: Easing.out(Easing.poly(3)) },
+      () => {
+        runOnJS(onClose)();
+      }
+    );
+  }, [onClose, translateX]);
+
   const handleBackPress = React.useCallback(() => {
-    translateX.value = 0;
     if (isDirectFromHomeRef.current) {
-      onClose();
+      performCloseAnimation();
       return;
     }
     if (selectedCategory !== 'All') {
       setSelectedCategory('All');
     } else {
-      onClose();
+      performCloseAnimation();
     }
-  }, [selectedCategory, onClose, translateX]);
+  }, [selectedCategory, performCloseAnimation]);
 
   // iOS native-feel Edge Swipe Back gesture (swipe right from left 65px edge)
   const edgeSwipeGesture = Gesture.Pan()
@@ -348,46 +362,6 @@ export default function CollectionGridView({
       .join(' ');
   }, [selectedCategory, headerTitle]);
 
-  const contentTranslateX = useSharedValue(40);
-  const contentOpacity = useSharedValue(0);
-  const backButtonOpacity = useSharedValue(0);
-
-  React.useEffect(() => {
-    if (isOpen) {
-      contentTranslateX.value = withTiming(0, {
-        duration: 250,
-        easing: Easing.out(Easing.quad),
-      });
-      contentOpacity.value = withTiming(1, { duration: 200 });
-      backButtonOpacity.value = withTiming(1, { duration: 200 });
-    } else {
-      contentTranslateX.value = 40;
-      contentOpacity.value = 0;
-      backButtonOpacity.value = 0;
-    }
-  }, [isOpen]);
-
-  React.useEffect(() => {
-    if (isOpen) {
-      contentTranslateX.value = 24;
-      contentOpacity.value = 0.7;
-      contentTranslateX.value = withTiming(0, {
-        duration: 200,
-        easing: Easing.out(Easing.quad),
-      });
-      contentOpacity.value = withTiming(1, { duration: 180 });
-    }
-  }, [selectedCategory]);
-
-  const contentAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: contentTranslateX.value }],
-    opacity: contentOpacity.value,
-  }));
-
-  const backButtonAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: backButtonOpacity.value,
-  }));
-
   const featuredItem = filteredItems.length > 0 ? filteredItems[0] : null;
   const gridItems = filteredItems.length > 1 ? filteredItems.slice(1) : (filteredItems.length === 1 ? [] : []);
 
@@ -398,20 +372,18 @@ export default function CollectionGridView({
   return (
     <Modal
       visible={isOpen}
-      animationType="fade"
-      presentationStyle="fullScreen"
-      onRequestClose={onClose}
+      animationType="none"
+      transparent={true}
+      onRequestClose={handleBackPress}
     >
       <GestureHandlerRootView style={{ flex: 1 }}>
         <GestureDetector gesture={edgeSwipeGesture}>
           <Animated.View style={[styles.container, animatedStyle]}>
-            {/* Clean Top Header Bar (Static Logo, Fading Back Arrow) */}
+            {/* Clean Top Header Bar */}
             <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
-              <Animated.View style={backButtonAnimatedStyle}>
-                <Pressable style={styles.backButton} onPress={handleBackPress}>
-                  <Text style={styles.backIcon}>←</Text>
-                </Pressable>
-              </Animated.View>
+              <Pressable style={styles.backButton} onPress={handleBackPress}>
+                <Text style={styles.backIcon}>←</Text>
+              </Pressable>
               <Image
                 source={require('@/assets/images/logo-black.png')}
                 style={styles.headerLogo}
@@ -420,9 +392,8 @@ export default function CollectionGridView({
               <View style={{ width: 40 }} />
             </View>
 
-            {/* Main Content Area (Smooth Spring & Fade Entrance) */}
-            <Animated.View style={[{ flex: 1 }, contentAnimatedStyle]}>
-              <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            {/* Main Content Area */}
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* Centered Editorial Title & Description Banner */}
                 <View style={styles.titleSection}>
                   <Text style={styles.bannerTitle}>{currentDisplayTitle}</Text>
@@ -562,7 +533,6 @@ export default function CollectionGridView({
                 </>
               )}
             </ScrollView>
-          </Animated.View>
 
             <FeaturedStoryView
               isOpen={activeStoryModalItem !== null}
