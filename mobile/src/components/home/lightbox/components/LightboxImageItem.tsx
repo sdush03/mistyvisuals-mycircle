@@ -38,6 +38,12 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
   heartPopScale,
   heartPopOpacity,
 }: LightboxImageItemProps) {
+  const imageAspect = typeof item === 'object' && (item.aspectRatio || item.cardAspect)
+    ? (item.aspectRatio || item.cardAspect)
+    : (typeof item === 'object' && item.width && item.height && item.height > 0
+      ? item.width / item.height
+      : null);
+
   const {
     scale,
     translateX,
@@ -48,6 +54,7 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
     screenHeight: defaultScreenHeight,
     containerW: width,
     containerH: defaultScreenHeight * 0.82,
+    imageAspect,
     expandProgress,
     onZoomChange,
     onToggleControls,

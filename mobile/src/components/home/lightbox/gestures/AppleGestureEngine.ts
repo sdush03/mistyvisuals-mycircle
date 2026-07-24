@@ -19,6 +19,7 @@ export interface AppleGestureEngineOptions {
   screenHeight?: number;
   containerW?: number;
   containerH?: number;
+  imageAspect?: number | null;
   expandProgress: SharedValue<number>;
   onZoomChange: (isZoomed: boolean) => void;
   onToggleControls: () => void;
@@ -32,6 +33,7 @@ export function useApplePhotosGesture({
   screenHeight = defaultScreenHeight,
   containerW = defaultScreenWidth,
   containerH = defaultScreenHeight * 0.82,
+  imageAspect,
   expandProgress,
   onZoomChange,
   onToggleControls,
@@ -83,7 +85,7 @@ export function useApplePhotosGesture({
   const finishGesture = () => {
     'worklet';
     isPinching.value = false;
-    const target = getTargetTransform(scale.value, translateX.value, translateY.value, containerW, containerH, width, screenHeight);
+    const target = getTargetTransform(scale.value, translateX.value, translateY.value, containerW, containerH, width, screenHeight, imageAspect);
     scale.value = withSpring(target.scale, { damping: 28, stiffness: 220, mass: 0.5 });
     translateX.value = withSpring(target.translateX, { damping: 28, stiffness: 220, mass: 0.5 });
     translateY.value = withSpring(target.translateY, { damping: 28, stiffness: 220, mass: 0.5 });
@@ -113,7 +115,7 @@ export function useApplePhotosGesture({
       const rawTx = startTx.value * r + startFocalX.value * (1 - r) + (currentFocalX - startFocalX.value);
       const rawTy = startTy.value * r + startFocalY.value * (1 - r) + (currentFocalY - startFocalY.value);
 
-      const bounds = applyElasticBounds(rawScale, rawTx, rawTy, containerW, containerH, width, screenHeight);
+      const bounds = applyElasticBounds(rawScale, rawTx, rawTy, containerW, containerH, width, screenHeight, imageAspect);
       scale.value = bounds.scale;
       translateX.value = bounds.translateX;
       translateY.value = bounds.translateY;
@@ -187,7 +189,7 @@ export function useApplePhotosGesture({
       const rawTx = panStartTx.value + dx;
       const rawTy = panStartTy.value + dy;
 
-      const bounds = applyElasticBounds(scale.value, rawTx, rawTy, containerW, containerH, width, screenHeight);
+      const bounds = applyElasticBounds(scale.value, rawTx, rawTy, containerW, containerH, width, screenHeight, imageAspect);
       translateX.value = bounds.translateX;
       translateY.value = bounds.translateY;
     })
@@ -278,7 +280,7 @@ export function useApplePhotosGesture({
         const rawTx = focalX * (1 - targetScale);
         const rawTy = focalY * (1 - targetScale);
 
-        const target = getTargetTransform(targetScale, rawTx, rawTy, containerW, containerH, width, screenHeight);
+        const target = getTargetTransform(targetScale, rawTx, rawTy, containerW, containerH, width, screenHeight, imageAspect);
 
         scale.value = withTiming(target.scale, { duration: 250, easing: Easing.out(Easing.quad) });
         translateX.value = withTiming(target.translateX, { duration: 250, easing: Easing.out(Easing.quad) });

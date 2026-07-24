@@ -13,7 +13,8 @@ export const getTargetTransform = (
   containerW: number = screenWidth,
   containerH: number = screenHeight * 0.82,
   viewportW: number = screenWidth,
-  viewportH: number = screenHeight
+  viewportH: number = screenHeight,
+  imageAspect?: number | null
 ) => {
   'worklet';
   const targetScale = Math.min(Math.max(s, 1.0), 5.0);
@@ -23,7 +24,13 @@ export const getTargetTransform = (
   }
 
   const scaledW = containerW * targetScale;
-  const scaledH = containerH * targetScale;
+
+  // Calculate actual fitted unscaled image height
+  const unscaledH = (imageAspect && !isNaN(imageAspect) && imageAspect > 0)
+    ? Math.min(containerH, containerW / imageAspect)
+    : containerH;
+
+  const scaledH = unscaledH * targetScale;
 
   let targetTx = 0;
   if (scaledW <= viewportW) {
@@ -35,8 +42,10 @@ export const getTargetTransform = (
 
   let targetTy = 0;
   if (scaledH <= viewportH) {
+    // CASE 1: Scaled image height <= viewport height -> center vertically (equal top & bottom space)
     targetTy = 0;
   } else {
+    // CASE 2: Scaled image height > viewport height -> preserve position, clamp to edges
     const maxTy = (scaledH - viewportH) / 2;
     targetTy = Math.min(Math.max(ty, -maxTy), maxTy);
   }
@@ -54,13 +63,20 @@ export const applyElasticBounds = (
   containerW: number = screenWidth,
   containerH: number = screenHeight * 0.82,
   viewportW: number = screenWidth,
-  viewportH: number = screenHeight
+  viewportH: number = screenHeight,
+  imageAspect?: number | null
 ) => {
   'worklet';
   const currentScale = Math.min(Math.max(s, 0.8), 5.5);
 
   const scaledW = containerW * currentScale;
-  const scaledH = containerH * currentScale;
+
+  // Calculate actual fitted unscaled image height
+  const unscaledH = (imageAspect && !isNaN(imageAspect) && imageAspect > 0)
+    ? Math.min(containerH, containerW / imageAspect)
+    : containerH;
+
+  const scaledH = unscaledH * currentScale;
 
   let clampedTx = tx;
   if (scaledW <= viewportW) {
