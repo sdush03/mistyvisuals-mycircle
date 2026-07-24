@@ -234,11 +234,12 @@ export default function CollectionGridView({
                           <Text style={styles.title} numberOfLines={1}>
                             {formattedTitle}
                           </Text>
-                          {item.subtext || item.location ? (
+                          <View style={styles.bottomRow}>
                             <Text style={styles.subtext} numberOfLines={1}>
-                              {item.subtext || item.location}
+                              {item.subtext || item.location || 'Collection'}
                             </Text>
-                          ) : null}
+                            <Text style={styles.ctaText}>View →</Text>
+                          </View>
                         </View>
                       </Pressable>
                     );
@@ -346,8 +347,8 @@ const styles = StyleSheet.create({
   },
   card: {
     width: (width - 54) / 2,
-    height: 230,
-    borderRadius: 2,
+    height: 240,
+    borderRadius: 4,
     overflow: 'hidden',
     position: 'relative',
     backgroundColor: '#1c1a18',
@@ -379,9 +380,23 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginBottom: 2,
   },
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
   subtext: {
     fontFamily: FONT_JOST_REGULAR,
     fontSize: 10.5,
+    color: '#e5dfd5',
+    flex: 1,
+    marginRight: 6,
+  },
+  ctaText: {
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 10.5,
+    letterSpacing: 0.5,
     color: '#d0c8be',
   },
   emptyContainer: {
