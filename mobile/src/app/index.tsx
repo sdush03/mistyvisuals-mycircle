@@ -605,20 +605,18 @@ export default function HomeScreen() {
     router.replace('/mycircle');
   };
 
-  // Dynamic Vibe filters from website story categories
+  // Dynamic Vibe filters from website story categories (100% dynamic from DB)
   const vibeFilters = React.useMemo(() => {
     const categoriesSet = new Set<string>();
     websiteStories.forEach((s: any) => {
       const cats = (s.category || '').split(',').map((c: string) => c.trim()).filter(Boolean);
       cats.forEach((c: string) => categoriesSet.add(c));
     });
-    if (categoriesSet.size === 0) return ['All', 'Destination', 'Intimate', 'Luxury', 'Traditional'];
     return ['All', ...Array.from(categoriesSet).sort()];
   }, [websiteStories]);
 
-  // Vibe Category Cards for 2x2 grid (Option A - Stories Categories Only)
+  // Vibe Category Cards for 2x2 grid (100% dynamic from DB stories categories)
   const vibeCategoryCards = React.useMemo(() => {
-    const defaultCategories = ['Destination', 'Intimate', 'Luxury', 'Traditional'];
     const categoryMap = new Map<string, { name: string; count: number; coverImage: any }>();
 
     websiteStories.forEach((item: any) => {
@@ -637,13 +635,6 @@ export default function HomeScreen() {
           }
         }
       });
-    });
-
-    // Ensure default categories exist if not enough DB categories
-    defaultCategories.forEach((catName) => {
-      if (!categoryMap.has(catName)) {
-        categoryMap.set(catName, { name: catName, count: 0, coverImage: null });
-      }
     });
 
     return Array.from(categoryMap.values()).slice(0, 4);
@@ -980,7 +971,7 @@ export default function HomeScreen() {
         ────────────────────────────────────────────────────────────────────── */}
 
         {/* ── 8. Browse by Vibe (2x2 Visual Vibe Category Cards Grid) ─────── */}
-        {(websiteStories.length > 0 || websiteInspirations.length > 0) && (
+        {vibeCategoryCards.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionHeader}>BROWSE BY VIBE</Text>
 
