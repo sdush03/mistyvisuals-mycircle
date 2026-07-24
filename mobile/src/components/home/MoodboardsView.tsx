@@ -11,6 +11,21 @@ import {
   BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
+import {
+  FONT_MONTSERRAT_REGULAR,
+  FONT_JOST_REGULAR,
+  FONT_JOST_MEDIUM,
+  FONT_JOST_SEMIBOLD,
+} from '../../constants/fonts';
 
 const { width } = Dimensions.get('window');
 
@@ -35,11 +50,68 @@ interface MoodboardsViewProps {
   onSelectInspiration?: (board: Moodboard) => void;
 }
 
-export default function MoodboardsView({ isOpen, onClose, selectedBoardId, selectedCategoryName, inspirations, onSelectInspiration }: MoodboardsViewProps) {
+export default function MoodboardsView({
+  isOpen,
+  onClose,
+  selectedBoardId,
+  selectedCategoryName,
+  inspirations,
+  onSelectInspiration,
+}: MoodboardsViewProps) {
   const insets = useSafeAreaInsets();
   const [activeBoard, setActiveBoard] = useState<Moodboard | null>(null);
   const [fetchedBoards, setFetchedBoards] = useState<Moodboard[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
+
+  const translateX = useSharedValue(0);
+  const touchStartX = useSharedValue(0);
+  const isSwipeFromEdge = useSharedValue(false);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      translateX.value = 0;
+    }
+  }, [isOpen]);
+
+  // iOS native-feel Edge Swipe Back gesture (swipe right from left 65px edge)
+  const edgeSwipeGesture = Gesture.Pan()
+    .onBegin((e) => {
+      'worklet';
+      if (e.x <= 65) {
+        touchStartX.value = e.x;
+        isSwipeFromEdge.value = true;
+      } else {
+        isSwipeFromEdge.value = false;
+      }
+    })
+    .activeOffsetX(5)
+    .failOffsetY([-20, 20])
+    .onUpdate((e) => {
+      'worklet';
+      if (isSwipeFromEdge.value && e.translationX > 0) {
+        translateX.value = e.translationX;
+      }
+    })
+    .onEnd((e) => {
+      'worklet';
+      if (isSwipeFromEdge.value) {
+        if (e.translationX > 100 || e.velocityX > 500) {
+          translateX.value = withTiming(width, { duration: 200 }, () => {
+            if (activeBoard !== null) {
+              runOnJS(setActiveBoard)(null);
+            } else {
+              runOnJS(onClose)();
+            }
+          });
+        } else {
+          translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
+        }
+      }
+    });
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
 
   React.useEffect(() => {
     if (isOpen) {
@@ -58,8 +130,8 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId, selec
         setFetchedBoards(inspirations);
       } else {
         fetch('https://www.mistyvisuals.com/api/app/inspirations')
-          .then(res => res.json())
-          .then(data => {
+          .then((res) => res.json())
+          .then((data) => {
             if (Array.isArray(data)) {
               setFetchedBoards(data);
             }
@@ -107,6 +179,7 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId, selec
     }
   }, [isOpen, selectedBoardId, displayBoards, onSelectInspiration, onClose]);
 
+  // Android hardware back button handler
   React.useEffect(() => {
     if (!isOpen) return;
     const onBackPress = () => {
@@ -137,100 +210,136 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId, selec
       presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
-      <View style={styles.container}>
-        {/* Top Header */}
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
-          <Pressable style={styles.closeButton} onPress={onClose}>
-            <Text style={styles.closeText}>✕ CLOSE</Text>
-          </Pressable>
-          <Text style={styles.headerTitle}>FINE ART INSPIRATIONS</Text>
-          <View style={{ width: 60 }} />
-        </View>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <GestureDetector gesture={edgeSwipeGesture}>
+          <Animated.View style={[styles.container, animatedStyle]}>
+            {/* Top Navigation Bar */}
+            <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
+              <Pressable
+                style={styles.backButton}
+                onPress={() => {
+                  if (activeBoard) {
+                    setActiveBoard(null);
+                  } else {
+                    onClose();
+                  }
+                }}
+              >
+                <Text style={styles.backText}>← BACK</Text>
+              </Pressable>
+              <Text style={styles.headerTitle}>FINE ART INSPIRATIONS</Text>
+              <View style={{ width: 60 }} />
+            </View>
 
-        {activeBoard ? (
-          /* Active Moodboard Detail View */
-          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-            <Pressable style={styles.backLink} onPress={() => setActiveBoard(null)}>
-              <Text style={styles.backLinkText}>← ALL INSPIRATIONS</Text>
-            </Pressable>
+            {activeBoard ? (
+              /* Active Moodboard Detail View */
+              <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                <Pressable style={styles.backLink} onPress={() => setActiveBoard(null)}>
+                  <Text style={styles.backLinkText}>← ALL INSPIRATIONS</Text>
+                </Pressable>
 
-            <Text style={styles.boardCategory}>{(activeBoard.category || 'INSPIRATION COLLECTION').toUpperCase()}</Text>
-            <Text style={styles.boardTitle}>{activeBoard.title}</Text>
-            {activeBoard.subtitle ? <Text style={styles.boardSubtitle}>{activeBoard.subtitle}</Text> : null}
-            {activeBoard.description ? <Text style={styles.boardDescription}>{activeBoard.description}</Text> : null}
+                <Text style={styles.boardCategory}>
+                  {(activeBoard.category || 'INSPIRATION COLLECTION').toUpperCase()}
+                </Text>
+                <Text style={styles.boardTitle}>{activeBoard.title}</Text>
+                {activeBoard.subtitle ? <Text style={styles.boardSubtitle}>{activeBoard.subtitle}</Text> : null}
+                {activeBoard.description ? <Text style={styles.boardDescription}>{activeBoard.description}</Text> : null}
 
-            <View style={styles.divider} />
+                <View style={styles.divider} />
 
-            {/* Inspiration Grid */}
-            <View style={styles.gridContainer}>
-              {(activeBoard.images || []).map((img, idx) => (
-                <View key={idx} style={styles.gridCard}>
-                  <Image source={typeof img === 'string' ? { uri: img } : img} style={styles.gridImage} />
+                {/* Inspiration Grid */}
+                <View style={styles.gridContainer}>
+                  {(activeBoard.images || []).map((img, idx) => (
+                    <View key={idx} style={styles.gridCard}>
+                      <Image source={typeof img === 'string' ? { uri: img } : img} style={styles.gridImage} />
+                    </View>
+                  ))}
                 </View>
-              ))}
-            </View>
-          </ScrollView>
-        ) : (
-          /* All Moodboards List View */
-          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-            <View style={styles.introContainer}>
-              <Text style={styles.introTag}>INSPIRATION & STYLING</Text>
-              <Text style={styles.introHeading}>Curated Fine Art Inspirations</Text>
-              <Text style={styles.introSub}>
-                Explore visual palettes, lighting directions, and editorial framing curated by Misty Visuals.
-              </Text>
-            </View>
-
-            {/* Category Filter Pills */}
-            {categories.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibePillScroll}>
-                {categories.map((cat) => (
-                  <Pressable
-                    key={cat}
-                    style={[styles.vibePill, selectedCategory === cat && styles.vibePillActive]}
-                    onPress={() => setSelectedCategory(cat)}
-                  >
-                    <Text style={[styles.vibeText, selectedCategory === cat && styles.vibeTextActive]}>{cat}</Text>
-                  </Pressable>
-                ))}
               </ScrollView>
-            )}
-
-            {filteredBoards.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyText}>No published inspiration collections available in this category.</Text>
-              </View>
             ) : (
-              <View style={styles.boardsList}>
-                {filteredBoards.map((board) => {
-                  const coverSrc = board.coverImageMobile || board.coverImage;
-                  return (
-                    <Pressable
-                      key={board.id}
-                      style={styles.boardCard}
-                      onPress={() => handleCardPress(board)}
-                    >
-                      <Image
-                        source={typeof coverSrc === 'string' ? { uri: coverSrc } : coverSrc}
-                        style={styles.boardCover}
-                      />
-                      <View style={styles.boardOverlay} />
-                      <View style={styles.boardCardContent}>
-                        {board.category ? (
-                          <Text style={styles.boardCardCategory}>{(board.category || '').toUpperCase()}</Text>
-                        ) : null}
-                        <Text style={styles.boardCardTitle}>{board.title}</Text>
-                        {board.subtitle ? <Text style={styles.boardCardSub}>{board.subtitle}</Text> : null}
-                        <Text style={styles.boardCardCta}>Explore Collection →</Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
+              /* Moodboards List View */
+              <View style={{ flex: 1 }}>
+                {/* Category Filter Pills */}
+                {categories.length > 0 && (
+                  <View style={styles.vibeBarContainer}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibeScroll}>
+                      {categories.map((cat) => (
+                        <Pressable
+                          key={cat}
+                          style={[styles.vibePill, selectedCategory === cat && styles.vibePillActive]}
+                          onPress={() => setSelectedCategory(cat)}
+                        >
+                          <Text style={[styles.vibeText, selectedCategory === cat && styles.vibeTextActive]}>{cat}</Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
+                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.sectionHeading}>
+                      {selectedCategory === 'All' ? 'ALL INSPIRATIONS' : `${selectedCategory.toUpperCase()} INSPIRATIONS`}
+                    </Text>
+                    <Text style={styles.countText}>{filteredBoards.length} COLLECTIONS</Text>
+                  </View>
+
+                  {filteredBoards.length === 0 ? (
+                    <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyText}>No inspiration collections found under "{selectedCategory}".</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.boardsList}>
+                      {filteredBoards.map((board) => {
+                        const coverSrc = board.coverImageMobile || board.coverImage || (board.images && board.images[0]);
+                        const formattedTitle = (board.title || '')
+                          .split(' ')
+                          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+                          .join(' ');
+                        const photoCount = Array.isArray(board.images) ? board.images.length : 0;
+                        const subtext = photoCount > 0
+                          ? `${photoCount} ${photoCount === 1 ? 'Photo' : 'Photos'} →`
+                          : 'Explore Collection →';
+
+                        return (
+                          <Pressable
+                            key={board.id}
+                            style={styles.boardCard}
+                            onPress={() => handleCardPress(board)}
+                          >
+                            {coverSrc ? (
+                              <Image
+                                source={typeof coverSrc === 'string' ? { uri: coverSrc } : coverSrc}
+                                style={styles.boardCover}
+                              />
+                            ) : (
+                              <View style={[styles.boardCover, { backgroundColor: '#18181b' }]} />
+                            )}
+                            <LinearGradient
+                              colors={['transparent', 'rgba(18, 16, 14, 0.2)', 'rgba(18, 16, 14, 0.88)']}
+                              locations={[0, 0.45, 1]}
+                              style={styles.boardOverlay}
+                            />
+                            <View style={styles.boardCardContent}>
+                              {board.category ? (
+                                <Text style={styles.boardCardCategory}>
+                                  {board.category.toUpperCase()}
+                                </Text>
+                              ) : null}
+                              <Text style={styles.boardCardTitle} numberOfLines={1}>{formattedTitle}</Text>
+                              <Text style={styles.boardCardSub} numberOfLines={1}>{subtext}</Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
+                </ScrollView>
               </View>
             )}
-          </ScrollView>
-        )}
-      </View>
+          </Animated.View>
+        </GestureDetector>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -238,7 +347,7 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId, selec
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#12100e',
   },
   header: {
     flexDirection: 'row',
@@ -247,163 +356,165 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0ede8',
-    backgroundColor: '#ffffff',
+    borderBottomColor: '#24211e',
+    backgroundColor: 'rgba(18, 16, 14, 0.96)',
   },
-  closeButton: {
-    paddingVertical: 8,
+  backButton: {
+    paddingVertical: 6,
+    paddingRight: 12,
   },
-  closeText: {
-    fontFamily: 'System',
+  backText: {
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 2,
-    color: '#1a1a1a',
+    letterSpacing: 1.5,
+    color: '#d0c8be',
   },
   headerTitle: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_MEDIUM,
     fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 2,
-    color: '#8c867e',
+    letterSpacing: 2.5,
+    color: '#9a7d52',
+    textAlign: 'center',
+  },
+  vibeBarContainer: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#24211e',
+    backgroundColor: '#161412',
+  },
+  vibeScroll: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  vibePill: {
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#2d2925',
+    backgroundColor: '#1c1a18',
+  },
+  vibePillActive: {
+    backgroundColor: '#9a7d52',
+    borderColor: '#9a7d52',
+  },
+  vibeText: {
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 11,
+    color: '#a0988e',
+  },
+  vibeTextActive: {
+    color: '#ffffff',
+    fontFamily: FONT_JOST_SEMIBOLD,
   },
   scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
     paddingBottom: 60,
   },
-  introContainer: {
-    paddingHorizontal: 24,
-    paddingTop: 32,
-    paddingBottom: 24,
-  },
-  introTag: {
-    fontFamily: 'System',
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 2,
-    color: '#9a7d52',
-    marginBottom: 8,
-  },
-  introHeading: {
-    fontFamily: 'System',
-    fontSize: 26,
-    fontWeight: '300',
-    color: '#1a1a1a',
-    marginBottom: 8,
-  },
-  introSub: {
-    fontFamily: 'System',
-    fontSize: 13,
-    lineHeight: 20,
-    color: '#666666',
-  },
-  emptyState: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontFamily: 'System',
-    fontSize: 13,
-    color: '#999999',
-  },
-  boardsList: {
-    paddingHorizontal: 20,
-    gap: 20,
-  },
-  boardCard: {
-    height: 220,
-    borderRadius: 12,
-    overflow: 'hidden',
-    position: 'relative',
-    backgroundColor: '#1a1a1a',
-  },
-  boardCover: {
-    width: '100%',
-    height: '100%',
-    position: 'absolute',
-    resizeMode: 'cover',
-  },
-  boardOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  boardCardContent: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 20,
-  },
-  boardCardTitle: {
-    fontFamily: 'System',
-    fontSize: 22,
-    fontWeight: '400',
-    color: '#ffffff',
-    marginBottom: 4,
-  },
-  boardCardSub: {
-    fontFamily: 'System',
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
-    marginBottom: 12,
-  },
-  boardCardCta: {
-    fontFamily: 'System',
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 1.5,
-    color: '#e2d5c3',
-  },
   backLink: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
     paddingBottom: 12,
   },
   backLinkText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 11,
-    fontWeight: '600',
     letterSpacing: 1.5,
     color: '#9a7d52',
   },
   boardCategory: {
-    paddingHorizontal: 24,
-    fontFamily: 'System',
-    fontSize: 10,
-    fontWeight: '600',
+    fontFamily: FONT_JOST_SEMIBOLD,
+    fontSize: 9,
     letterSpacing: 2,
-    color: '#8c867e',
+    color: '#a07850',
     marginBottom: 6,
   },
   boardTitle: {
-    paddingHorizontal: 24,
-    fontFamily: 'System',
-    fontSize: 28,
-    fontWeight: '300',
-    color: '#1a1a1a',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 24,
+    color: '#ffffff',
     marginBottom: 6,
   },
   boardSubtitle: {
-    paddingHorizontal: 24,
-    fontFamily: 'System',
-    fontSize: 14,
-    color: '#666666',
-    marginBottom: 12,
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 13,
+    color: '#d0c8be',
+    marginBottom: 10,
   },
   boardDescription: {
-    paddingHorizontal: 24,
-    fontFamily: 'System',
-    fontSize: 13,
-    lineHeight: 20,
-    color: '#444444',
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 12.5,
+    lineHeight: 19,
+    color: '#a0988e',
   },
   divider: {
     height: 1,
-    backgroundColor: '#f0ede8',
-    marginHorizontal: 24,
-    marginVertical: 24,
+    backgroundColor: '#24211e',
+    marginVertical: 20,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  sectionHeading: {
+    fontFamily: FONT_JOST_MEDIUM,
+    fontSize: 11,
+    letterSpacing: 2.5,
+    color: '#9a7d52',
+  },
+  countText: {
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 10,
+    letterSpacing: 1,
+    color: '#7a756d',
+  },
+  boardsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 14,
+  },
+  boardCard: {
+    width: (width - 54) / 2,
+    height: 230,
+    borderRadius: 2,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#1c1a18',
+  },
+  boardCover: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  boardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  boardCardContent: {
+    position: 'absolute',
+    bottom: 14,
+    left: 14,
+    right: 14,
+  },
+  boardCardCategory: {
+    fontFamily: FONT_JOST_SEMIBOLD,
+    fontSize: 8.5,
+    letterSpacing: 1.8,
+    color: '#a07850',
+    marginBottom: 4,
+  },
+  boardCardTitle: {
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 16,
+    color: '#ffffff',
+    marginBottom: 2,
+  },
+  boardCardSub: {
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 10.5,
+    color: '#d0c8be',
   },
   gridContainer: {
-    paddingHorizontal: 20,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
@@ -411,47 +522,22 @@ const styles = StyleSheet.create({
   gridCard: {
     width: (width - 52) / 2,
     aspectRatio: 3 / 4,
-    borderRadius: 8,
+    borderRadius: 2,
     overflow: 'hidden',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#1c1a18',
   },
   gridImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
-  boardCardCategory: {
-    fontFamily: 'System',
-    fontSize: 8.5,
-    fontWeight: '600',
-    letterSpacing: 1.8,
-    color: '#e2d5c3',
-    marginBottom: 4,
+  emptyContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
   },
-  vibePillScroll: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    gap: 8,
-  },
-  vibePill: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: '#f5f3ef',
-    borderWidth: 1,
-    borderColor: '#e8e4de',
-  },
-  vibePillActive: {
-    backgroundColor: '#1c1a18',
-    borderColor: '#1c1a18',
-  },
-  vibeText: {
-    fontFamily: 'System',
-    fontSize: 11,
-    color: '#666666',
-  },
-  vibeTextActive: {
-    color: '#ffffff',
-    fontWeight: '600',
+  emptyText: {
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 13,
+    color: '#8c867e',
   },
 });

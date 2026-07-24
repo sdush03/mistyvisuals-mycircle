@@ -11,6 +11,21 @@ import {
   BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
+import {
+  FONT_MONTSERRAT_REGULAR,
+  FONT_JOST_REGULAR,
+  FONT_JOST_MEDIUM,
+  FONT_JOST_SEMIBOLD,
+} from '../../constants/fonts';
 
 const { width } = Dimensions.get('window');
 
@@ -31,6 +46,52 @@ export default function AllStoriesView({
 }: AllStoriesViewProps) {
   const insets = useSafeAreaInsets();
   const [selectedVibe, setSelectedVibe] = useState(initialVibe);
+
+  const translateX = useSharedValue(0);
+  const touchStartX = useSharedValue(0);
+  const isSwipeFromEdge = useSharedValue(false);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      translateX.value = 0;
+    }
+  }, [isOpen]);
+
+  // iOS native-feel Edge Swipe Back gesture (swipe right from left 65px edge)
+  const edgeSwipeGesture = Gesture.Pan()
+    .onBegin((e) => {
+      'worklet';
+      if (e.x <= 65) {
+        touchStartX.value = e.x;
+        isSwipeFromEdge.value = true;
+      } else {
+        isSwipeFromEdge.value = false;
+      }
+    })
+    .activeOffsetX(5)
+    .failOffsetY([-20, 20])
+    .onUpdate((e) => {
+      'worklet';
+      if (isSwipeFromEdge.value && e.translationX > 0) {
+        translateX.value = e.translationX;
+      }
+    })
+    .onEnd((e) => {
+      'worklet';
+      if (isSwipeFromEdge.value) {
+        if (e.translationX > 100 || e.velocityX > 500) {
+          translateX.value = withTiming(width, { duration: 200 }, () => {
+            runOnJS(onClose)();
+          });
+        } else {
+          translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
+        }
+      }
+    });
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
 
   // Android hardware back button handler
   React.useEffect(() => {
@@ -80,71 +141,87 @@ export default function AllStoriesView({
       presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
-          <Pressable style={styles.closeButton} onPress={onClose}>
-            <Text style={styles.closeText}>✕ CLOSE</Text>
-          </Pressable>
-          <Text style={styles.headerTitle}>WEDDING COLLECTIONS</Text>
-          <View style={{ width: 60 }} />
-        </View>
-
-        {/* Vibe Tabs Bar */}
-        <View style={styles.vibeBarContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibeScroll}>
-            {vibeFilters.map((vibe) => {
-              const active = vibe === selectedVibe;
-              return (
-                <Pressable
-                  key={vibe}
-                  style={[styles.vibePill, active && styles.vibePillActive]}
-                  onPress={() => setSelectedVibe(vibe)}
-                >
-                  <Text style={[styles.vibeText, active && styles.vibeTextActive]}>{vibe}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <Text style={styles.sectionHeading}>
-            {selectedVibe === 'All' ? 'All Stories' : `${selectedVibe} Stories`} ({filteredStories.length})
-          </Text>
-
-          {filteredStories.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No stories found for "{selectedVibe}".</Text>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <GestureDetector gesture={edgeSwipeGesture}>
+          <Animated.View style={[styles.container, animatedStyle]}>
+            {/* Top Navigation Bar */}
+            <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
+              <Pressable style={styles.backButton} onPress={onClose}>
+                <Text style={styles.backText}>← BACK</Text>
+              </Pressable>
+              <Text style={styles.headerTitle}>WEDDING STORIES</Text>
+              <View style={{ width: 60 }} />
             </View>
-          ) : (
-            <View style={styles.storiesGrid}>
-              {filteredStories.map((story) => {
-                const coverUri = story.cover_image_mobile_url || story.cover_image_url || story.grid_image_url || (typeof story.coverImage === 'string' ? story.coverImage : story.coverImage?.uri);
-                const imageSource = coverUri ? { uri: coverUri } : undefined;
-                return (
-                  <Pressable
-                    key={story.id}
-                    style={styles.storyCard}
-                    onPress={() => {
-                      onClose();
-                      onSelectStory(story);
-                    }}
-                  >
-                    <Image source={imageSource} style={styles.storyCover} />
-                    <View style={styles.storyOverlay} />
-                    <View style={styles.storyInfo}>
-                      <Text style={styles.storyCategory}>{(story.category || 'WEDDING').toUpperCase()}</Text>
-                      <Text style={styles.storyTitle}>{story.title}</Text>
-                      {story.location ? <Text style={styles.storyLocation}>📍 {story.location}</Text> : null}
-                    </View>
-                  </Pressable>
-                );
-              })}
+
+            {/* Vibe Filter Pills */}
+            <View style={styles.vibeBarContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vibeScroll}>
+                {vibeFilters.map((vibe) => {
+                  const active = vibe === selectedVibe;
+                  return (
+                    <Pressable
+                      key={vibe}
+                      style={[styles.vibePill, active && styles.vibePillActive]}
+                      onPress={() => setSelectedVibe(vibe)}
+                    >
+                      <Text style={[styles.vibeText, active && styles.vibeTextActive]}>{vibe}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
             </View>
-          )}
-        </ScrollView>
-      </View>
+
+            {/* Grid Content */}
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionHeading}>
+                  {selectedVibe === 'All' ? 'ALL STORIES' : `${selectedVibe.toUpperCase()} STORIES`}
+                </Text>
+                <Text style={styles.countText}>{filteredStories.length} COLLECTIONS</Text>
+              </View>
+
+              {filteredStories.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No stories found under "{selectedVibe}".</Text>
+                </View>
+              ) : (
+                <View style={styles.storiesGrid}>
+                  {filteredStories.map((story) => {
+                    const coverUri = story.cover_image_mobile_url || story.cover_image_url || story.grid_image_url || (typeof story.coverImage === 'string' ? story.coverImage : story.coverImage?.uri);
+                    const imageSource = coverUri ? { uri: coverUri } : undefined;
+                    return (
+                      <Pressable
+                        key={story.id}
+                        style={styles.storyCard}
+                        onPress={() => {
+                          onClose();
+                          onSelectStory(story);
+                        }}
+                      >
+                        {imageSource ? (
+                          <Image source={imageSource} style={styles.storyCover} />
+                        ) : (
+                          <View style={[styles.storyCover, { backgroundColor: '#18181b' }]} />
+                        )}
+                        <LinearGradient
+                          colors={['transparent', 'rgba(18, 16, 14, 0.2)', 'rgba(18, 16, 14, 0.88)']}
+                          locations={[0, 0.45, 1]}
+                          style={styles.storyOverlay}
+                        />
+                        <View style={styles.storyInfo}>
+                          <Text style={styles.storyCategory}>{(story.category || 'WEDDING').toUpperCase()}</Text>
+                          <Text style={styles.storyTitle} numberOfLines={1}>{story.title}</Text>
+                          {story.location ? <Text style={styles.storyLocation} numberOfLines={1}>{story.location}</Text> : null}
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+            </ScrollView>
+          </Animated.View>
+        </GestureDetector>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -152,7 +229,7 @@ export default function AllStoriesView({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#12100e',
   },
   header: {
     flexDirection: 'row',
@@ -161,82 +238,92 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0ede8',
-    backgroundColor: '#ffffff',
+    borderBottomColor: '#24211e',
+    backgroundColor: 'rgba(18, 16, 14, 0.96)',
   },
-  closeButton: {
-    paddingVertical: 8,
+  backButton: {
+    paddingVertical: 6,
+    paddingRight: 12,
   },
-  closeText: {
-    fontFamily: 'System',
+  backText: {
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 2,
-    color: '#8c867e',
+    letterSpacing: 1.5,
+    color: '#d0c8be',
   },
   headerTitle: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_MEDIUM,
     fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 3,
-    color: '#1c1a18',
+    letterSpacing: 2.5,
+    color: '#9a7d52',
     textAlign: 'center',
   },
   vibeBarContainer: {
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0ede8',
-    backgroundColor: '#fbfaf8',
+    borderBottomColor: '#24211e',
+    backgroundColor: '#161412',
   },
   vibeScroll: {
     paddingHorizontal: 20,
     gap: 8,
   },
   vibePill: {
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 16,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#e5e0d8',
-    backgroundColor: '#ffffff',
+    borderColor: '#2d2925',
+    backgroundColor: '#1c1a18',
   },
   vibePillActive: {
-    backgroundColor: '#1c1a18',
-    borderColor: '#1c1a18',
+    backgroundColor: '#9a7d52',
+    borderColor: '#9a7d52',
   },
   vibeText: {
-    fontFamily: 'System',
+    fontFamily: FONT_JOST_REGULAR,
     fontSize: 11,
-    fontWeight: '600',
-    color: '#60646c',
+    color: '#a0988e',
   },
   vibeTextActive: {
     color: '#ffffff',
+    fontFamily: FONT_JOST_SEMIBOLD,
   },
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 60,
   },
-  sectionHeading: {
-    fontFamily: 'System',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 2,
-    color: '#8c867e',
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
-    textTransform: 'uppercase',
+  },
+  sectionHeading: {
+    fontFamily: FONT_JOST_MEDIUM,
+    fontSize: 11,
+    letterSpacing: 2.5,
+    color: '#9a7d52',
+  },
+  countText: {
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 10,
+    letterSpacing: 1,
+    color: '#7a756d',
   },
   storiesGrid: {
-    gap: 20,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 14,
   },
   storyCard: {
-    width: '100%',
-    height: 220,
+    width: (width - 54) / 2,
+    height: 230,
     borderRadius: 2,
     overflow: 'hidden',
     position: 'relative',
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#1c1a18',
   },
   storyCover: {
     width: '100%',
@@ -245,32 +332,29 @@ const styles = StyleSheet.create({
   },
   storyOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(28, 26, 24, 0.35)',
   },
   storyInfo: {
     position: 'absolute',
-    bottom: 16,
-    left: 16,
-    right: 16,
+    bottom: 14,
+    left: 14,
+    right: 14,
   },
   storyCategory: {
-    fontFamily: 'System',
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 2,
+    fontFamily: FONT_JOST_SEMIBOLD,
+    fontSize: 8.5,
+    letterSpacing: 1.8,
     color: '#a07850',
     marginBottom: 4,
   },
   storyTitle: {
-    fontFamily: 'serif',
-    fontSize: 22,
-    fontWeight: '300',
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 16,
     color: '#ffffff',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   storyLocation: {
-    fontFamily: 'System',
-    fontSize: 11,
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 10,
     color: '#d0c8be',
   },
   emptyContainer: {
@@ -278,8 +362,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    fontFamily: 'serif',
-    fontSize: 14,
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 13,
     color: '#8c867e',
   },
 });
