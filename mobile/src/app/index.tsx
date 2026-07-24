@@ -605,17 +605,16 @@ export default function HomeScreen() {
     router.replace('/mycircle');
   };
 
-  // Dynamic Vibe filters from website story categories
+  // Dynamic Vibe filters from website story and inspiration categories
   const vibeFilters = React.useMemo(() => {
     const categoriesSet = new Set<string>();
-    const sourceStories = websiteStories;
-    sourceStories.forEach((s: any) => {
+    [...websiteStories, ...websiteInspirations].forEach((s: any) => {
       const cats = (s.category || '').split(',').map((c: string) => c.trim()).filter(Boolean);
       cats.forEach((c: string) => categoriesSet.add(c));
     });
     if (categoriesSet.size === 0) return ['All', 'Destination', 'Intimate', 'Luxury', 'Traditional'];
     return ['All', ...Array.from(categoriesSet).sort()];
-  }, [websiteStories]);
+  }, [websiteStories, websiteInspirations]);
 
   // Helper to filter website portfolio stories by selected Vibe
   const getFilteredVibeStories = () => {
@@ -1380,32 +1379,31 @@ const styles = StyleSheet.create({
     color: '#8c867e',
   },
   vibePillScroll: {
-    paddingHorizontal: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0ede8',
+    paddingLeft: 24,
+    paddingRight: 12,
     marginBottom: 16,
-    flexDirection: 'row',
-    gap: 22,
   },
   vibePill: {
-    paddingVertical: 10,
-    paddingHorizontal: 2,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-    marginBottom: -1,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#ddd8d0',
+    marginRight: 8,
+    backgroundColor: '#ffffff',
   },
   vibePillActive: {
-    borderBottomColor: '#1c1a18',
+    backgroundColor: '#1c1a18',
+    borderColor: '#1c1a18',
   },
   vibeText: {
-    fontFamily: FONT_JOST_SEMIBOLD,
+    fontFamily: FONT_JOST_MEDIUM,
     fontSize: 11,
     color: '#8c867e',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   vibeTextActive: {
-    color: '#1c1a18',
+    color: '#ffffff',
   },
   vibeGridContainer: {
     paddingHorizontal: 24,
