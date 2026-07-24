@@ -80,6 +80,7 @@ export default function HomeScreen() {
   const [selectedMoodboardId, setSelectedMoodboardId] = useState<string | null>(null);
   const [isAllStoriesOpen, setIsAllStoriesOpen] = useState(false);
   const [isJoinCelebrationModalOpen, setIsJoinCelebrationModalOpen] = useState(false);
+  const [selectedInspoCategory, setSelectedInspoCategory] = useState<string | undefined>(undefined);
 
   const handleScroll = useScrollTabBarCollapse();
 
@@ -680,6 +681,88 @@ export default function HomeScreen() {
     }));
   }, [websiteStories]);
 
+  // Inspiration Category Cards for 2x2 grid (100% dynamic from DB inspirations categories with unique cover deduplication)
+  const inspoCategoryCards = React.useMemo(() => {
+    const categoryMap = new Map<string, { name: string; count: number; totalPhotos: number; items: any[] }>();
+
+    // 1. Group inspirations by category
+    websiteInspirations.forEach((item: any) => {
+      const cats = (item.category || '').split(',').map((c: string) => c.trim()).filter(Boolean);
+      const photosCount = Array.isArray(item.images) ? item.images.length : 0;
+
+      cats.forEach((catName: string) => {
+        if (!categoryMap.has(catName)) {
+          categoryMap.set(catName, { name: catName, count: 1, totalPhotos: photosCount, items: [item] });
+        } else {
+          const existing = categoryMap.get(catName)!;
+          existing.count += 1;
+          existing.totalPhotos += photosCount;
+          existing.items.push(item);
+        }
+      });
+    });
+
+    const categoryList = Array.from(categoryMap.values()).slice(0, 4);
+
+    // If no DB categories exist yet, fallback to individual inspiration collections
+    if (categoryList.length === 0) {
+      return websiteInspirations.slice(0, 4).map((board) => {
+        const coverSrc = board.coverImageMobile || board.coverImage || (board.images && board.images[0]);
+        const photoCount = Array.isArray(board.images) ? board.images.length : 0;
+        return {
+          name: board.title,
+          count: photoCount,
+          totalPhotos: photoCount,
+          coverImage: coverSrc ? (typeof coverSrc === 'string' ? { uri: coverSrc } : coverSrc) : null,
+          isDirectBoard: true,
+          board: board,
+        };
+      });
+    }
+
+    const sortedCategories = [...categoryList].sort((a, b) => a.count - b.count);
+    const assignedCoversMap = new Map<string, any>();
+    const usedCoverUris = new Set<string>();
+
+    sortedCategories.forEach((cat) => {
+      let chosenCoverSrc: any = null;
+      let chosenUriKey: string | null = null;
+
+      for (const item of cat.items) {
+        const coverUri = item.coverImageMobile || item.coverImage || (item.images && item.images[0]);
+        const coverSrc = coverUri ? (typeof coverUri === 'string' ? { uri: coverUri } : coverUri) : null;
+        const uriKey = typeof coverSrc === 'object' && coverSrc?.uri ? coverSrc.uri : (typeof coverSrc === 'string' ? coverSrc : null);
+
+        if (coverSrc && uriKey && !usedCoverUris.has(uriKey)) {
+          chosenCoverSrc = coverSrc;
+          chosenUriKey = uriKey;
+          break;
+        }
+      }
+
+      if (!chosenCoverSrc && cat.items.length > 0) {
+        const firstItem = cat.items[0];
+        const coverUri = firstItem.coverImageMobile || firstItem.coverImage || (firstItem.images && firstItem.images[0]);
+        chosenCoverSrc = coverUri ? (typeof coverUri === 'string' ? { uri: coverUri } : coverUri) : null;
+        chosenUriKey = typeof chosenCoverSrc === 'object' && chosenCoverSrc?.uri ? chosenCoverSrc.uri : (typeof chosenCoverSrc === 'string' ? chosenCoverSrc : null);
+      }
+
+      if (chosenUriKey) {
+        usedCoverUris.add(chosenUriKey);
+      }
+      assignedCoversMap.set(cat.name, chosenCoverSrc);
+    });
+
+    return categoryList.map((cat) => ({
+      name: cat.name,
+      count: cat.count,
+      totalPhotos: cat.totalPhotos,
+      coverImage: assignedCoversMap.get(cat.name) || null,
+      isDirectBoard: false,
+      board: null,
+    }));
+  }, [websiteInspirations]);
+
   // Helper to filter website portfolio stories by selected Vibe
   const getFilteredVibeStories = () => {
     const sourceStories = websiteStories;
@@ -950,49 +1033,54 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── 6. Inspirations (2x2 Grid Layout matching Browse by Vibe) ── */}
-        {websiteInspirations.length > 0 && (
+        {/* ── 6. Inspirations (2x2 Inspiration Category Cards Grid) ─────── */}
+        {(websiteInspirations.length > 0 || inspoCategoryCards.length > 0) && (
           <View style={styles.section}>
             <Text style={styles.sectionHeader}>INSPIRATIONS</Text>
 
-            {/* 2x2 Grid of 4 Inspiration Cards */}
+            {/* 2x2 Grid of Inspiration Category Cards */}
             <View style={styles.vibeGridContainer}>
-              {websiteInspirations.slice(0, 4).map((board) => {
-                const coverSrc = board.coverImageMobile || board.coverImage || (board.images && board.images[0]);
-                const formattedTitle = (board.title || '')
+              {inspoCategoryCards.map((card, index) => {
+                const formattedTitle = (card.name || '')
                   .split(' ')
                   .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
                   .join(' ');
-                const photoCount = Array.isArray(board.images) ? board.images.length : 0;
-                const subtext = photoCount > 0
-                  ? `${photoCount} ${photoCount === 1 ? 'Photo' : 'Photos'} →`
-                  : 'Curated Collection →';
+                const subtext = card.totalPhotos > 0
+                  ? `${card.totalPhotos} ${card.totalPhotos === 1 ? 'Photo' : 'Photos'} →`
+                  : 'Explore Category →';
 
                 return (
                   <Pressable
-                    key={board.id}
+                    key={card.name || index}
                     style={styles.vibeGridCard}
                     onPress={() => {
-                      setSelectedStory({
-                        id: String(board.id || board.slug),
-                        title: board.title,
-                        subtitle: board.subtitle || '',
-                        location: (board.category || 'FINE ART INSPIRATION').toUpperCase(),
-                        date: 'CURATED COLLECTION',
-                        coverImage: coverSrc,
-                        description: board.description || '',
-                        images: (board.images || []).map((imgUrl: any, imgIdx: number) => ({
-                          id: `inspo-${board.id || board.slug}-${imgIdx}`,
-                          uri: typeof imgUrl === 'string' ? imgUrl : imgUrl.uri || imgUrl,
-                          caption: board.title,
-                          originalIndex: imgIdx,
-                        })),
-                      });
+                      if (card.isDirectBoard && card.board) {
+                        const board = card.board;
+                        const coverSrc = board.coverImageMobile || board.coverImage || (board.images && board.images[0]);
+                        setSelectedStory({
+                          id: String(board.id || board.slug),
+                          title: board.title,
+                          subtitle: board.subtitle || '',
+                          location: (board.category || 'FINE ART INSPIRATION').toUpperCase(),
+                          date: 'CURATED COLLECTION',
+                          coverImage: coverSrc,
+                          description: board.description || '',
+                          images: (board.images || []).map((imgUrl: any, imgIdx: number) => ({
+                            id: `inspo-${board.id || board.slug}-${imgIdx}`,
+                            uri: typeof imgUrl === 'string' ? imgUrl : imgUrl.uri || imgUrl,
+                            caption: board.title,
+                            originalIndex: imgIdx,
+                          })),
+                        });
+                      } else {
+                        setSelectedInspoCategory(card.name);
+                        setIsMoodboardsOpen(true);
+                      }
                     }}
                   >
-                    {coverSrc ? (
+                    {card.coverImage ? (
                       <Image
-                        source={typeof coverSrc === 'string' ? { uri: coverSrc } : coverSrc}
+                        source={typeof card.coverImage === 'string' ? { uri: card.coverImage } : card.coverImage}
                         style={styles.vibeCardImage}
                       />
                     ) : (
@@ -1004,11 +1092,6 @@ export default function HomeScreen() {
                       style={styles.featuredOverlay}
                     />
                     <View style={styles.vibeCardContent}>
-                      {board.category ? (
-                        <Text style={styles.filmCategory} numberOfLines={1}>
-                          {board.category.toUpperCase()}
-                        </Text>
-                      ) : null}
                       <Text style={styles.vibeCardTitle} numberOfLines={1}>{formattedTitle}</Text>
                       <Text style={styles.vibeCardSubtext} numberOfLines={1}>{subtext}</Text>
                     </View>
@@ -1020,7 +1103,10 @@ export default function HomeScreen() {
             {/* View More → Button */}
             <Pressable 
               style={styles.viewMoreGridBtn}
-              onPress={() => setIsMoodboardsOpen(true)}
+              onPress={() => {
+                setSelectedInspoCategory(undefined);
+                setIsMoodboardsOpen(true);
+              }}
             >
               <Text style={styles.viewAllText}>View More →</Text>
             </Pressable>
@@ -1122,8 +1208,12 @@ export default function HomeScreen() {
 
       <MoodboardsView
         isOpen={isMoodboardsOpen}
-        onClose={() => setIsMoodboardsOpen(false)}
+        onClose={() => {
+          setIsMoodboardsOpen(false);
+          setSelectedInspoCategory(undefined);
+        }}
         selectedBoardId={selectedMoodboardId}
+        selectedCategoryName={selectedInspoCategory}
         inspirations={websiteInspirations}
         onSelectInspiration={(board) => {
           setSelectedStory({

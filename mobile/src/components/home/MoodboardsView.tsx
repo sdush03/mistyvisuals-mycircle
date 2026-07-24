@@ -30,15 +30,26 @@ interface MoodboardsViewProps {
   isOpen: boolean;
   onClose: () => void;
   selectedBoardId?: string | number | null;
+  selectedCategoryName?: string;
   inspirations?: Moodboard[];
   onSelectInspiration?: (board: Moodboard) => void;
 }
 
-export default function MoodboardsView({ isOpen, onClose, selectedBoardId, inspirations, onSelectInspiration }: MoodboardsViewProps) {
+export default function MoodboardsView({ isOpen, onClose, selectedBoardId, selectedCategoryName, inspirations, onSelectInspiration }: MoodboardsViewProps) {
   const insets = useSafeAreaInsets();
   const [activeBoard, setActiveBoard] = useState<Moodboard | null>(null);
   const [fetchedBoards, setFetchedBoards] = useState<Moodboard[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
+
+  React.useEffect(() => {
+    if (isOpen) {
+      if (selectedCategoryName) {
+        setSelectedCategory(selectedCategoryName);
+      } else {
+        setSelectedCategory('All');
+      }
+    }
+  }, [isOpen, selectedCategoryName]);
 
   // Fetch dynamic inspirations from backend API if not passed via props
   React.useEffect(() => {
