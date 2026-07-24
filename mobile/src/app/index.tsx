@@ -605,25 +605,25 @@ export default function HomeScreen() {
     router.replace('/mycircle');
   };
 
-  // Dynamic Vibe filters from website story and inspiration categories
+  // Dynamic Vibe filters from website story categories
   const vibeFilters = React.useMemo(() => {
     const categoriesSet = new Set<string>();
-    [...websiteStories, ...websiteInspirations].forEach((s: any) => {
+    websiteStories.forEach((s: any) => {
       const cats = (s.category || '').split(',').map((c: string) => c.trim()).filter(Boolean);
       cats.forEach((c: string) => categoriesSet.add(c));
     });
     if (categoriesSet.size === 0) return ['All', 'Destination', 'Intimate', 'Luxury', 'Traditional'];
     return ['All', ...Array.from(categoriesSet).sort()];
-  }, [websiteStories, websiteInspirations]);
+  }, [websiteStories]);
 
-  // Vibe Category Cards for 2x2 grid (Option A)
+  // Vibe Category Cards for 2x2 grid (Option A - Stories Categories Only)
   const vibeCategoryCards = React.useMemo(() => {
     const defaultCategories = ['Destination', 'Intimate', 'Luxury', 'Traditional'];
     const categoryMap = new Map<string, { name: string; count: number; coverImage: any }>();
 
-    [...websiteStories, ...websiteInspirations].forEach((item: any) => {
+    websiteStories.forEach((item: any) => {
       const cats = (item.category || '').split(',').map((c: string) => c.trim()).filter(Boolean);
-      const coverUri = item.cover_image_mobile_url || item.cover_image_url || item.coverImageMobile || item.coverImage || item.grid_image_url;
+      const coverUri = item.cover_image_mobile_url || item.cover_image_url || item.grid_image_url;
       const coverSrc = coverUri ? { uri: coverUri } : typeof item.img === 'string' ? { uri: item.img } : item.img || null;
 
       cats.forEach((catName: string) => {
@@ -647,7 +647,7 @@ export default function HomeScreen() {
     });
 
     return Array.from(categoryMap.values()).slice(0, 4);
-  }, [websiteStories, websiteInspirations]);
+  }, [websiteStories]);
 
   // Helper to filter website portfolio stories by selected Vibe
   const getFilteredVibeStories = () => {
@@ -1008,7 +1008,7 @@ export default function HomeScreen() {
                   <View style={styles.vibeCardContent}>
                     <Text style={styles.vibeCardTitle} numberOfLines={1}>{card.name.toUpperCase()}</Text>
                     <Text style={styles.vibeCardSubtext} numberOfLines={1}>
-                      {card.count > 0 ? `${card.count} STORIES & INSPO` : 'EXPLORE VIBE'}
+                      {card.count > 0 ? `${card.count} ${card.count === 1 ? 'STORY' : 'STORIES'}` : 'EXPLORE VIBE'}
                     </Text>
                   </View>
                 </Pressable>
