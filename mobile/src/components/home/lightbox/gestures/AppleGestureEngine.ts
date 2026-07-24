@@ -123,7 +123,6 @@ export function useApplePhotosGesture({
     .onEnd(() => {
       'worklet';
       isPinching.value = false;
-      needsPanReset.value = true;
       runOnJS(onInteractionEnd)();
       if (scale.value <= 1.001 || activePointerCount.value === 0) {
         finishGesture();
@@ -132,7 +131,6 @@ export function useApplePhotosGesture({
     .onFinalize(() => {
       'worklet';
       isPinching.value = false;
-      needsPanReset.value = true;
       if (scale.value <= 1.001 || activePointerCount.value === 0) {
         finishGesture();
       }
@@ -146,12 +144,28 @@ export function useApplePhotosGesture({
     .onTouchesDown((e) => {
       'worklet';
       activePointerCount.value = e.numberOfTouches;
-      needsPanReset.value = true;
+      if (e.numberOfTouches === 1 && e.allTouches && e.allTouches.length === 1) {
+        panAnchorX.value = e.allTouches[0].absoluteX;
+        panAnchorY.value = e.allTouches[0].absoluteY;
+        panStartTx.value = translateX.value;
+        panStartTy.value = translateY.value;
+        needsPanReset.value = false;
+      } else {
+        needsPanReset.value = true;
+      }
     })
     .onTouchesUp((e) => {
       'worklet';
       activePointerCount.value = e.numberOfTouches;
-      needsPanReset.value = true;
+      if (e.numberOfTouches === 1 && e.allTouches && e.allTouches.length === 1) {
+        panAnchorX.value = e.allTouches[0].absoluteX;
+        panAnchorY.value = e.allTouches[0].absoluteY;
+        panStartTx.value = translateX.value;
+        panStartTy.value = translateY.value;
+        needsPanReset.value = false;
+      } else {
+        needsPanReset.value = true;
+      }
       if (scale.value <= 1.001 || (e.numberOfTouches === 0 && !isPinching.value)) {
         finishGesture();
       }
@@ -159,7 +173,15 @@ export function useApplePhotosGesture({
     .onTouchesCancelled((e) => {
       'worklet';
       activePointerCount.value = e.numberOfTouches;
-      needsPanReset.value = true;
+      if (e.numberOfTouches === 1 && e.allTouches && e.allTouches.length === 1) {
+        panAnchorX.value = e.allTouches[0].absoluteX;
+        panAnchorY.value = e.allTouches[0].absoluteY;
+        panStartTx.value = translateX.value;
+        panStartTy.value = translateY.value;
+        needsPanReset.value = false;
+      } else {
+        needsPanReset.value = true;
+      }
       if (scale.value <= 1.001 || (e.numberOfTouches === 0 && !isPinching.value)) {
         finishGesture();
       }
