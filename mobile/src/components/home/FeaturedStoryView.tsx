@@ -180,11 +180,14 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   }, [activeImageIndex, updateThumbForIndex]);
 
   const openLightbox = useCallback((img: any, bounds: { x: number; y: number; width: number; height: number } | null) => {
-    const targetIdx = filteredGalleryImages.findIndex(item => (
-      (item.id && img.id && String(item.id) === String(img.id)) ||
-      (item.uri && img.uri && item.uri === img.uri) ||
-      item === img
-    ));
+    const targetIdx = filteredGalleryImages.findIndex(item => {
+      if (!item || !img) return false;
+      if (item === img) return true;
+      if (item.id !== undefined && img.id !== undefined && item.id === img.id) return true;
+      const uriItem = typeof item === 'string' ? item : item.uri;
+      const uriImg = typeof img === 'string' ? img : img.uri;
+      return Boolean(uriItem && uriImg && uriItem === uriImg);
+    });
     const finalIdx = targetIdx !== -1 ? targetIdx : (img.originalIndex ?? 0);
 
     if (bounds && bounds.width > 0 && bounds.height > 0) {
@@ -610,7 +613,6 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 
   const locationText = (story.location || '').toUpperCase();
   const titleText = story.title || '';
-  const subtitleText = story.subtitle || '';
   const dateText = formatDateText(story.date);
   const descriptionText = story.description || '';
 
@@ -672,7 +674,6 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
             <View style={[styles.titleContainer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
               {locationText ? <Text style={styles.storyLocation}>{locationText}</Text> : null}
               {titleText ? <Text style={styles.storyTitle}>{titleText}</Text> : null}
-              {subtitleText ? <Text style={styles.storySubtitle}>{subtitleText}</Text> : null}
               {dateText ? <Text style={styles.storyDate}>{dateText}</Text> : null}
             </View>
           </View>
@@ -1064,15 +1065,8 @@ const styles = StyleSheet.create({
     fontFamily: FONT_MONTSERRAT_REGULAR,
     fontSize: 32,
     color: '#ffffff',
-    marginBottom: 6,
-    lineHeight: 38,
-  },
-  storySubtitle: {
-    fontFamily: FONT_JOST_REGULAR,
-    fontSize: 14,
-    color: '#ffffff',
     marginBottom: 8,
-    opacity: 0.9,
+    lineHeight: 38,
   },
   storyDate: {
     fontFamily: FONT_JOST_REGULAR,

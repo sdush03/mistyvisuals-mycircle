@@ -912,11 +912,12 @@ export default function HomeScreen() {
                         date: 'CURATED COLLECTION',
                         coverImage: coverSrc,
                         description: board.description || '',
-                        images: (board.images || []).map((imgUrl: any, idx: number) =>
-                          typeof imgUrl === 'string'
-                            ? { id: `inspo_${board.id}_${idx}`, uri: imgUrl, caption: board.title, originalIndex: idx }
-                            : { ...imgUrl, id: imgUrl.id || `inspo_${board.id}_${idx}`, originalIndex: idx }
-                        ),
+                        images: (board.images || []).map((imgUrl: any, imgIdx: number) => ({
+                          id: `inspo-${board.id || board.slug}-${imgIdx}`,
+                          uri: typeof imgUrl === 'string' ? imgUrl : imgUrl.uri || imgUrl,
+                          caption: board.title,
+                          originalIndex: imgIdx,
+                        })),
                       });
                     }}
                   >
@@ -1063,11 +1064,12 @@ export default function HomeScreen() {
             date: 'CURATED COLLECTION',
             coverImage: board.coverImageMobile || board.coverImage || (board.images && board.images[0]),
             description: board.description || '',
-            images: (board.images || []).map((imgUrl: any, idx: number) =>
-              typeof imgUrl === 'string'
-                ? { id: `inspo_${board.id}_${idx}`, uri: imgUrl, caption: board.title, originalIndex: idx }
-                : { ...imgUrl, id: imgUrl.id || `inspo_${board.id}_${idx}`, originalIndex: idx }
-            ),
+            images: (board.images || []).map((imgUrl: any, imgIdx: number) => ({
+              id: `inspo-${board.id || board.slug}-${imgIdx}`,
+              uri: typeof imgUrl === 'string' ? imgUrl : imgUrl.uri || imgUrl,
+              caption: board.title,
+              originalIndex: imgIdx,
+            })),
           });
         }}
       />
