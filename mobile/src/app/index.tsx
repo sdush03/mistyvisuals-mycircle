@@ -877,7 +877,7 @@ export default function HomeScreen() {
         {/* ── 6. Moodboards (Preview section with View All) ───────────────── */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionHeader}>MOODBOARDS</Text>
+            <Text style={styles.sectionHeader}>INSPIRATIONS</Text>
             <Pressable onPress={() => setIsMoodboardsOpen(true)}>
               <Text style={styles.viewAllText}>View All →</Text>
             </Pressable>
