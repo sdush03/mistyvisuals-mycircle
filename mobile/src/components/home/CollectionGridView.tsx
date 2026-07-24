@@ -71,6 +71,77 @@ export default function CollectionGridView({
   const isClickBusyRef = useRef(false);
   const storyDetailsCacheRef = useRef<Record<string, any>>({});
 
+  // Background pre-fetch story details into memory cache
+  React.useEffect(() => {
+    if (isOpen && items && items.length > 0) {
+      items.forEach((item) => {
+        const raw = item.rawItem;
+        if (raw && raw.slug && !storyDetailsCacheRef.current[raw.slug] && (!raw.images || raw.images.length === 0)) {
+          fetch(`https://www.mistyvisuals.com/api/website/stories/${raw.slug}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((fullStory) => {
+              if (fullStory) {
+                const photos = fullStory.photos || fullStory.images || fullStory.gallery || [];
+                const galleryImages = (Array.isArray(photos) ? photos : []).map((p: any, idx: number) => {
+                  const thumbUri = p.file_url_thumb || p.file_url_mobile || p.thumbnail_url || p.thumbnailUrl || p.mobile_url || p.thumb_url || p.preview_url || p.r2Url || p.file_url || (typeof p === 'string' ? p : '');
+                  const fullUri = p.file_url || p.r2Url || p.file_url_mobile || p.file_url_thumb || p.thumbnail_url || (typeof p === 'string' ? p : '');
+
+                  let originalAspect: number | null = null;
+                  if (p.aspect_ratio || p.aspectRatio) {
+                    originalAspect = Number(p.aspect_ratio || p.aspectRatio);
+                  } else if (p.width && p.height && Number(p.height) > 0) {
+                    originalAspect = Number(p.width) / Number(p.height);
+                  }
+
+                  const isHorizontal = originalAspect ? originalAspect > 1.05 : false;
+                  const verticalRatios = [2 / 3, 3 / 4, 4 / 5];
+                  const vertRatio = verticalRatios[idx % 3];
+
+                  const finalAspect = isHorizontal
+                    ? (originalAspect && originalAspect > 1.0 ? originalAspect : 3 / 2)
+                    : (originalAspect && originalAspect <= 1.0 ? originalAspect : vertRatio);
+
+                  return {
+                    originalIndex: idx,
+                    id: p.id || `photo-${idx}`,
+                    uri: thumbUri,
+                    fullUri: fullUri,
+                    blurUri: p.blur_data_url || p.blurDataUrl || p.cover_blur_data_url || null,
+                    width: p.width ? Number(p.width) : null,
+                    height: p.height ? Number(p.height) : null,
+                    aspectRatio: finalAspect,
+                    isHorizontal: isHorizontal,
+                    category: p.tab_name || p.tabName || p.category || p.tag || p.tagName || p.tab || p.event_name || p.eventName || p.folder_name || p.sub_folder || null,
+                  };
+                });
+
+                const rawTabs = fullStory.tabs || fullStory.categories || fullStory.category || [];
+                const parsedTabs = Array.isArray(rawTabs)
+                  ? rawTabs.filter((s: any) => typeof s === 'string' && s.trim().length <= 25)
+                  : (typeof rawTabs === 'string' ? rawTabs.split(',').map((s: string) => s.trim()).filter((s: string) => s && s.length <= 25) : []);
+
+                const coverUri = fullStory.cover_image_mobile_url || fullStory.cover_image_url || fullStory.grid_image_url;
+
+                storyDetailsCacheRef.current[raw.slug] = {
+                  ...raw,
+                  id: String(fullStory.id || raw.id),
+                  title: fullStory.title || raw.title,
+                  subtitle: fullStory.subtitle || fullStory.category || raw.subtitle,
+                  location: fullStory.location || raw.location,
+                  date: fullStory.date || raw.date,
+                  coverImage: coverUri ? { uri: coverUri } : raw.coverImage,
+                  description: fullStory.description || fullStory.subtitle || raw.description,
+                  images: galleryImages,
+                  tabs: parsedTabs,
+                };
+              }
+            })
+            .catch(() => {});
+        }
+      });
+    }
+  }, [isOpen, items]);
+
   const handleItemClick = async (item: CollectionItem) => {
     if (isClickBusyRef.current || activeStoryModalItem !== null) return;
     isClickBusyRef.current = true;
@@ -91,10 +162,7 @@ export default function CollectionGridView({
       return;
     }
 
-    // 0ms INSTANT OPEN with existing story metadata while fetching full photos in background
-    setActiveStoryModalItem(raw);
-
-    // Fetch full gallery photos payload in background if slug is present
+    // Fetch full gallery photos payload if slug is present (single modal trigger)
     if (raw.slug) {
       try {
         const res = await fetch(`https://www.mistyvisuals.com/api/website/stories/${raw.slug}`);
@@ -156,11 +224,14 @@ export default function CollectionGridView({
 
           storyDetailsCacheRef.current[raw.slug] = parsedStory;
           setActiveStoryModalItem(parsedStory);
+          return;
         }
       } catch (err) {
         console.warn('Failed to fetch story gallery photos:', err);
       }
     }
+
+    setActiveStoryModalItem(raw);
   };
 
   const translateX = useSharedValue(0);
