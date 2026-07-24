@@ -11,7 +11,7 @@ import {
   Dimensions
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { FONT_MONTSERRAT_REGULAR } from '../../constants/fonts';
+import { FONT_MONTSERRAT_REGULAR, FONT_JOST_SEMIBOLD } from '../../constants/fonts';
 
 const { height: screenHeight } = Dimensions.get('screen');
 
@@ -86,8 +86,7 @@ export default function ArticleView({ isOpen, onClose, article }: ArticleViewPro
           onPress={onClose}
           hitSlop={16}
         >
-          <Text style={styles.editorialBackIcon}>←</Text>
-          <Text style={styles.editorialBackText}>BACK</Text>
+          <Text style={styles.editorialBackText}>← BACK</Text>
         </Pressable>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -155,21 +154,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 4,
   },
-  editorialBackIcon: {
-    color: '#ffffff',
-    fontSize: 19,
-    lineHeight: 19,
-    marginRight: 3,
-    transform: [{ translateY: -3.5 }],
-    textShadowColor: 'rgba(0, 0, 0, 0.65)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
   editorialBackText: {
-    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 11,
     lineHeight: 14,
-    letterSpacing: 3,
+    letterSpacing: 1.5,
     color: '#ffffff',
     textShadowColor: 'rgba(0, 0, 0, 0.65)',
     textShadowOffset: { width: 0, height: 1 },

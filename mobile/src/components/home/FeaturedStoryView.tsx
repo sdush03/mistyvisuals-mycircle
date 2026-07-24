@@ -554,8 +554,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
           onPress={onClose}
           hitSlop={16}
         >
-          <Text style={styles.editorialBackIcon}>←</Text>
-          <Text style={styles.editorialBackText}>BACK</Text>
+          <Text style={styles.editorialBackText}>← BACK</Text>
         </Pressable>
 
         <ScrollView
@@ -937,21 +936,11 @@ const styles = StyleSheet.create({
     width: 135,
     height: 38,
   },
-  editorialBackIcon: {
-    color: '#ffffff',
-    fontSize: 19,
-    lineHeight: 19,
-    marginRight: 3,
-    transform: [{ translateY: -3.5 }],
-    textShadowColor: 'rgba(0, 0, 0, 0.65)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
   editorialBackText: {
-    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontFamily: FONT_JOST_SEMIBOLD,
     fontSize: 11,
     lineHeight: 14,
-    letterSpacing: 3,
+    letterSpacing: 1.5,
     color: '#ffffff',
     textShadowColor: 'rgba(0, 0, 0, 0.65)',
     textShadowOffset: { width: 0, height: 1 },
