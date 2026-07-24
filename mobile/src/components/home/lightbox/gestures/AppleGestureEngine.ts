@@ -120,6 +120,7 @@ export function useApplePhotosGesture({
     .onEnd(() => {
       'worklet';
       isPinching.value = false;
+      needsPanReset.value = true;
       runOnJS(onInteractionEnd)();
       if (scale.value <= 1.001 || activePointerCount.value === 0) {
         finishGesture();
@@ -128,6 +129,7 @@ export function useApplePhotosGesture({
     .onFinalize(() => {
       'worklet';
       isPinching.value = false;
+      needsPanReset.value = true;
       if (scale.value <= 1.001 || activePointerCount.value === 0) {
         finishGesture();
       }
@@ -141,30 +143,12 @@ export function useApplePhotosGesture({
     .onTouchesDown((e) => {
       'worklet';
       activePointerCount.value = e.numberOfTouches;
-      if (e.numberOfTouches === 1 && e.allTouches && e.allTouches.length === 1) {
-        const xTouch = e.allTouches[0].absoluteX - width / 2;
-        const yTouch = e.allTouches[0].absoluteY - screenHeight / 2;
-        const curScale = Math.max(0.001, scale.value);
-        anchorImgX.value = (xTouch - translateX.value) / curScale;
-        anchorImgY.value = (yTouch - translateY.value) / curScale;
-        needsPanReset.value = false;
-      } else {
-        needsPanReset.value = true;
-      }
+      needsPanReset.value = true;
     })
     .onTouchesUp((e) => {
       'worklet';
       activePointerCount.value = e.numberOfTouches;
-      if (e.numberOfTouches === 1 && e.allTouches && e.allTouches.length === 1) {
-        const xTouch = e.allTouches[0].absoluteX - width / 2;
-        const yTouch = e.allTouches[0].absoluteY - screenHeight / 2;
-        const curScale = Math.max(0.001, scale.value);
-        anchorImgX.value = (xTouch - translateX.value) / curScale;
-        anchorImgY.value = (yTouch - translateY.value) / curScale;
-        needsPanReset.value = false;
-      } else {
-        needsPanReset.value = true;
-      }
+      needsPanReset.value = true;
       if (scale.value <= 1.001 || (e.numberOfTouches === 0 && !isPinching.value)) {
         finishGesture();
       }
@@ -172,16 +156,7 @@ export function useApplePhotosGesture({
     .onTouchesCancelled((e) => {
       'worklet';
       activePointerCount.value = e.numberOfTouches;
-      if (e.numberOfTouches === 1 && e.allTouches && e.allTouches.length === 1) {
-        const xTouch = e.allTouches[0].absoluteX - width / 2;
-        const yTouch = e.allTouches[0].absoluteY - screenHeight / 2;
-        const curScale = Math.max(0.001, scale.value);
-        anchorImgX.value = (xTouch - translateX.value) / curScale;
-        anchorImgY.value = (yTouch - translateY.value) / curScale;
-        needsPanReset.value = false;
-      } else {
-        needsPanReset.value = true;
-      }
+      needsPanReset.value = true;
       if (scale.value <= 1.001 || (e.numberOfTouches === 0 && !isPinching.value)) {
         finishGesture();
       }
@@ -204,7 +179,6 @@ export function useApplePhotosGesture({
         anchorImgX.value = (curTouchX - translateX.value) / curScale;
         anchorImgY.value = (curTouchY - translateY.value) / curScale;
         needsPanReset.value = false;
-        return;
       }
 
       const rawTx = curTouchX - scale.value * anchorImgX.value;
