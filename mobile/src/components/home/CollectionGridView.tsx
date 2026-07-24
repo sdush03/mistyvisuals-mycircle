@@ -68,10 +68,6 @@ export default function CollectionGridView({
   const [activeStoryModalItem, setActiveStoryModalItem] = useState<any | null>(null);
 
   const handleItemClick = async (item: CollectionItem) => {
-    if (onSelectItem) {
-      onSelectItem(item);
-    }
-
     const raw = item.rawItem;
     if (!raw) return;
 
