@@ -217,6 +217,16 @@ export default function CollectionGridView({
     });
   }, [categories, items]);
 
+  const currentDisplayTitle = React.useMemo(() => {
+    if (selectedCategory === 'All' || !selectedCategory) {
+      return headerTitle;
+    }
+    return selectedCategory
+      .split(' ')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
+  }, [selectedCategory, headerTitle]);
+
   const featuredItem = filteredItems.length > 0 ? filteredItems[0] : null;
   const gridItems = filteredItems.length > 1 ? filteredItems.slice(1) : (filteredItems.length === 1 ? [] : []);
 
@@ -247,7 +257,7 @@ export default function CollectionGridView({
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
               {/* Centered Editorial Title & Description Banner */}
               <View style={styles.titleSection}>
-                <Text style={styles.bannerTitle}>{headerTitle}</Text>
+                <Text style={styles.bannerTitle}>{currentDisplayTitle}</Text>
                 {headerDescription ? (
                   <Text style={styles.bannerDescription}>{headerDescription}</Text>
                 ) : null}
