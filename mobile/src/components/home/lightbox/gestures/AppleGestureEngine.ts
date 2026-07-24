@@ -68,12 +68,9 @@ export function useApplePhotosGesture({
   const startFocalX = useSharedValue(0);
   const startFocalY = useSharedValue(0);
   const isPinching = useSharedValue(false);
-
-  // Re-anchored pan baseline values
-  const panAnchorX = useSharedValue(0);
-  const panAnchorY = useSharedValue(0);
-  const panStartTx = useSharedValue(0);
-  const panStartTy = useSharedValue(0);
+  // Re-anchored image-space focal point tracking values
+  const anchorImgX = useSharedValue(0);
+  const anchorImgY = useSharedValue(0);
 
   // Continuity & pointer tracking state
   const activePointerCount = useSharedValue(0);
@@ -145,10 +142,11 @@ export function useApplePhotosGesture({
       'worklet';
       activePointerCount.value = e.numberOfTouches;
       if (e.numberOfTouches === 1 && e.allTouches && e.allTouches.length === 1) {
-        panAnchorX.value = e.allTouches[0].absoluteX;
-        panAnchorY.value = e.allTouches[0].absoluteY;
-        panStartTx.value = translateX.value;
-        panStartTy.value = translateY.value;
+        const xTouch = e.allTouches[0].absoluteX - width / 2;
+        const yTouch = e.allTouches[0].absoluteY - screenHeight / 2;
+        const curScale = Math.max(0.001, scale.value);
+        anchorImgX.value = (xTouch - translateX.value) / curScale;
+        anchorImgY.value = (yTouch - translateY.value) / curScale;
         needsPanReset.value = false;
       } else {
         needsPanReset.value = true;
@@ -158,10 +156,11 @@ export function useApplePhotosGesture({
       'worklet';
       activePointerCount.value = e.numberOfTouches;
       if (e.numberOfTouches === 1 && e.allTouches && e.allTouches.length === 1) {
-        panAnchorX.value = e.allTouches[0].absoluteX;
-        panAnchorY.value = e.allTouches[0].absoluteY;
-        panStartTx.value = translateX.value;
-        panStartTy.value = translateY.value;
+        const xTouch = e.allTouches[0].absoluteX - width / 2;
+        const yTouch = e.allTouches[0].absoluteY - screenHeight / 2;
+        const curScale = Math.max(0.001, scale.value);
+        anchorImgX.value = (xTouch - translateX.value) / curScale;
+        anchorImgY.value = (yTouch - translateY.value) / curScale;
         needsPanReset.value = false;
       } else {
         needsPanReset.value = true;
@@ -174,10 +173,11 @@ export function useApplePhotosGesture({
       'worklet';
       activePointerCount.value = e.numberOfTouches;
       if (e.numberOfTouches === 1 && e.allTouches && e.allTouches.length === 1) {
-        panAnchorX.value = e.allTouches[0].absoluteX;
-        panAnchorY.value = e.allTouches[0].absoluteY;
-        panStartTx.value = translateX.value;
-        panStartTy.value = translateY.value;
+        const xTouch = e.allTouches[0].absoluteX - width / 2;
+        const yTouch = e.allTouches[0].absoluteY - screenHeight / 2;
+        const curScale = Math.max(0.001, scale.value);
+        anchorImgX.value = (xTouch - translateX.value) / curScale;
+        anchorImgY.value = (yTouch - translateY.value) / curScale;
         needsPanReset.value = false;
       } else {
         needsPanReset.value = true;
@@ -196,20 +196,19 @@ export function useApplePhotosGesture({
       if (isPinching.value) return;
       if (scale.value <= 1.001) return;
 
+      const curTouchX = e.absoluteX - width / 2;
+      const curTouchY = e.absoluteY - screenHeight / 2;
+
       if (needsPanReset.value) {
-        panAnchorX.value = e.absoluteX;
-        panAnchorY.value = e.absoluteY;
-        panStartTx.value = translateX.value;
-        panStartTy.value = translateY.value;
+        const curScale = Math.max(0.001, scale.value);
+        anchorImgX.value = (curTouchX - translateX.value) / curScale;
+        anchorImgY.value = (curTouchY - translateY.value) / curScale;
         needsPanReset.value = false;
         return;
       }
 
-      const dx = e.absoluteX - panAnchorX.value;
-      const dy = e.absoluteY - panAnchorY.value;
-
-      const rawTx = panStartTx.value + dx;
-      const rawTy = panStartTy.value + dy;
+      const rawTx = curTouchX - scale.value * anchorImgX.value;
+      const rawTy = curTouchY - scale.value * anchorImgY.value;
 
       const bounds = applyElasticBounds(scale.value, rawTx, rawTy, containerW, containerH, width, screenHeight, imageAspect);
       translateX.value = bounds.translateX;
