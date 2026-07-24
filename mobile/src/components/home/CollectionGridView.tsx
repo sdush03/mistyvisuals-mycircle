@@ -183,14 +183,17 @@ export default function CollectionGridView({
   }, [items]);
 
   const prevIsOpenRef = React.useRef(isOpen);
+  const isDirectFromHomeRef = React.useRef(false);
 
   React.useEffect(() => {
     if (isOpen && !prevIsOpenRef.current) {
       translateX.value = 0;
       if (initialCategory && initialCategory !== 'All') {
+        isDirectFromHomeRef.current = true;
         const found = categories.find((c) => c.toLowerCase() === initialCategory.toLowerCase());
         setSelectedCategory(found || initialCategory);
       } else {
+        isDirectFromHomeRef.current = false;
         setSelectedCategory('All');
       }
     }
@@ -265,6 +268,10 @@ export default function CollectionGridView({
 
   const handleBackPress = React.useCallback(() => {
     translateX.value = 0;
+    if (isDirectFromHomeRef.current) {
+      onClose();
+      return;
+    }
     if (selectedCategory !== 'All') {
       setSelectedCategory('All');
     } else {
