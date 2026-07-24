@@ -8,7 +8,6 @@ import {
   Image,
   Pressable,
   Dimensions,
-  FlatList,
   BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,110 +15,54 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const { width } = Dimensions.get('window');
 
 export interface Moodboard {
-  id: string;
+  id: string | number;
+  slug?: string;
   title: string;
-  subtitle: string;
-  description: string;
-  coverImage: any;
-  images: any[];
+  subtitle?: string;
+  description?: string;
+  coverImage?: any;
+  coverImageMobile?: any;
+  images?: any[];
 }
-
-export const CURATED_MOODBOARDS: Moodboard[] = [
-  {
-    id: 'mb_1',
-    title: 'Golden Hour',
-    subtitle: 'Warm Sunset & Glowing Portraits',
-    description: 'Warm golden light cascading through forest pines and open hills, highlighting genuine emotion and glowing silhouettes.',
-    coverImage: require('@/assets/images/portfolio/sunset_couple.jpg'),
-    images: [
-      require('@/assets/images/portfolio/sunset_couple.jpg'),
-      require('@/assets/images/portfolio/indian_bride.jpg'),
-      require('@/assets/images/portfolio/palace_wedding.jpg'),
-    ],
-  },
-  {
-    id: 'mb_2',
-    title: 'Editorial Fine Art',
-    subtitle: 'High Fashion Framing & Details',
-    description: 'Crisp architectural lines, intentional negative space, and couture bridal attire framed like a fashion editorial.',
-    coverImage: require('@/assets/images/portfolio/indian_bride.jpg'),
-    images: [
-      require('@/assets/images/portfolio/indian_bride.jpg'),
-      require('@/assets/images/portfolio/palace_wedding.jpg'),
-      require('@/assets/images/portfolio/sunset_couple.jpg'),
-    ],
-  },
-  {
-    id: 'mb_3',
-    title: 'Palace Romance',
-    subtitle: 'Rajput Heritage & Royalty',
-    description: 'Majestic courtyards, marble reflections, and imperial grand arches capturing timeless romance in historic palaces.',
-    coverImage: require('@/assets/images/portfolio/palace_wedding.jpg'),
-    images: [
-      require('@/assets/images/portfolio/palace_wedding.jpg'),
-      require('@/assets/images/portfolio/sunset_couple.jpg'),
-      require('@/assets/images/portfolio/indian_bride.jpg'),
-    ],
-  },
-  {
-    id: 'mb_4',
-    title: 'Mehendi Details',
-    subtitle: 'Vibrant Colors & Henna Art',
-    description: 'Intricate henna patterns, marigold garlands, and raw joyful laughter during traditional pre-wedding celebrations.',
-    coverImage: require('@/assets/images/portfolio/indian_bride.jpg'),
-    images: [
-      require('@/assets/images/portfolio/indian_bride.jpg'),
-      require('@/assets/images/portfolio/sunset_couple.jpg'),
-    ],
-  },
-  {
-    id: 'mb_5',
-    title: 'Monochrome',
-    subtitle: 'Classic Black & White Emotion',
-    description: 'Stripping away color to reveal pure light, shadow, and unscripted raw human emotion.',
-    coverImage: require('@/assets/images/portfolio/sunset_couple.jpg'),
-    images: [
-      require('@/assets/images/portfolio/sunset_couple.jpg'),
-      require('@/assets/images/portfolio/palace_wedding.jpg'),
-    ],
-  },
-];
 
 interface MoodboardsViewProps {
   isOpen: boolean;
   onClose: () => void;
-  selectedBoardId?: string | null;
+  selectedBoardId?: string | number | null;
+  inspirations?: Moodboard[];
 }
 
-export default function MoodboardsView({ isOpen, onClose, selectedBoardId }: MoodboardsViewProps) {
+export default function MoodboardsView({ isOpen, onClose, selectedBoardId, inspirations }: MoodboardsViewProps) {
   const insets = useSafeAreaInsets();
   const [activeBoard, setActiveBoard] = useState<Moodboard | null>(null);
   const [fetchedBoards, setFetchedBoards] = useState<Moodboard[]>([]);
 
-  // Fetch dynamic inspirations from backend API
+  // Fetch dynamic inspirations from backend API if not passed via props
   React.useEffect(() => {
     if (isOpen) {
-      fetch('https://www.mistyvisuals.com/api/app/inspirations')
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data) && data.length > 0) {
-            setFetchedBoards(data);
-          }
-        })
-        .catch(() => {
-          /* Keep fallback static boards on error/offline */
-        });
+      if (inspirations && inspirations.length > 0) {
+        setFetchedBoards(inspirations);
+      } else {
+        fetch('https://www.mistyvisuals.com/api/app/inspirations')
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data)) {
+              setFetchedBoards(data);
+            }
+          })
+          .catch(() => {});
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, inspirations]);
 
-  const displayBoards = fetchedBoards.length > 0 ? fetchedBoards : CURATED_MOODBOARDS;
+  const displayBoards = fetchedBoards.length > 0 ? fetchedBoards : (inspirations || []);
 
   // Set default active board on open if specified
   React.useEffect(() => {
     if (isOpen) {
-      if (selectedBoardId) {
-        const found = displayBoards.find((b) => b.id === selectedBoardId);
-        setActiveBoard(found || displayBoards[0]);
+      if (selectedBoardId !== null && selectedBoardId !== undefined) {
+        const found = displayBoards.find((b) => String(b.id) === String(selectedBoardId));
+        setActiveBoard(found || displayBoards[0] || null);
       }
     }
   }, [isOpen, selectedBoardId, displayBoards]);
@@ -189,26 +132,35 @@ export default function MoodboardsView({ isOpen, onClose, selectedBoardId }: Moo
               </Text>
             </View>
 
-            <View style={styles.boardsList}>
-              {displayBoards.map((board) => (
-                <Pressable
-                  key={board.id}
-                  style={styles.boardCard}
-                  onPress={() => setActiveBoard(board)}
-                >
-                  <Image
-                    source={typeof board.coverImage === 'string' ? { uri: board.coverImage } : board.coverImage}
-                    style={styles.boardCover}
-                  />
-                  <View style={styles.boardOverlay} />
-                  <View style={styles.boardCardContent}>
-                    <Text style={styles.boardCardTitle}>{board.title}</Text>
-                    {board.subtitle ? <Text style={styles.boardCardSub}>{board.subtitle}</Text> : null}
-                    <Text style={styles.boardCardCta}>Explore Collection →</Text>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
+            {displayBoards.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>No published inspiration collections available.</Text>
+              </View>
+            ) : (
+              <View style={styles.boardsList}>
+                {displayBoards.map((board) => {
+                  const coverSrc = board.coverImageMobile || board.coverImage;
+                  return (
+                    <Pressable
+                      key={board.id}
+                      style={styles.boardCard}
+                      onPress={() => setActiveBoard(board)}
+                    >
+                      <Image
+                        source={typeof coverSrc === 'string' ? { uri: coverSrc } : coverSrc}
+                        style={styles.boardCover}
+                      />
+                      <View style={styles.boardOverlay} />
+                      <View style={styles.boardCardContent}>
+                        <Text style={styles.boardCardTitle}>{board.title}</Text>
+                        {board.subtitle ? <Text style={styles.boardCardSub}>{board.subtitle}</Text> : null}
+                        <Text style={styles.boardCardCta}>Explore Collection →</Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
           </ScrollView>
         )}
       </View>
@@ -239,143 +191,162 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 2,
-    color: '#8c867e',
+    color: '#1a1a1a',
   },
   headerTitle: {
     fontFamily: 'System',
     fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 3,
-    color: '#1c1a18',
-    textAlign: 'center',
+    fontWeight: '600',
+    letterSpacing: 2,
+    color: '#8c867e',
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
     paddingBottom: 60,
   },
-  backLink: {
-    marginBottom: 16,
-  },
-  backLinkText: {
-    fontFamily: 'System',
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 1.5,
-    color: '#a07850',
-  },
   introContainer: {
-    marginBottom: 24,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 24,
   },
   introTag: {
     fontFamily: 'System',
     fontSize: 10,
     fontWeight: '600',
-    letterSpacing: 3,
-    color: '#a07850',
-    marginBottom: 6,
+    letterSpacing: 2,
+    color: '#9a7d52',
+    marginBottom: 8,
   },
   introHeading: {
-    fontFamily: 'serif',
+    fontFamily: 'System',
     fontSize: 26,
     fontWeight: '300',
-    color: '#1c1a18',
+    color: '#1a1a1a',
     marginBottom: 8,
   },
   introSub: {
-    fontFamily: 'serif',
-    fontSize: 14,
-    color: '#60646c',
+    fontFamily: 'System',
+    fontSize: 13,
     lineHeight: 20,
+    color: '#666666',
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontFamily: 'System',
+    fontSize: 13,
+    color: '#999999',
   },
   boardsList: {
+    paddingHorizontal: 20,
     gap: 20,
   },
   boardCard: {
-    width: '100%',
-    height: 200,
-    borderRadius: 2,
+    height: 220,
+    borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
+    backgroundColor: '#1a1a1a',
   },
   boardCover: {
     width: '100%',
     height: '100%',
+    position: 'absolute',
     resizeMode: 'cover',
   },
   boardOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(28, 26, 24, 0.45)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   boardCardContent: {
     position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
   },
   boardCardTitle: {
-    fontFamily: 'serif',
-    fontSize: 24,
-    fontWeight: '300',
+    fontFamily: 'System',
+    fontSize: 22,
+    fontWeight: '400',
     color: '#ffffff',
     marginBottom: 4,
   },
   boardCardSub: {
     fontFamily: 'System',
-    fontSize: 11,
-    color: '#e0d8ce',
-    letterSpacing: 1,
-    marginBottom: 10,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 12,
   },
   boardCardCta: {
     fontFamily: 'System',
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 1.5,
-    color: '#ffffff',
+    color: '#e2d5c3',
+  },
+  backLink: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 12,
+  },
+  backLinkText: {
+    fontFamily: 'System',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    color: '#9a7d52',
   },
   boardCategory: {
+    paddingHorizontal: 24,
     fontFamily: 'System',
     fontSize: 10,
     fontWeight: '600',
-    letterSpacing: 3,
-    color: '#a07850',
+    letterSpacing: 2,
+    color: '#8c867e',
     marginBottom: 6,
   },
   boardTitle: {
-    fontFamily: 'serif',
-    fontSize: 30,
+    paddingHorizontal: 24,
+    fontFamily: 'System',
+    fontSize: 28,
     fontWeight: '300',
-    color: '#1c1a18',
-    marginBottom: 4,
+    color: '#1a1a1a',
+    marginBottom: 6,
   },
   boardSubtitle: {
+    paddingHorizontal: 24,
     fontFamily: 'System',
-    fontSize: 12,
-    color: '#8c867e',
-    letterSpacing: 1,
+    fontSize: 14,
+    color: '#666666',
     marginBottom: 12,
   },
   boardDescription: {
-    fontFamily: 'serif',
-    fontSize: 14,
-    lineHeight: 22,
-    color: '#3a3630',
-    marginBottom: 20,
+    paddingHorizontal: 24,
+    fontFamily: 'System',
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#444444',
   },
   divider: {
-    width: '100%',
     height: 1,
     backgroundColor: '#f0ede8',
-    marginBottom: 24,
+    marginHorizontal: 24,
+    marginVertical: 24,
   },
   gridContainer: {
-    gap: 16,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
   },
   gridCard: {
-    width: '100%',
-    height: 240,
-    backgroundColor: '#f9fafb',
+    width: (width - 52) / 2,
+    aspectRatio: 3 / 4,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#f5f5f5',
   },
   gridImage: {
     width: '100%',

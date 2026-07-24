@@ -50,7 +50,7 @@ import {
 // Sub-components for reading/exploring
 import FeaturedStoryView from '../components/home/FeaturedStoryView';
 import ArticleView from '../components/home/ArticleView';
-import MoodboardsView, { CURATED_MOODBOARDS } from '../components/home/MoodboardsView';
+import MoodboardsView from '../components/home/MoodboardsView';
 import AllStoriesView from '../components/home/AllStoriesView';
 import JoinCelebrationModal from '../components/JoinCelebrationModal';
 import {
@@ -85,6 +85,7 @@ export default function HomeScreen() {
 
   const [websiteStories, setWebsiteStories] = useState<any[]>([]);
   const [websiteFilms, setWebsiteFilms] = useState<any[]>([]);
+  const [websiteInspirations, setWebsiteInspirations] = useState<any[]>([]);
   const [likedPhotos, setLikedPhotos] = useState<any[]>([]);
 
   // Hero seen data: tracks first-discovery time + last-seen count per event slug
@@ -322,6 +323,18 @@ export default function HomeScreen() {
         }
       } catch (e) {
         console.warn('Failed to fetch website films:', e);
+      }
+
+      try {
+        const inspoRes = await fetch('https://www.mistyvisuals.com/api/app/inspirations');
+        if (inspoRes.ok) {
+          const inspoData = await inspoRes.json();
+          if (Array.isArray(inspoData)) {
+            setWebsiteInspirations(inspoData);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to fetch website inspirations:', e);
       }
     };
     fetchWebsiteData();
@@ -874,38 +887,46 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── 6. Moodboards (Preview section with View All) ───────────────── */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionHeader}>INSPIRATIONS</Text>
-            <Pressable onPress={() => setIsMoodboardsOpen(true)}>
-              <Text style={styles.viewAllText}>View All →</Text>
-            </Pressable>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-            {CURATED_MOODBOARDS.slice(0, 4).map((board) => (
-              <Pressable
-                key={board.id}
-                style={styles.moodboardCard}
-                onPress={() => {
-                  setSelectedMoodboardId(board.id);
-                  setIsMoodboardsOpen(true);
-                }}
-              >
-                <Image source={board.coverImage} style={styles.moodboardImage} />
-                <LinearGradient
-                  colors={['transparent', 'rgba(18, 16, 14, 0.15)', 'rgba(18, 16, 14, 0.85)']}
-                  locations={[0, 0.45, 1]}
-                  style={styles.featuredOverlay}
-                />
-                <View style={styles.moodboardContent}>
-                  <Text style={styles.moodboardTitle}>{board.title}</Text>
-                  <Text style={styles.moodboardSub}>{board.subtitle}</Text>
-                </View>
+        {/* ── 6. Inspirations (Preview section with View All — hidden if 0 published) ── */}
+        {websiteInspirations.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionHeader}>INSPIRATIONS</Text>
+              <Pressable onPress={() => setIsMoodboardsOpen(true)}>
+                <Text style={styles.viewAllText}>View All →</Text>
               </Pressable>
-            ))}
-          </ScrollView>
-        </View>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+              {websiteInspirations.slice(0, 6).map((board) => {
+                const coverSrc = board.coverImageMobile || board.coverImage;
+                return (
+                  <Pressable
+                    key={board.id}
+                    style={styles.moodboardCard}
+                    onPress={() => {
+                      setSelectedMoodboardId(board.id);
+                      setIsMoodboardsOpen(true);
+                    }}
+                  >
+                    <Image
+                      source={typeof coverSrc === 'string' ? { uri: coverSrc } : coverSrc}
+                      style={styles.moodboardImage}
+                    />
+                    <LinearGradient
+                      colors={['transparent', 'rgba(18, 16, 14, 0.15)', 'rgba(18, 16, 14, 0.85)']}
+                      locations={[0, 0.45, 1]}
+                      style={styles.featuredOverlay}
+                    />
+                    <View style={styles.moodboardContent}>
+                      <Text style={styles.moodboardTitle}>{board.title}</Text>
+                      {board.subtitle ? <Text style={styles.moodboardSub}>{board.subtitle}</Text> : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         {/* ── 7. Circle Journal ─────────────────────────────────────────────
              Hidden until real blog posts are available via API.
@@ -1020,6 +1041,7 @@ export default function HomeScreen() {
         isOpen={isMoodboardsOpen}
         onClose={() => setIsMoodboardsOpen(false)}
         selectedBoardId={selectedMoodboardId}
+        inspirations={websiteInspirations}
       />
 
       <AllStoriesView
