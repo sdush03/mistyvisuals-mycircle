@@ -434,14 +434,16 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
         resetZoom();
       } else {
         const targetScale = 2.5;
+        const imgWidth = width;
+        const imgHeight = Math.min(screenHeight, imgWidth * 1.33);
         const centerX = width / 2;
         const centerY = screenHeight / 2;
 
         const targetX = (centerX - e.x) * (targetScale - 1);
         const targetY = (centerY - e.y) * (targetScale - 1);
 
-        const maxTx = Math.max(0, (width * (targetScale - 1)) / 2);
-        const maxTy = Math.max(0, (screenHeight * (targetScale - 1)) / 2);
+        const maxTx = Math.max(0, (imgWidth * (targetScale - 1)) / 2);
+        const maxTy = Math.max(0, (imgHeight * (targetScale - 1)) / 2);
 
         const clampedX = Math.min(Math.max(targetX, -maxTx), maxTx);
         const clampedY = Math.min(Math.max(targetY, -maxTy), maxTy);
@@ -864,6 +866,14 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   }, []);
 
   React.useEffect(() => {
+    return () => {
+      if (heartPopTimeoutRef.current) clearTimeout(heartPopTimeoutRef.current);
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      if (autoHideTimeoutRef.current) clearTimeout(autoHideTimeoutRef.current);
+    };
+  }, []);
+
+  React.useEffect(() => {
     if (isOpen) {
       setActiveTab('ALL');
       setActiveImageIndex(null);
@@ -1233,9 +1243,9 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                       scrollEnabled={!isZoomed}
                       showsHorizontalScrollIndicator={false}
                       initialScrollIndex={activeImageIndex ?? 0}
-                      windowSize={7}
-                      maxToRenderPerBatch={5}
-                      initialNumToRender={3}
+                      windowSize={3}
+                      maxToRenderPerBatch={2}
+                      initialNumToRender={1}
                       getItemLayout={(data, index) => ({
                         length: width + 18,
                         offset: (width + 18) * index,
@@ -1338,7 +1348,12 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
                         return (
                           <View style={{ alignItems: 'center', width: '100%' }}>
                             {/* High-Fashion Format Counter: e.g. "01 // 24" */}
-                            <View style={styles.lightboxCounterContainer}>
+                            <View 
+                              style={styles.lightboxCounterContainer}
+                              accessible={true}
+                              accessibilityRole="text"
+                              accessibilityLabel={`Photo ${activeImageIndex !== null ? activeImageIndex + 1 : 1} of ${filteredGalleryImages.length}`}
+                            >
                               <Text style={styles.lightboxCounterCurrent}>
                                 {String(activeImageIndex !== null ? activeImageIndex + 1 : 1).padStart(2, '0')}
                               </Text>
