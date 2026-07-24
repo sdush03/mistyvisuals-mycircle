@@ -161,7 +161,6 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
   expandProgress,
   heartPopAnimatedStyle,
 }: LightboxImageItemProps) {
-  const [isZoomedState, setIsZoomedState] = useState(false);
   const pinchScale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const zoomTranslateX = useSharedValue(0);
@@ -171,6 +170,17 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
 
   const lastPinchTime = useSharedValue(0);
 
+  // Single Authoritative State Synchronizer between UI thread pinchScale & React viewer mode
+  useAnimatedReaction(
+    () => pinchScale.value > 1.01,
+    (isZoomed, previous) => {
+      if (isZoomed !== previous) {
+        runOnJS(onZoomChange)(isZoomed);
+      }
+    },
+    [onZoomChange]
+  );
+
   const resetZoom = useCallback(() => {
     'worklet';
     savedScale.value = 1;
@@ -179,9 +189,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     zoomTranslateX.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) });
     zoomTranslateY.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) });
     pinchScale.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.quad) });
-    runOnJS(setIsZoomedState)(false);
-    runOnJS(onZoomChange)(false);
-  }, [onZoomChange]);
+  }, []);
 
 
   const dragTranslateY = useSharedValue(0);
@@ -215,8 +223,6 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
         initialDist.value = Math.hypot(p2.x - p1.x, p2.y - p1.y);
         initialScaleOnPinch.value = pinchScale.value;
         manager.activate();
-        runOnJS(setIsZoomedState)(true);
-        runOnJS(onZoomChange)(true);
       }
     })
     .onTouchesMove((e, manager) => {
@@ -394,7 +400,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     .maxDuration(250)
     .onEnd(() => {
       'worklet';
-      if (pinchScale.value > 1.05 || isZoomedState) return;
+      if (pinchScale.value > 1.01) return;
       runOnJS(onToggleControls)();
     });
 
@@ -403,7 +409,7 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
     .maxDelay(250)
     .onEnd((e) => {
       'worklet';
-      if (pinchScale.value > 1.05) {
+      if (pinchScale.value > 1.01) {
         resetZoom();
       } else {
         const targetScale = 2.5;
@@ -426,8 +432,6 @@ const LightboxImageItem = React.memo(function LightboxImageItem({
           if (finished) {
             savedZoomX.value = clampedX;
             savedZoomY.value = clampedY;
-            runOnJS(setIsZoomedState)(true);
-            runOnJS(onZoomChange)(true);
           }
         });
       }
