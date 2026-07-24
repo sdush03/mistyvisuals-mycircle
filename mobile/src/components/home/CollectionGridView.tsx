@@ -37,6 +37,7 @@ export interface CollectionItem {
   location?: string;
   subtext?: string;
   coverImage?: any;
+  horizontalCoverImage?: any;
   rawItem: any;
 }
 
@@ -214,12 +215,12 @@ export default function CollectionGridView({
                         style={styles.featuredCard}
                         onPress={() => onSelectItem(featuredItem)}
                       >
-                        {featuredItem.coverImage ? (
+                        {(featuredItem.horizontalCoverImage || featuredItem.coverImage) ? (
                           <Image
                             source={
-                              typeof featuredItem.coverImage === 'string'
-                                ? { uri: featuredItem.coverImage }
-                                : featuredItem.coverImage
+                              typeof (featuredItem.horizontalCoverImage || featuredItem.coverImage) === 'string'
+                                ? { uri: featuredItem.horizontalCoverImage || featuredItem.coverImage }
+                                : (featuredItem.horizontalCoverImage || featuredItem.coverImage)
                             }
                             style={styles.featuredCover}
                           />

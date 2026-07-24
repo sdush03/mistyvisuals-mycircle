@@ -18,10 +18,16 @@ export default function AllStoriesView({
 }: AllStoriesViewProps) {
   const collectionItems: CollectionItem[] = React.useMemo(() => {
     return stories.map((story) => {
-      const coverUri =
-        story.cover_image_mobile_url ||
+      const horizontalCover =
         story.cover_image_url ||
+        story.cover_image_mobile_url ||
         story.grid_image_url ||
+        (typeof story.coverImage === 'string' ? story.coverImage : story.coverImage?.uri);
+
+      const verticalCover =
+        story.cover_image_mobile_url ||
+        story.grid_image_url ||
+        story.cover_image_url ||
         (typeof story.coverImage === 'string' ? story.coverImage : story.coverImage?.uri);
 
       return {
@@ -29,7 +35,8 @@ export default function AllStoriesView({
         title: story.title,
         category: story.category || 'WEDDING',
         location: story.location,
-        coverImage: coverUri,
+        coverImage: verticalCover,
+        horizontalCoverImage: horizontalCover,
         rawItem: story,
       };
     });

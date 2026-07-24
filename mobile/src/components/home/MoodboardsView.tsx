@@ -104,7 +104,8 @@ export default function MoodboardsView({
 
   const collectionItems: CollectionItem[] = React.useMemo(() => {
     return displayBoards.map((board) => {
-      const coverSrc = board.coverImageMobile || board.coverImage || (board.images && board.images[0]);
+      const horizontalCover = board.coverImage || board.coverImageMobile || (board.images && board.images[0]);
+      const verticalCover = board.coverImageMobile || board.coverImage || (board.images && board.images[0]);
       const photoCount = Array.isArray(board.images) ? board.images.length : 0;
       const subtext = photoCount > 0 ? `${photoCount} ${photoCount === 1 ? 'Photo' : 'Photos'} →` : 'Explore Collection →';
 
@@ -113,7 +114,8 @@ export default function MoodboardsView({
         title: board.title,
         category: board.category,
         subtext: subtext,
-        coverImage: coverSrc,
+        coverImage: verticalCover,
+        horizontalCoverImage: horizontalCover,
         rawItem: board,
       };
     });
