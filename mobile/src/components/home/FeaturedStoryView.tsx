@@ -869,11 +869,10 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 
     toastTimeoutRef.current = setTimeout(() => {
       toastTranslateY.value = withTiming(-150, { duration: 220, easing: Easing.in(Easing.quad) });
-      toastOpacity.value = withTiming(0, { duration: 200 }, (finished) => {
-        if (finished) {
-          runOnJS(setToastMessage)(null);
-        }
-      });
+      toastOpacity.value = withTiming(0, { duration: 200 });
+      setTimeout(() => {
+        setToastMessage(null);
+      }, 250);
     }, 2200);
   }, [resetAutoHideTimer]);
 
