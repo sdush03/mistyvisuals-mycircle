@@ -68,8 +68,13 @@ export default function CollectionGridView({
   const insets = useSafeAreaInsets();
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [activeStoryModalItem, setActiveStoryModalItem] = useState<any | null>(null);
+  const isClickBusyRef = useRef(false);
 
   const handleItemClick = async (item: CollectionItem) => {
+    if (isClickBusyRef.current || activeStoryModalItem !== null) return;
+    isClickBusyRef.current = true;
+    setTimeout(() => { isClickBusyRef.current = false; }, 500);
+
     const raw = item.rawItem;
     if (!raw) return;
 
@@ -280,6 +285,10 @@ export default function CollectionGridView({
   }));
 
   const selectCategoryWithPush = React.useCallback((catName: string) => {
+    if (isClickBusyRef.current) return;
+    isClickBusyRef.current = true;
+    setTimeout(() => { isClickBusyRef.current = false; }, 400);
+
     categoryTransitionTranslateX.value = width * 0.35;
     categoryTransitionOpacity.value = 0.5;
     setSelectedCategory(catName);

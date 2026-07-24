@@ -371,7 +371,13 @@ export default function HomeScreen() {
     fetchUserEvents();
   }, [fetchUserEvents]);
 
+  const isGlobalClickBusyRef = useRef(false);
+
   const handleStoryPress = async (story: any) => {
+    if (isGlobalClickBusyRef.current || selectedStory !== null) return;
+    isGlobalClickBusyRef.current = true;
+    setTimeout(() => { isGlobalClickBusyRef.current = false; }, 600);
+
     // 0ms instant load if pre-cached in background
     if (story && story.slug && storyDetailsCacheRef.current[story.slug]) {
       setSelectedStory(storyDetailsCacheRef.current[story.slug]);
@@ -1140,6 +1146,9 @@ export default function HomeScreen() {
                     key={card.name || index}
                     style={styles.vibeGridCard}
                     onPress={() => {
+                      if (isGlobalClickBusyRef.current || isAllStoriesOpen) return;
+                      isGlobalClickBusyRef.current = true;
+                      setTimeout(() => { isGlobalClickBusyRef.current = false; }, 500);
                       setSelectedVibe(card.name);
                       setIsAllStoriesOpen(true);
                     }}
@@ -1167,6 +1176,9 @@ export default function HomeScreen() {
             <Pressable 
               style={styles.viewMoreGridBtn}
               onPress={() => {
+                if (isGlobalClickBusyRef.current || isAllStoriesOpen) return;
+                isGlobalClickBusyRef.current = true;
+                setTimeout(() => { isGlobalClickBusyRef.current = false; }, 500);
                 setSelectedVibe('All');
                 setIsAllStoriesOpen(true);
               }}
