@@ -27,6 +27,7 @@ import {
   FONT_JOST_MEDIUM,
   FONT_JOST_SEMIBOLD,
 } from '../../constants/fonts';
+import FilmPlayerModal from './FilmPlayerModal';
 
 const { width } = Dimensions.get('window');
 
@@ -64,6 +65,14 @@ export default function CollectionGridView({
 }: CollectionGridViewProps) {
   const insets = useSafeAreaInsets();
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
+  const [activeStoryModalItem, setActiveStoryModalItem] = useState<any | null>(null);
+
+  const handleItemClick = (item: CollectionItem) => {
+    if (onSelectItem) {
+      onSelectItem(item);
+    }
+    setActiveStoryModalItem(item.rawItem);
+  };
 
   const translateX = useSharedValue(0);
   const touchStartX = useSharedValue(0);
@@ -322,7 +331,7 @@ export default function CollectionGridView({
                     <View style={styles.featuredSection}>
                       <Pressable
                         style={styles.featuredCard}
-                        onPress={() => onSelectItem(featuredItem)}
+                        onPress={() => handleItemClick(featuredItem)}
                       >
                         {(featuredItem.horizontalCoverImage || featuredItem.coverImage) ? (
                           <Image
@@ -375,7 +384,7 @@ export default function CollectionGridView({
                           <Pressable
                             key={item.id}
                             style={styles.card}
-                            onPress={() => onSelectItem(item)}
+                            onPress={() => handleItemClick(item)}
                           >
                             {imageSource ? (
                               <Image source={imageSource} style={styles.cover} />
@@ -403,6 +412,12 @@ export default function CollectionGridView({
                 </>
               )}
             </ScrollView>
+
+            <FilmPlayerModal
+              isOpen={activeStoryModalItem !== null}
+              onClose={() => setActiveStoryModalItem(null)}
+              film={activeStoryModalItem}
+            />
           </Animated.View>
         </GestureDetector>
       </GestureHandlerRootView>
