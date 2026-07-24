@@ -57,6 +57,8 @@ interface FeaturedStoryViewProps {
 
 export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedStoryViewProps) {
   const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
+  // Shared value mirror of activeImageIndex for reliable worklet access (JS state is not safe in worklets)
+  const isLightboxOpen = useSharedValue(false);
   const [activeTab, setActiveTab] = useState<string>('ALL');
 
   const galleryImages = React.useMemo(() => {
@@ -349,6 +351,11 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     };
   }, []);
 
+  // Sync isLightboxOpen shared value whenever JS activeImageIndex state changes
+  React.useEffect(() => {
+    isLightboxOpen.value = activeImageIndex !== null;
+  }, [activeImageIndex]);
+
   // Native iOS Left-Edge Swipe Back Gesture
   const touchStartedOnLeftEdge = useSharedValue(false);
   const screenSwipeX = useSharedValue(0);
@@ -377,22 +384,23 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   }, [isOpen, handleCloseScreen]);
 
   const edgeSwipeGesture = Gesture.Pan()
-    .activeOffsetX(15)
-    .failOffsetY([-25, 25])
+    .activeOffsetX(10)
+    .failOffsetY([-40, 40])
     .onStart((e) => {
       'worklet';
-      touchStartedOnLeftEdge.value = e.x <= 45;
+      // Only activate for touches starting on the left edge, and only when lightbox is closed
+      touchStartedOnLeftEdge.value = e.x <= 50 && !isLightboxOpen.value;
     })
     .onUpdate((e) => {
       'worklet';
-      if (!touchStartedOnLeftEdge.value || activeImageIndex !== null) return;
+      if (!touchStartedOnLeftEdge.value) return;
       if (e.translationX > 0) {
         screenSwipeX.value = e.translationX;
       }
     })
     .onEnd((e) => {
       'worklet';
-      if (!touchStartedOnLeftEdge.value || activeImageIndex !== null) return;
+      if (!touchStartedOnLeftEdge.value) return;
       if (e.translationX > width * 0.25 || e.velocityX > 400) {
         screenSwipeX.value = withTiming(width, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
           if (finished) {
