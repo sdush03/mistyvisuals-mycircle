@@ -1015,7 +1015,7 @@ export default function HomeScreen() {
                 style={styles.viewMoreGridBtn}
                 onPress={() => setIsAllStoriesOpen(true)}
               >
-                <Text style={styles.viewMoreGridText}>View More →</Text>
+                <Text style={styles.viewAllText}>View More →</Text>
               </Pressable>
             )}
           </View>
@@ -1429,20 +1429,9 @@ const styles = StyleSheet.create({
   },
   viewMoreGridBtn: {
     alignSelf: 'center',
-    marginTop: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    borderRadius: 20,
-    backgroundColor: '#fbfaf8',
-    borderWidth: 1,
-    borderColor: '#e8e4de',
-  },
-  viewMoreGridText: {
-    fontFamily: FONT_JOST_MEDIUM,
-    fontSize: 11,
-    letterSpacing: 2,
-    color: '#1c1a18',
-    textTransform: 'uppercase',
+    marginTop: 18,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
   },
   vibeGalleryGrid: {
     flexDirection: 'row',
