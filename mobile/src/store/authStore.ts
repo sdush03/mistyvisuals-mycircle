@@ -13,6 +13,7 @@ export interface GuestProfile {
   selfieUrl?: string | null;
   selfieGuestId?: number | null;
   displayRole?: 'BRIDE' | 'GROOM' | 'GUEST';
+  hasFullAccess?: boolean;
 }
 
 interface AuthState {

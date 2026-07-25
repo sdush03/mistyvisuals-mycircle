@@ -309,19 +309,31 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     fetchPhotos();
   }, [eventSlug]);
 
-  // Dynamic Available Tabs (Matching website logic 1:1)
+  const hasFullAccess = profile?.hasFullAccess ?? true;
+  const favoritesCount = React.useMemo(() => allPhotos.filter((p: any) => p.isLiked).length, [allPhotos]);
+
+  const highlightsCount = React.useMemo(() => {
+    return allPhotos.filter((p: any) => p.tabName && p.tabName.trim().toUpperCase() === 'HIGHLIGHTS').length;
+  }, [allPhotos]);
+
+  // Dynamic Available Tabs (Matching website ordering and access rules 1:1)
   const availableTabs = React.useMemo(() => {
     const list: string[] = [];
 
-    // 1. Show 'MY PHOTOS' if user has face-matched photos
-    if (photos.length > 0) {
-      list.push('MY PHOTOS');
+    // 1. ALL Tab (Only visible to Full Access guests)
+    if (hasFullAccess) {
+      list.push('ALL');
     }
 
-    // 2. Always include 'ALL'
-    list.push('ALL');
+    // 2. MY PHOTOS Tab (Always visible)
+    list.push('MY PHOTOS');
 
-    // 3. Add ceremony/event tabs from eventDetails.tabs (from DB)
+    // 3. MY FAVOURITES Tab (Only visible if favorites count > 0)
+    if (favoritesCount > 0) {
+      list.push('MY FAVOURITES');
+    }
+
+    // 4. Dynamic Ceremony/Event Tabs from eventDetails.tabs (from DB)
     const ceremonyTabsSet = new Set<string>();
     if (Array.isArray(eventDetails?.tabs)) {
       eventDetails.tabs.forEach((t: string) => {
@@ -339,30 +351,42 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     });
 
     ceremonyTabsSet.forEach((tab) => {
-      if (tab !== 'ALL' && tab !== 'MY PHOTOS' && !list.includes(tab)) {
-        list.push(tab);
+      if (tab !== 'ALL' && tab !== 'MY PHOTOS' && tab !== 'MY FAVOURITES') {
+        if (hasFullAccess || tab === 'HIGHLIGHTS') {
+          if (!list.includes(tab)) {
+            list.push(tab);
+          }
+        }
       }
     });
 
     return list;
-  }, [photos.length, eventDetails?.tabs, allPhotos]);
+  }, [hasFullAccess, favoritesCount, eventDetails?.tabs, allPhotos]);
 
-  // Default landing tab logic (matching website 1:1):
-  // Land on 'MY PHOTOS' if matched photos exist, else land on 'ALL'
+  // Exact Landing Tab Rules:
+  // - Full Access: Lands on ALL
+  // - Partial Access: If highlights.count > 0 -> HIGHLIGHTS, else -> MY PHOTOS
   useEffect(() => {
     if (!isLoading) {
-      if (photos.length > 0) {
-        setActiveTab('MY PHOTOS');
-      } else {
+      if (hasFullAccess) {
         setActiveTab('ALL');
+      } else {
+        if (highlightsCount > 0) {
+          setActiveTab('HIGHLIGHTS');
+        } else {
+          setActiveTab('MY PHOTOS');
+        }
       }
     }
-  }, [isLoading, photos.length]);
+  }, [isLoading, hasFullAccess, highlightsCount]);
 
   const activeList = React.useMemo(() => {
     const currentUpper = activeTab.toUpperCase();
     if (currentUpper === 'MY PHOTOS') {
       return photos;
+    }
+    if (currentUpper === 'MY FAVOURITES') {
+      return allPhotos.filter((p: any) => p.isLiked);
     }
     if (currentUpper === 'ALL') {
       return allPhotos;
@@ -572,6 +596,8 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
                     let tabCount: number | null = null;
                     if (tabName === 'MY PHOTOS') {
                       tabCount = photos.length;
+                    } else if (tabName === 'MY FAVOURITES') {
+                      tabCount = favoritesCount;
                     } else if (tabName === 'ALL') {
                       tabCount = totalAllPhotosCount !== null ? totalAllPhotosCount : allPhotos.length;
                     } else {
@@ -611,7 +637,9 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
                 <View style={styles.emptyContainer}>
                   <Text style={styles.emptyText}>
                     {activeTab.toUpperCase() === 'MY PHOTOS'
-                      ? "We couldn't find any photos matched with your face yet. Switch to ALL or ceremony tabs to view the full gallery!"
+                      ? "We couldn't find any photos matched with your face yet. Switch to ceremony tabs to view the gallery!"
+                      : activeTab.toUpperCase() === 'MY FAVOURITES'
+                      ? "You haven't liked any photos yet. Tap the heart icon on any photo to save it here!"
                       : `No photos found in ${activeTab}.`}
                   </Text>
                 </View>
