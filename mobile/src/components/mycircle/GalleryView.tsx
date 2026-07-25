@@ -54,6 +54,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const [totalAllPhotosCount, setTotalAllPhotosCount] = useState<number | null>(null);
   const [eventDetails, setEventDetailsData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<string>('ALL');
+  const [renderLimit, setRenderLimit] = useState<number>(40);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [allPhotosOffset, setAllPhotosOffset] = useState(0);
@@ -372,12 +373,21 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     });
   }, [activeTab, photos, allPhotos]);
 
+  // Progressive render limit matching FeaturedStoryView 1:1
+  useEffect(() => {
+    setRenderLimit(40);
+    const timer = setTimeout(() => setRenderLimit(Infinity as any), 150);
+    return () => clearTimeout(timer);
+  }, [activeTab]);
+
   // Shortest Column Height Balancing — EXACTLY matching FeaturedStoryView
   const { column0, column1 } = React.useMemo(() => {
     const cols: [any[], any[]] = [[], []];
     const colHeights = [0, 0];
 
-    activeList.forEach((photo: any, index: number) => {
+    const visibleList = activeList.slice(0, renderLimit);
+
+    visibleList.forEach((photo: any, index: number) => {
       const realAspect = photo.width && photo.height && Number(photo.height) > 0
         ? Number(photo.width) / Number(photo.height)
         : (photo.aspectRatio || null);
@@ -406,7 +416,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     });
 
     return { column0: cols[0], column1: cols[1] };
-  }, [activeList]);
+  }, [activeList, renderLimit]);
 
   // Bounds measurement for smooth Lightbox opening & background page auto-scrolling
   const getBoundsForIndex = useCallback((idx: number, callback: (bounds: LightboxBounds) => void) => {
