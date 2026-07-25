@@ -11,6 +11,7 @@ import {
   ScrollView,
   Dimensions,
   Platform,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -58,6 +59,7 @@ export default function JoinCelebrationModal({
   const [modalVisible, setModalVisible] = useState(visible);
   const backdropOpacity = useSharedValue(0);
   const sheetTranslateY = useSharedValue(height);
+  const keyboardOffset = useSharedValue(0);
 
   useEffect(() => {
     if (visible) {
@@ -79,6 +81,33 @@ export default function JoinCelebrationModal({
       );
     }
   }, [visible]);
+
+  // Subtly nudge the sheet up when keyboard appears
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const onShow = (e: any) => {
+      // Shift up so buttons land exactly 5px above the keyboard.
+      // The sheet's bottom padding (safe-area space) can sit behind the keyboard.
+      const sheetPaddingBottom = Platform.OS === 'ios' ? 36 : 24;
+      const nudge = e.endCoordinates.height - sheetPaddingBottom - 20;
+      keyboardOffset.value = withTiming(-nudge, {
+        duration: e.duration || 260,
+        easing: Easing.out(Easing.poly(3)),
+      });
+    };
+    const onHide = (e: any) => {
+      keyboardOffset.value = withTiming(0, {
+        duration: e.duration || 220,
+        easing: Easing.in(Easing.poly(3)),
+      });
+    };
+
+    const showSub = Keyboard.addListener(showEvent, onShow);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
 
   const loadRecentEvents = async () => {
     try {
@@ -200,7 +229,7 @@ export default function JoinCelebrationModal({
   }));
 
   const sheetAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: sheetTranslateY.value }],
+    transform: [{ translateY: sheetTranslateY.value + keyboardOffset.value }],
   }));
 
   if (!modalVisible) return null;
@@ -212,14 +241,20 @@ export default function JoinCelebrationModal({
       transparent={true}
       onRequestClose={handleClose}
     >
-      <View style={styles.modalOverlayContainer}>
-        {/* Fade-in dark backdrop */}
+      {/* Root wrapper fills the entire screen */}
+      <View style={styles.modalRoot}>
+        {/* Fade-in dark backdrop — absolute full-screen layer, independent of sheet */}
         <Animated.View style={[styles.modalBackdrop, backdropAnimatedStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
         </Animated.View>
 
-        {/* Slide-up lower sheet modal */}
-        <Animated.View style={[styles.modalCardContainer, sheetAnimatedStyle]}>
+        {/* White fill — covers the dark backdrop below the sheet when keyboard nudges it up */}
+        <View style={styles.sheetBottomFill} />
+
+        {/* Bottom-anchored container — only the sheet card lives here */}
+        <View style={styles.modalOverlayContainer}>
+          {/* Slide-up lower sheet modal */}
+          <Animated.View style={[styles.modalCardContainer, sheetAnimatedStyle]}>
           {/* Header */}
           <View style={styles.modalHeader}>
             <View>
@@ -329,20 +364,36 @@ export default function JoinCelebrationModal({
               )}
             </ScrollView>
           )}
-        </Animated.View>
+          </Animated.View>
+        </View>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalRoot: {
+    flex: 1,
+  },
   modalOverlayContainer: {
     flex: 1,
     justifyContent: 'flex-end',
   },
   modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width,
+    height,
     backgroundColor: 'rgba(18, 16, 14, 0.75)',
+  },
+  sheetBottomFill: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 120,
+    backgroundColor: '#ffffff',
   },
   modalCardContainer: {
     backgroundColor: '#ffffff',

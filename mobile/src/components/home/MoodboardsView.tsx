@@ -183,9 +183,9 @@ export default function MoodboardsView({
     <CollectionGridView
       isOpen={isOpen}
       onClose={onClose}
-      headerTitle="Inspiration"
-      headerDescription="Curated moodboards, aesthetic details and inspiration for your celebration."
-      sectionHeadingPrefix="COLLECTIONS"
+      headerTitle="Aesthetics"
+      headerDescription="Curated moods, visual details and fine art inspiration. Browse by vibe to find the aesthetic that speaks to your celebration."
+      sectionHeadingPrefix="BROWSE BY VIBE"
       items={collectionItems}
       initialCategory={selectedCategoryName || 'All'}
       customCategoryCards={categoryCards}

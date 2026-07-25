@@ -51,9 +51,11 @@ import {
 import FeaturedStoryView from '../components/home/FeaturedStoryView';
 import ArticleView from '../components/home/ArticleView';
 import MoodboardsView from '../components/home/MoodboardsView';
+import InspirationsView from '../components/home/InspirationsView';
 import AllStoriesView from '../components/home/AllStoriesView';
 import { formatUniversalGalleryImages } from '@/utils/masonryHelper';
 import JoinCelebrationModal from '../components/JoinCelebrationModal';
+import { tabEvents, TAB_OPEN_MOODBOARDS, TAB_OPEN_INSPIRATIONS } from '../lib/tabEvents';
 import {
   FONT_FUTURA,
   FONT_FUTURA_BOLD,
@@ -78,7 +80,8 @@ export default function HomeScreen() {
   const [selectedArticle, setSelectedArticle] = useState<any | null>(null);
   const [playingFilmId, setPlayingFilmId] = useState<string | null>(null);
   const [isMoodboardsOpen, setIsMoodboardsOpen] = useState(false);
-  const [selectedMoodboardId, setSelectedMoodboardId] = useState<string | null>(null);
+  const [isInspirationsOpen, setIsInspirationsOpen] = useState(false);
+  const [selectedMoodboardId, setSelectedMoodboardId] = useState<string | number | null>(null);
   const [isAllStoriesOpen, setIsAllStoriesOpen] = useState(false);
   const [isJoinCelebrationModalOpen, setIsJoinCelebrationModalOpen] = useState(false);
   const [selectedInspoCategory, setSelectedInspoCategory] = useState<string | undefined>(undefined);
@@ -109,6 +112,7 @@ export default function HomeScreen() {
       if (playingFilmId) { setPlayingFilmId(null); return true; }
       if (selectedMoodboardId) { setSelectedMoodboardId(null); return true; }
       if (isMoodboardsOpen) { setIsMoodboardsOpen(false); return true; }
+      if (isInspirationsOpen) { setIsInspirationsOpen(false); return true; }
       if (isAllStoriesOpen) { setIsAllStoriesOpen(false); return true; }
       if (isJoinCelebrationModalOpen) { setIsJoinCelebrationModalOpen(false); return true; }
       return false; // Let default system back behavior happen (exit app if on home)
@@ -116,7 +120,15 @@ export default function HomeScreen() {
 
     const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => subscription.remove();
-  }, [selectedStory, selectedArticle, playingFilmId, selectedMoodboardId, isMoodboardsOpen, isAllStoriesOpen, isJoinCelebrationModalOpen]);
+  }, [selectedStory, selectedArticle, playingFilmId, selectedMoodboardId, isMoodboardsOpen, isInspirationsOpen, isAllStoriesOpen, isJoinCelebrationModalOpen]);
+
+  // Tab bar event listeners — My Moodboard + Inspirations tabs
+  useEffect(() => {
+    const offMoodboards   = tabEvents.on(TAB_OPEN_MOODBOARDS,   () => setIsMoodboardsOpen(true));
+    // Inspirations tab → opens dedicated Inspirations view
+    const offInspirations = tabEvents.on(TAB_OPEN_INSPIRATIONS, () => setIsInspirationsOpen(true));
+    return () => { offMoodboards(); offInspirations(); };
+  }, []);
 
   // Tier 2 Editorial Rotation History: tracks lastShownAt per hero type
   const [tier2History, setTier2History] = useState<Record<string, { lastShownAt: number }>>({});
@@ -1008,10 +1020,10 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── 6. Inspirations (2x2 Inspiration Category Cards Grid) ─────── */}
+        {/* ── 6. Aesthetics (2x2 Category Cards Grid) ─────── */}
         {(websiteInspirations.length > 0 || inspoCategoryCards.length > 0) && (
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>INSPIRATIONS</Text>
+            <Text style={styles.sectionHeader}>AESTHETICS</Text>
 
             {/* 2x2 Grid of Inspiration Category Cards */}
             <View style={styles.vibeGridContainer}>

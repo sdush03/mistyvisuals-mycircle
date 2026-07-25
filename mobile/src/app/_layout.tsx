@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Image, useColorScheme, StyleSheet, Platform, View, Pressable, Text, Modal, ActivityIndicator, StatusBar, BackHandler, LogBox } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+
 import { Tabs, router, useSegments } from 'expo-router';
 import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import * as SplashScreen from 'expo-splash-screen';
@@ -12,6 +14,7 @@ import { useAuthStore } from '../store/authStore';
 import api, { API_BASE_URL } from '../services/api';
 import LoginView from '../components/mycircle/LoginView';
 import { ProfileView } from '../components/profile/ProfileView';
+import { tabEvents, TAB_OPEN_MOODBOARDS, TAB_OPEN_INSPIRATIONS } from '../lib/tabEvents';
 
 import { deactivateKeepAwake } from 'expo-keep-awake';
 
@@ -181,7 +184,10 @@ function RootLayoutContent() {
   }, [token]);
 
   // Determine current active tab
-  const currentTab = segments[0] === 'mycircle' ? 'mycircle' : 'index';
+  const currentTab: 'index' | 'mycircle' | 'moodboard' | 'inspirations' =
+    segments[0] === 'mycircle' ? 'mycircle' :
+    segments[0] === 'inspirations' ? 'inspirations' :
+    segments[0] === 'moodboard' ? 'moodboard' : 'index';
   const topInset = insets.top;
   const headerHeight = 52 + topInset;
 
@@ -216,6 +222,8 @@ function RootLayoutContent() {
         >
           <Tabs.Screen name="index" />
           <Tabs.Screen name="mycircle" />
+          <Tabs.Screen name="moodboard" />
+          <Tabs.Screen name="inspirations" />
         </Tabs>
 
         {/* Custom Animated Floating Tab Bar (Instagram 3-Tab Style) */}
@@ -243,132 +251,161 @@ function RootLayoutContent() {
 }
 
 interface CustomTabBarProps {
-  activeTab: 'index' | 'mycircle' | 'profile';
+  activeTab: 'index' | 'mycircle' | 'moodboard' | 'inspirations' | 'profile';
   isCollapsed: boolean;
   bottomInset: number;
   profile: any;
   onOpenProfile: () => void;
 }
 
+// ── Icon components ────────────────────────────────────────────────────────
+function IconProfile({ active, profile }: { active: boolean; profile: any }) {
+  if (profile?.selfieUrl) {
+    return (
+      <Image
+        source={{ uri: profile.selfieUrl }}
+        style={[styles.tabAvatarImage, active && styles.tabAvatarImageActive]}
+      />
+    );
+  }
+  return (
+    <View style={[styles.tabAvatarCircle, active && styles.tabAvatarCircleActive]}>
+      <Text style={styles.tabAvatarText}>
+        {profile?.name ? profile.name.charAt(0).toUpperCase() : 'U'}
+      </Text>
+    </View>
+  );
+}
+
+// ── Floating tab bar ────────────────────────────────────────────────────────
 function CustomFloatingTabBar({ activeTab, isCollapsed, bottomInset, profile, onOpenProfile }: CustomTabBarProps) {
-  const targetWidth = isCollapsed ? 150 : 285;
-  const widthVal = useSharedValue(285);
+  const targetWidth  = isCollapsed ? 200 : 360;
+  const targetHeight = isCollapsed ? 48  : 64;
+  const widthVal  = useSharedValue(360);
+  const heightVal = useSharedValue(64);
 
   useEffect(() => {
-    widthVal.value = withSpring(targetWidth, {
-      damping: 18,
-      stiffness: 150,
-      mass: 0.8,
-    });
+    const spring = { damping: 18, stiffness: 150, mass: 0.8 };
+    widthVal.value  = withSpring(targetWidth,  spring);
+    heightVal.value = withSpring(targetHeight, spring);
   }, [isCollapsed]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    width: widthVal.value,
+    width:        widthVal.value,
+    height:       heightVal.value,
+    borderRadius: heightVal.value / 2,
   }));
 
   const setTabBarCollapsed = useAuthStore((state) => state.setTabBarCollapsed);
 
-  const handleTabPress = (tabName: 'index' | 'mycircle' | 'profile') => {
+  const handleTabPress = (tabName: 'index' | 'mycircle' | 'moodboard' | 'inspirations' | 'profile') => {
     setTabBarCollapsed(false);
     if (tabName === 'index') {
       router.replace('/');
     } else if (tabName === 'mycircle') {
       router.replace('/mycircle');
+    } else if (tabName === 'moodboard') {
+      router.replace('/moodboard');
+    } else if (tabName === 'inspirations') {
+      router.replace('/inspirations');
     } else if (tabName === 'profile') {
       onOpenProfile();
     }
   };
 
+  const MoodboardMasonryIcon = ({ active, size = 22, color }: { active: boolean; size?: number; color: string }) => {
+    const bw = active ? 2 : 1.6;
+    return (
+      <View style={{ width: size, height: size, flexDirection: 'row', gap: 2.5, paddingVertical: 1 }}>
+        <View
+          style={{
+            flex: 1,
+            height: '100%',
+            borderWidth: bw,
+            borderColor: color,
+            borderRadius: 2,
+            backgroundColor: active ? color : 'transparent',
+          }}
+        />
+        <View style={{ flex: 1, height: '100%', flexDirection: 'column', gap: 2.5 }}>
+          <View
+            style={{
+              flex: 1,
+              borderWidth: bw,
+              borderColor: color,
+              borderRadius: 2,
+              backgroundColor: active ? color : 'transparent',
+            }}
+          />
+          <View
+            style={{
+              flex: 1,
+              borderWidth: bw,
+              borderColor: color,
+              borderRadius: 2,
+              backgroundColor: active ? color : 'transparent',
+            }}
+          />
+        </View>
+      </View>
+    );
+  };
+
   const bottomPosition = bottomInset > 0 ? bottomInset + 10 : 20;
+
+  const ICON_SIZE = 22;
+  const tabs: Array<{
+    key: 'index' | 'mycircle' | 'moodboard' | 'inspirations' | 'profile';
+    label: string;
+    icon: (active: boolean) => React.ReactNode;
+  }> = [
+    {
+      key: 'index',
+      label: 'Home',
+      icon: (a) => <Ionicons name={a ? 'home' : 'home-outline'} size={ICON_SIZE} color={a ? '#1c1a18' : 'rgba(0,0,0,0.35)'} />,
+    },
+    {
+      key: 'mycircle',
+      label: 'My Circle',
+      icon: (a) => <Ionicons name={a ? 'disc' : 'disc-outline'} size={ICON_SIZE} color={a ? '#1c1a18' : 'rgba(0,0,0,0.35)'} />,
+    },
+    {
+      key: 'moodboard',
+      label: 'Moodboard',
+      icon: (a) => <MoodboardMasonryIcon active={a} size={ICON_SIZE} color={a ? '#1c1a18' : 'rgba(0,0,0,0.35)'} />,
+    },
+    {
+      key: 'inspirations',
+      label: 'Inspirations',
+      icon: (a) => <Ionicons name={a ? 'bulb' : 'bulb-outline'} size={ICON_SIZE} color={a ? '#1c1a18' : 'rgba(0,0,0,0.35)'} />,
+    },
+    {
+      key: 'profile',
+      label: 'Profile',
+      icon: (a) => <IconProfile active={a} profile={profile} />,
+    },
+  ];
 
   return (
     <Animated.View style={[styles.floatingTabBar, animatedStyle, { bottom: bottomPosition }]}>
-      {/* Home Tab Button */}
-      <Pressable
-        style={[styles.tabButton, activeTab === 'index' && styles.tabButtonActive]}
-        onPress={() => handleTabPress('index')}
-      >
-        <Image
-          source={require('@/assets/images/tabIcons/home.png')}
-          style={[
-            styles.tabIcon,
-            { tintColor: activeTab === 'index' ? '#000000' : 'rgba(0, 0, 0, 0.4)' },
-          ]}
-          resizeMode="contain"
-        />
-        {!isCollapsed && (
-          <Text
-            style={[
-              styles.tabLabel,
-              { color: activeTab === 'index' ? '#000000' : 'rgba(0, 0, 0, 0.4)' },
-            ]}
+      {tabs.map(({ key, label, icon }) => {
+        const isActive = activeTab === key;
+        const labelColor = isActive ? '#1c1a18' : 'rgba(0,0,0,0.35)';
+        return (
+          <Pressable
+            key={key}
+            style={[styles.tabButton, isActive && styles.tabButtonActive]}
+            onPress={() => handleTabPress(key)}
           >
-            Home
-          </Text>
-        )}
-      </Pressable>
-
-      {/* My Circle Tab Button */}
-      <Pressable
-        style={[styles.tabButton, activeTab === 'mycircle' && styles.tabButtonActive]}
-        onPress={() => handleTabPress('mycircle')}
-      >
-        <Image
-          source={require('@/assets/images/tabIcons/explore.png')}
-          style={[
-            styles.tabIcon,
-            { tintColor: activeTab === 'mycircle' ? '#000000' : 'rgba(0, 0, 0, 0.4)' },
-          ]}
-          resizeMode="contain"
-        />
-        {!isCollapsed && (
-          <Text
-            style={[
-              styles.tabLabel,
-              { color: activeTab === 'mycircle' ? '#000000' : 'rgba(0, 0, 0, 0.4)' },
-            ]}
-          >
-            Circle
-          </Text>
-        )}
-      </Pressable>
-
-      {/* Profile Tab Button (Instagram Style) */}
-      <Pressable
-        style={[styles.tabButton, activeTab === 'profile' && styles.tabButtonActive]}
-        onPress={() => handleTabPress('profile')}
-      >
-        {profile?.selfieUrl ? (
-          <Image
-            source={{ uri: profile.selfieUrl }}
-            style={[
-              styles.tabAvatarImage,
-              activeTab === 'profile' && styles.tabAvatarImageActive,
-            ]}
-          />
-        ) : (
-          <View
-            style={[
-              styles.tabAvatarCircle,
-              activeTab === 'profile' && styles.tabAvatarCircleActive,
-            ]}
-          >
-            <Text style={styles.tabAvatarText}>
-              {profile?.name ? profile.name.charAt(0).toUpperCase() : 'U'}
-            </Text>
-          </View>
-        )}
-        {!isCollapsed && (
-          <Text
-            style={[
-              styles.tabLabel,
-              { color: activeTab === 'profile' ? '#000000' : 'rgba(0, 0, 0, 0.4)' },
-            ]}
-          >
-            Profile
-          </Text>
-        )}
-      </Pressable>
+            <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
+              {icon(isActive)}
+            </View>
+            {!isCollapsed && (
+              <Text style={[styles.tabLabel, { color: labelColor }]} numberOfLines={1}>{label}</Text>
+            )}
+          </Pressable>
+        );
+      })}
     </Animated.View>
   );
 }
@@ -388,9 +425,7 @@ const styles = StyleSheet.create({
   floatingTabBar: {
     position: 'absolute',
     alignSelf: 'center',
-    height: 56,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 28,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
@@ -404,13 +439,13 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   tabButton: {
-    flexDirection: 'row',
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'column',
+    gap: 2,
     paddingVertical: 6,
-    paddingHorizontal: 10,
     borderRadius: 20,
-    gap: 5,
   },
   tabButtonActive: {
     backgroundColor: 'rgba(0, 0, 0, 0.05)',
@@ -420,8 +455,10 @@ const styles = StyleSheet.create({
     height: 20,
   },
   tabLabel: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 9,
+    fontFamily: 'Montserrat_600SemiBold',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
   globalHeader: {
     width: '100%',

@@ -485,6 +485,9 @@ export default function CollectionGridView({
                 ) : selectedCategory === 'All' && categoryCardsToRender.length > 0 ? (
                   /* Categories Overview Grid View */
                   <View style={styles.gridSection}>
+                    {sectionHeadingPrefix ? (
+                      <Text style={styles.sectionHeading}>{sectionHeadingPrefix}</Text>
+                    ) : null}
                     <View style={styles.grid}>
                       {categoryCardsToRender.map((catCard) => (
                         <Pressable
@@ -522,10 +525,10 @@ export default function CollectionGridView({
                   </View>
                 </View>
               ) : (
-                <>
-                  {/* FEATURED Section */}
-                  {featuredItem && (
-                    <View style={styles.featuredSection}>
+                  <>
+                    {/* FEATURED Section */}
+                    {featuredItem && (
+                      <View style={styles.featuredSection}>
                       <Pressable
                         style={styles.featuredCard}
                         onPress={() => handleItemClick(featuredItem)}
