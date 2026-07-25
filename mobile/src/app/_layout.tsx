@@ -92,6 +92,7 @@ function RootLayoutContent() {
   const loadStoredAuth = useAuthStore((state) => state.loadStoredAuth);
   const updateProfile = useAuthStore((state) => state.updateProfile);
   const logout = useAuthStore((state) => state.logout);
+  const eventSlug = useAuthStore((state) => state.eventSlug);
 
   const [isReady, setIsReady] = useState(false);
 
@@ -202,7 +203,6 @@ function RootLayoutContent() {
     return <LoginView onSuccess={() => {}} startAnimation={isSplashHidden} />;
   }
 
-  const eventSlug = useAuthStore((state) => state.eventSlug);
   const isHeaderHidden = currentTab === 'mycircle' && Boolean(eventSlug);
 
   return (
