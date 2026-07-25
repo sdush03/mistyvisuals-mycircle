@@ -240,14 +240,15 @@ export function EditorialLightbox({
   const currentUrl = currentItem
     ? typeof currentItem === 'string'
       ? currentItem
-      : currentItem.photoUrl ||
-        currentItem.url ||
+      : currentItem.fullUri ||
         currentItem.r2Url ||
         currentItem.r2_url ||
-        currentItem.file_url_mobile ||
         currentItem.file_url ||
+        currentItem.file_url_mobile ||
+        currentItem.url ||
+        currentItem.imageUrl ||
+        currentItem.photoUrl ||
         currentItem.uri ||
-        currentItem.fullUri ||
         ''
     : '';
 

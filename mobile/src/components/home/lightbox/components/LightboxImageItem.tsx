@@ -81,21 +81,21 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
     if (typeof i === 'string') return i;
     return (
       i.fullUri ||
-      i.uri ||
-      i.photoUrl ||
       i.r2Url ||
       i.r2_url ||
-      i.file_url_mobile ||
       i.file_url ||
-      i.thumbnailUrl ||
+      i.file_url_mobile ||
       i.url ||
       i.imageUrl ||
+      i.photoUrl ||
+      i.thumbnailUrl ||
+      i.uri ||
       null
     );
   };
 
-  const thumbnailUri = getMediaUri(item);
-  const fullUri = (typeof item === 'object' && item?.fullUri) ? item.fullUri : thumbnailUri;
+  const thumbnailUri = typeof item === 'object' ? (item.photoUrl || item.thumbnailUrl || getMediaUri(item)) : item;
+  const fullUri = getMediaUri(item);
 
   return (
     <GestureDetector gesture={composedGesture}>
