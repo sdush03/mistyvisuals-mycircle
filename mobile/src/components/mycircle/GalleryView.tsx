@@ -142,7 +142,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     transform: [{ translateX: screenSwipeX.value }],
   }));
 
-  const PAGE_SIZE = 100;
+  const PAGE_SIZE = 30;
 
   const eventSlug = useAuthStore((state) => state.eventSlug);
   const passcode = useAuthStore((state) => state.passcode);
@@ -244,8 +244,14 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         const total = typeof allRes.data.total === 'number' ? allRes.data.total : mapped.length;
         setTotalAllPhotosCount(total);
         setAllPhotos(mapped);
-        setAllPhotosOffset(mapped.length);
-        setHasMorePhotos(mapped.length < total);
+        const hasMore = mapped.length < total;
+        setHasMorePhotos(hasMore);
+
+        if (hasMore) {
+          setTimeout(() => {
+            loadMorePhotos();
+          }, 300);
+        }
       } catch (e: any) {
         console.warn('Parallel photo fetch error:', e);
       }
@@ -306,10 +312,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   };
 
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => {
-      fetchPhotos();
-    });
-    return () => task.cancel();
+    fetchPhotos();
   }, [eventSlug]);
 
   const hasFullAccess = profile?.hasFullAccess ?? true;
