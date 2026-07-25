@@ -276,7 +276,17 @@ export function EditorialLightbox({
       showToast('Removed from Moodboard');
       await savesService.unsavePhoto(currentUrl, currentItem?.id);
       if (onUnsave && currentItem) {
-        onUnsave(currentItem);
+        if (images.length > 1) {
+          const hasNext = activeIdx < images.length - 1;
+          const targetIdx = hasNext ? activeIdx + 1 : activeIdx - 1;
+          flatListRef.current?.scrollToOffset({ offset: (width + 18) * targetIdx, animated: true });
+
+          setTimeout(() => {
+            onUnsave(currentItem);
+          }, 250);
+        } else {
+          onUnsave(currentItem);
+        }
       }
     } else {
       try {
