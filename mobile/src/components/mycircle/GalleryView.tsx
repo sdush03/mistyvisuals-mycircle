@@ -392,7 +392,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     .trim()
     .toUpperCase();
 
-  const locationText = (eventDetails?.location || eventDetails?.city || 'CELEBRATION GALLERY').toUpperCase();
+  const locationText = (eventDetails?.location || eventDetails?.city || '').toUpperCase();
   const dateText = eventDetails?.date
     ? new Date(eventDetails.date).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()
     : '';
@@ -463,27 +463,13 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
 
               {/* Cover Title Container */}
               <View style={[styles.titleContainer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-                <Text style={styles.storyLocation}>{locationText}</Text>
+                {locationText ? <Text style={styles.storyLocation}>{locationText}</Text> : null}
                 <Text style={styles.storyTitle}>{cleanTitle}</Text>
                 {dateText ? <Text style={styles.storyDate}>{dateText}</Text> : null}
               </View>
             </View>
 
-            {/* ── 2. Editorial Description ── */}
-            <View style={styles.editorialContainer}>
-              <Text style={styles.subtitleText}>
-                {totalAllPhotosCount !== null
-                  ? `${totalAllPhotosCount.toLocaleString()} PHOTOGRAPHS IN CELEBRATION GALLERY`
-                  : 'CELEBRATION GALLERY'}
-              </Text>
-              {profile?.name ? (
-                <Text style={styles.descriptionText}>
-                  Welcome {profile.name}! Explore matched face memories and complete story highlights below.
-                </Text>
-              ) : null}
-            </View>
-
-            {/* ── 3. Category Tabs (Exact Featured Story Style) ── */}
+            {/* ── 2. Category Tabs (Exact Featured Story Style) ── */}
             <View style={styles.galleryContainer}>
               <View style={styles.tabsWrapper}>
                 <ScrollView
