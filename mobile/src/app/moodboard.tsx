@@ -73,10 +73,18 @@ export default function MoodboardScreen() {
   };
 
   const handleUnsave = (item: SavedPhotoItem) => {
-    setSaves((prev) => prev.filter((s) => s.id !== item.id));
-    if (selectedPhotoIdx !== null) {
-      setSelectedPhotoIdx(null);
-    }
+    setSaves((prevSaves) => {
+      const nextSaves = prevSaves.filter((s) => s.id !== item.id);
+      if (selectedPhotoIdx !== null) {
+        if (nextSaves.length === 0) {
+          setSelectedPhotoIdx(null);
+        } else {
+          const targetIdx = Math.min(selectedPhotoIdx, nextSaves.length - 1);
+          setSelectedPhotoIdx(targetIdx);
+        }
+      }
+      return nextSaves;
+    });
   };
 
   // Check if item belongs to current user

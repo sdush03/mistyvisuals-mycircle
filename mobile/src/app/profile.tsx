@@ -261,10 +261,18 @@ export default function ProfileScreen() {
   };
 
   const handleUnsaveFromProfile = (item: SavedPhotoItem) => {
-    setSavedPhotos((prev) => prev.filter((s) => s.id !== item.id));
-    if (selectedSavedIdx !== null) {
-      setSelectedSavedIdx(null);
-    }
+    setSavedPhotos((prevSaves) => {
+      const nextSaves = prevSaves.filter((s) => s.id !== item.id);
+      if (selectedSavedIdx !== null) {
+        if (nextSaves.length === 0) {
+          setSelectedSavedIdx(null);
+        } else {
+          const targetIdx = Math.min(selectedSavedIdx, nextSaves.length - 1);
+          setSelectedSavedIdx(targetIdx);
+        }
+      }
+      return nextSaves;
+    });
   };
 
   const mainScrollRef = useRef<ScrollView>(null);

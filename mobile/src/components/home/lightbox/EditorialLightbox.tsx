@@ -195,6 +195,16 @@ export function EditorialLightbox({
     }
   }, [visible, activeIdx, images]);
 
+  // Adjust activeIdx and scroll FlatList when photos are removed (e.g. un-saving)
+  React.useEffect(() => {
+    if (!visible || images.length === 0) return;
+    if (activeIdx >= images.length) {
+      const nextIdx = Math.max(0, images.length - 1);
+      setActiveIdx(nextIdx);
+      flatListRef.current?.scrollToOffset({ offset: (width + 18) * nextIdx, animated: true });
+    }
+  }, [visible, images.length, activeIdx]);
+
   const showToast = useCallback(
     (msg: string) => {
       setToastMsg(msg);
