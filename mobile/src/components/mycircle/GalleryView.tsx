@@ -55,7 +55,6 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const [totalAllPhotosCount, setTotalAllPhotosCount] = useState<number | null>(null);
   const [eventDetails, setEventDetailsData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<string>('ALL');
-  const [renderLimit, setRenderLimit] = useState<number>(20);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [allPhotosOffset, setAllPhotosOffset] = useState(0);
@@ -446,12 +445,25 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     });
   }, [activeTab, photos, allPhotos, tabCache]);
 
-  // Progressive render limit matching FeaturedStoryView 1:1
+  // Smooth 60fps incremental batching to prevent JS thread locks
+  const [renderLimit, setRenderLimit] = useState<number>(16);
+
   useEffect(() => {
-    setRenderLimit(20);
-    const timer = setTimeout(() => setRenderLimit(Infinity as any), 250);
-    return () => clearTimeout(timer);
-  }, [activeTab]);
+    setRenderLimit(16);
+    if (activeList.length <= 16) return;
+
+    const interval = setInterval(() => {
+      setRenderLimit((prev) => {
+        if (prev >= activeList.length) {
+          clearInterval(interval);
+          return prev;
+        }
+        return prev + 12;
+      });
+    }, 60);
+
+    return () => clearInterval(interval);
+  }, [activeTab, activeList.length]);
 
   // Shortest Column Height Balancing — EXACTLY matching FeaturedStoryView
   const { column0, column1 } = React.useMemo(() => {
