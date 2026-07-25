@@ -55,6 +55,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const [totalAllPhotosCount, setTotalAllPhotosCount] = useState<number | null>(null);
   const [eventDetails, setEventDetailsData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<string>('ALL');
+  const [renderLimit, setRenderLimit] = useState<number>(16);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [allPhotosOffset, setAllPhotosOffset] = useState(0);
@@ -446,8 +447,6 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   }, [activeTab, photos, allPhotos, tabCache]);
 
   // Smooth 60fps incremental batching to prevent JS thread locks
-  const [renderLimit, setRenderLimit] = useState<number>(16);
-
   useEffect(() => {
     setRenderLimit(16);
     if (activeList.length <= 16) return;
