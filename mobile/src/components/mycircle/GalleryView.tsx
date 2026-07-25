@@ -10,6 +10,7 @@ import {
   Alert,
   StatusBar,
   BackHandler,
+  Modal,
   Image as RNImage,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -409,10 +410,18 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     : '';
 
   return (
-    <GestureHandlerRootView style={styles.container}>
-      <GestureDetector gesture={edgeSwipeGesture}>
-        <Animated.View style={[{ flex: 1, backgroundColor: '#ffffff' }, screenSwipeAnimatedStyle]}>
-          <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+    <Modal
+      visible={true}
+      animationType="none"
+      transparent={true}
+      presentationStyle="overFullScreen"
+      onRequestClose={handleBackAction}
+      statusBarTranslucent={true}
+    >
+      <GestureHandlerRootView style={styles.container}>
+        <GestureDetector gesture={edgeSwipeGesture}>
+          <Animated.View style={[{ flex: 1, backgroundColor: '#ffffff' }, screenSwipeAnimatedStyle]}>
+            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
           {/* Borderless Editorial Back Button (Exact Featured Story Style) */}
           <Pressable
@@ -596,7 +605,8 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         />
       )}
     </GestureHandlerRootView>
-  );
+  </Modal>
+);
 }
 
 const styles = StyleSheet.create({
