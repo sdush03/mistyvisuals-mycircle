@@ -20,6 +20,7 @@ import Animated, {
   withTiming,
   withSpring,
   runOnJS,
+  Easing,
 } from 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -33,7 +34,7 @@ import {
   FONT_JOST_REGULAR,
 } from '../../../constants/fonts';
 
-const { width } = Dimensions.get('window');
+const { width, height: screenHeight } = Dimensions.get('window');
 
 export interface EditorialLightboxProps {
   visible: boolean;
@@ -61,10 +62,8 @@ export function EditorialLightbox({
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [savedUrls, setSavedUrls] = useState<Set<string>>(new Set());
 
-  // Shared Values for Reanimated Gestures & Animations
-  const expandProgress = useSharedValue(1);
-  const backdropOpacity = useSharedValue(1);
-  const controlsOpacity = useSharedValue(1);
+  // Shared Values for Reanimated Gestures & Expansion Animations (Matching FeaturedStoryView)
+  const expandProgress = useSharedValue(0);
   const toastOpacity = useSharedValue(0);
   const heartPopScale = useSharedValue(0);
   const heartPopOpacity = useSharedValue(0);
@@ -72,9 +71,16 @@ export function EditorialLightbox({
   useEffect(() => {
     if (visible) {
       setActiveIdx(initialIndex);
-      expandProgress.value = 1;
-      backdropOpacity.value = 1;
-      controlsOpacity.value = 1;
+      setShowControls(true);
+      expandProgress.value = 0;
+
+      // Smooth Bezier 400ms expansion matching FeaturedStoryView
+      requestAnimationFrame(() => {
+        expandProgress.value = withTiming(1, {
+          duration: 400,
+          easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+        });
+      });
 
       savesService.getSavedPhotos().then((items) => {
         const urls = new Set(items.map((i) => i.photoUrl));
@@ -101,20 +107,28 @@ export function EditorialLightbox({
     });
   }, [heartPopScale, heartPopOpacity]);
 
+  // Smooth Bezier 350ms collapse matching FeaturedStoryView
   const handleClose = useCallback(() => {
-    expandProgress.value = withTiming(0, { duration: 180 }, (finished) => {
-      'worklet';
-      if (finished) {
-        runOnJS(onClose)();
+    expandProgress.value = withTiming(
+      0,
+      {
+        duration: 350,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      },
+      (finished) => {
+        'worklet';
+        if (finished) {
+          runOnJS(onClose)();
+        }
       }
-    });
+    );
   }, [expandProgress, onClose]);
 
   const currentItem = images[activeIdx] || null;
   const currentUrl = currentItem
-    ? (typeof currentItem === 'string'
-        ? currentItem
-        : currentItem.photoUrl || currentItem.url || currentItem.r2Url || currentItem.file_url_mobile || '')
+    ? typeof currentItem === 'string'
+      ? currentItem
+      : currentItem.photoUrl || currentItem.url || currentItem.r2Url || currentItem.file_url_mobile || ''
     : '';
 
   const isSaved = savedUrls.has(currentUrl);
@@ -159,13 +173,28 @@ export function EditorialLightbox({
     }
   };
 
+  // Exact FeaturedStoryView animated styles
+  const heroAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const p = expandProgress.value;
+    const initialScale = 0.82;
+    const scale = initialScale + (1 - initialScale) * p;
+
+    return {
+      opacity: p > 0.002 ? 1 : 0,
+      transform: [{ scale }],
+      borderRadius: (1 - p) * 16,
+      overflow: 'hidden',
+    };
+  });
+
   const backdropAnimatedStyle = useAnimatedStyle(() => ({
     backgroundColor: '#000000',
-    opacity: backdropOpacity.value,
+    opacity: expandProgress.value,
   }));
 
   const controlsAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: controlsOpacity.value,
+    opacity: expandProgress.value,
   }));
 
   const toastAnimatedStyle = useAnimatedStyle(() => ({
@@ -188,7 +217,6 @@ export function EditorialLightbox({
         onZoomChange={(zoomed) => setIsZoomed(zoomed)}
         onToggleControls={() => {
           setShowControls((prev) => !prev);
-          controlsOpacity.value = withTiming(showControls ? 0 : 1, { duration: 200 });
         }}
         onCloseLightbox={handleClose}
         onInteractionStart={() => {}}
@@ -212,6 +240,7 @@ export function EditorialLightbox({
       statusBarTranslucent
     >
       <GestureHandlerRootView style={{ flex: 1 }}>
+        {/* Full-screen Dark Backdrop */}
         <Animated.View style={[StyleSheet.absoluteFillObject, backdropAnimatedStyle]} pointerEvents="none" />
 
         <View style={styles.lightboxContainer}>
@@ -257,34 +286,36 @@ export function EditorialLightbox({
             </Animated.View>
           )}
 
-          {/* Horizontal Paging Stage */}
-          <View style={styles.lightboxImageContainer}>
-            <FlatList
-              ref={flatListRef}
-              data={images}
-              horizontal
-              pagingEnabled
-              decelerationRate="fast"
-              snapToInterval={width + 18}
-              scrollEnabled={!isZoomed}
-              showsHorizontalScrollIndicator={false}
-              initialScrollIndex={initialIndex}
-              getItemLayout={(_data, index) => ({
-                length: width + 18,
-                offset: (width + 18) * index,
-                index,
-              })}
-              onMomentumScrollEnd={(e) => {
-                const nextIdx = Math.round(e.nativeEvent.contentOffset.x / (width + 18));
-                if (nextIdx >= 0 && nextIdx < images.length) {
-                  setActiveIdx(nextIdx);
-                }
-              }}
-              keyExtractor={(item, index) => item.id || `lightbox-${index}`}
-              ItemSeparatorComponent={() => <View style={{ width: 18, backgroundColor: '#000000' }} />}
-              renderItem={renderItem}
-            />
-          </View>
+          {/* Animated Hero Stage (Matching FeaturedStoryView bezier scale expansion) */}
+          <Animated.View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center' }, heroAnimatedStyle]}>
+            <View style={styles.lightboxImageContainer}>
+              <FlatList
+                ref={flatListRef}
+                data={images}
+                horizontal
+                pagingEnabled
+                decelerationRate="fast"
+                snapToInterval={width + 18}
+                scrollEnabled={!isZoomed}
+                showsHorizontalScrollIndicator={false}
+                initialScrollIndex={initialIndex}
+                getItemLayout={(_data, index) => ({
+                  length: width + 18,
+                  offset: (width + 18) * index,
+                  index,
+                })}
+                onMomentumScrollEnd={(e) => {
+                  const nextIdx = Math.round(e.nativeEvent.contentOffset.x / (width + 18));
+                  if (nextIdx >= 0 && nextIdx < images.length) {
+                    setActiveIdx(nextIdx);
+                  }
+                }}
+                keyExtractor={(item, index) => item.id || `lightbox-${index}`}
+                ItemSeparatorComponent={() => <View style={{ width: 18, backgroundColor: '#000000' }} />}
+                renderItem={renderItem}
+              />
+            </View>
+          </Animated.View>
 
           {/* Bottom Editorial Footer Gradient Overlay */}
           {showControls && (
