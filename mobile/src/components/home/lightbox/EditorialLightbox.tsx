@@ -25,6 +25,7 @@ import Animated, {
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { LightboxImageItem } from './components/LightboxImageItem';
+import { Image as ExpoImage } from 'expo-image';
 import { savesService } from '../../../services/savesService';
 import {
   FONT_FUTURA_BOLD,
@@ -135,6 +136,38 @@ export function EditorialLightbox({
       pauseAutoHideTimer();
     };
   }, [visible, initialIndex, initialBounds, resetAutoHideTimer, pauseAutoHideTimer]);
+
+  // Imperative StatusBar visibility control matching native iOS/Android Photos app
+  useEffect(() => {
+    if (visible) {
+      StatusBar.setHidden(!showControls || isZoomed, 'fade');
+    } else {
+      StatusBar.setHidden(false, 'fade');
+    }
+    return () => {
+      StatusBar.setHidden(false, 'fade');
+    };
+  }, [visible, showControls, isZoomed]);
+
+  // High-performance background prefetching of adjacent photos (+/- 2 photos) in memory-disk cache
+  useEffect(() => {
+    if (visible && activeIdx !== null && images.length > 0) {
+      const urlsToPrefetch: string[] = [];
+      [activeIdx - 1, activeIdx + 1, activeIdx + 2, activeIdx - 2].forEach((idx) => {
+        if (idx >= 0 && idx < images.length) {
+          const item = images[idx];
+          const uri =
+            typeof item === 'string'
+              ? item
+              : item.fullUri || item.uri || item.photoUrl || item.r2Url || item.file_url || item.url;
+          if (uri) urlsToPrefetch.push(uri);
+        }
+      });
+      urlsToPrefetch.forEach((url) => {
+        ExpoImage.prefetch(url, 'memory-disk');
+      });
+    }
+  }, [visible, activeIdx, images]);
 
   const showToast = useCallback(
     (msg: string) => {
