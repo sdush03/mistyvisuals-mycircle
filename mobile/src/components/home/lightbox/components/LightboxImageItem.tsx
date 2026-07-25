@@ -96,30 +96,20 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
 
   const thumbnailUri = typeof item === 'object' ? (item.photoUrl || item.thumbnailUrl || getMediaUri(item)) : item;
   const fullUri = getMediaUri(item);
+  const displayUri = fullUri || thumbnailUri;
 
   return (
     <GestureDetector gesture={composedGesture}>
       <View style={{ width, height: '100%', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
         <Animated.View style={[styles.lightboxImageStack, imageZoomAnimatedStyle]}>
-          {/* Layer 1: Instant grid thumbnail from memory cache */}
-          {thumbnailUri && (
+          {displayUri && (
             <Image
-              source={{ uri: thumbnailUri }}
-              style={[styles.lightboxImage, StyleSheet.absoluteFillObject]}
-              contentFit="contain"
-              cachePolicy="memory-disk"
-              priority="high"
-            />
-          )}
-          {/* Layer 2: High-res image fading in smoothly on top */}
-          {fullUri && fullUri !== thumbnailUri && (
-            <Image
-              source={{ uri: fullUri }}
+              source={{ uri: displayUri }}
               style={styles.lightboxImage}
               contentFit="contain"
               cachePolicy="memory-disk"
               priority="high"
-              transition={400}
+              transition={150}
             />
           )}
           {/* Layer 3: Heart Pop Center Animation Overlay */}
