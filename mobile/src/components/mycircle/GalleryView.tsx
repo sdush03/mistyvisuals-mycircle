@@ -492,6 +492,19 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     return { column0: cols[0], column1: cols[1] };
   }, [activeList, renderLimit]);
 
+  const pairedRows = React.useMemo(() => {
+    const maxLen = Math.max(column0.length, column1.length);
+    const rows: { left: any | null; right: any | null; index: number }[] = [];
+    for (let i = 0; i < maxLen; i++) {
+      rows.push({
+        left: column0[i] || null,
+        right: column1[i] || null,
+        index: i,
+      });
+    }
+    return rows;
+  }, [column0, column1]);
+
   // Bounds measurement for smooth Lightbox opening & background page auto-scrolling
   const getBoundsForIndex = useCallback((idx: number, callback: (bounds: LightboxBounds) => void) => {
     if (idx < 0 || idx >= activeList.length) return;
@@ -703,44 +716,42 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
                 </View>
               ) : (
                 <View style={styles.masonryGridContainer}>
-                  <View style={styles.masonryColumn}>
-                    {column0.map((img, idx) => {
-                      const cardId = img.id ? `c0-${img.id}-${idx}` : (img.r2Url ? `c0-${img.r2Url}-${idx}` : `c0-${idx}`);
-                      const refId = img.id ? String(img.id) : (img.r2Url || `photo-${idx}`);
-                      return (
-                        <MasonryCard
-                          key={cardId}
-                          img={img}
-                          index={idx}
-                          isColumn0={true}
-                          onSelect={(bounds) => openLightbox(img, bounds)}
-                          onRegisterRef={(id, ref) => {
-                            if (id) cardRefs.current[id] = ref;
-                            if (refId) cardRefs.current[refId] = ref;
-                          }}
-                        />
-                      );
-                    })}
-                  </View>
-                  <View style={styles.masonryColumn}>
-                    {column1.map((img, idx) => {
-                      const cardId = img.id ? `c1-${img.id}-${idx}` : (img.r2Url ? `c1-${img.r2Url}-${idx}` : `c1-${idx}`);
-                      const refId = img.id ? String(img.id) : (img.r2Url || `photo-${idx}`);
-                      return (
-                        <MasonryCard
-                          key={cardId}
-                          img={img}
-                          index={idx}
-                          isColumn0={false}
-                          onSelect={(bounds) => openLightbox(img, bounds)}
-                          onRegisterRef={(id, ref) => {
-                            if (id) cardRefs.current[id] = ref;
-                            if (refId) cardRefs.current[refId] = ref;
-                          }}
-                        />
-                      );
-                    })}
-                  </View>
+                  {pairedRows.map((row) => (
+                    <View key={`row-${row.index}`} style={styles.masonryRow}>
+                      <View style={styles.masonryCell}>
+                        {row.left ? (
+                          <MasonryCard
+                            key={row.left.id ? `c0-${row.left.id}-${row.index}` : `c0-${row.index}`}
+                            img={row.left}
+                            index={row.index * 2}
+                            isColumn0={true}
+                            onSelect={(bounds) => openLightbox(row.left, bounds)}
+                            onRegisterRef={(id, ref) => {
+                              const refId = row.left.id ? String(row.left.id) : (row.left.r2Url || `photo-${row.index}`);
+                              if (id) cardRefs.current[id] = ref;
+                              if (refId) cardRefs.current[refId] = ref;
+                            }}
+                          />
+                        ) : null}
+                      </View>
+                      <View style={styles.masonryCell}>
+                        {row.right ? (
+                          <MasonryCard
+                            key={row.right.id ? `c1-${row.right.id}-${row.index}` : `c1-${row.index}`}
+                            img={row.right}
+                            index={row.index * 2 + 1}
+                            isColumn0={false}
+                            onSelect={(bounds) => openLightbox(row.right, bounds)}
+                            onRegisterRef={(id, ref) => {
+                              const refId = row.right.id ? String(row.right.id) : (row.right.r2Url || `photo-${row.index}`);
+                              if (id) cardRefs.current[id] = ref;
+                              if (refId) cardRefs.current[refId] = ref;
+                            }}
+                          />
+                        ) : null}
+                      </View>
+                    </View>
+                  ))}
                 </View>
               )}
 
@@ -912,9 +923,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   masonryGridContainer: {
-    flexDirection: 'row',
-    gap: 6,
     width: '100%',
+  },
+  masonryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    width: '100%',
+    marginBottom: 6,
+  },
+  masonryCell: {
+    width: (width - 24 - 6) / 2,
   },
   masonryColumn: {
     flex: 1,
