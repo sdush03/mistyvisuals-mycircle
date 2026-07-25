@@ -49,7 +49,7 @@ export interface EditorialLightboxProps {
   images: any[];
   initialIndex: number;
   initialBounds?: LightboxBounds | null;
-  onGetBoundsForIndex?: (index: number) => LightboxBounds | null;
+  onGetBoundsForIndex?: (index: number, callback: (bounds: LightboxBounds) => void) => void;
   onClose: () => void;
   onUnsave?: (item: any) => void;
   title?: string;
@@ -143,18 +143,25 @@ export function EditorialLightbox({
     };
   }, [visible, initialIndex, initialBounds, resetAutoHideTimer, pauseAutoHideTimer]);
 
-  // FIX 1: Update target bounds whenever active index changes (e.g. user scrolled 3-4 photos ahead)
-  useEffect(() => {
-    if (visible && onGetBoundsForIndex) {
-      const newBounds = onGetBoundsForIndex(activeIdx);
-      if (newBounds && newBounds.width > 0) {
-        thumbX.value = newBounds.x;
-        thumbY.value = newBounds.y;
-        thumbW.value = newBounds.width;
-        thumbH.value = newBounds.height;
-      }
+  const updateBoundsForIndex = useCallback((idx: number) => {
+    if (onGetBoundsForIndex) {
+      onGetBoundsForIndex(idx, (newBounds) => {
+        if (newBounds && newBounds.width > 0) {
+          thumbX.value = newBounds.x;
+          thumbY.value = newBounds.y;
+          thumbW.value = newBounds.width;
+          thumbH.value = newBounds.height;
+        }
+      });
     }
-  }, [visible, activeIdx, onGetBoundsForIndex, thumbX, thumbY, thumbW, thumbH]);
+  }, [onGetBoundsForIndex, thumbX, thumbY, thumbW, thumbH]);
+
+  // Update target bounds whenever active index changes (and auto-scroll background page if offscreen)
+  useEffect(() => {
+    if (visible) {
+      updateBoundsForIndex(activeIdx);
+    }
+  }, [visible, activeIdx, updateBoundsForIndex]);
 
   // Imperative StatusBar visibility control matching native iOS/Android Photos app
   useEffect(() => {
@@ -212,15 +219,7 @@ export function EditorialLightbox({
   // Smooth 350ms Bezier collapse back to original bounds on exit
   const handleClose = useCallback(() => {
     pauseAutoHideTimer();
-    if (onGetBoundsForIndex) {
-      const latestBounds = onGetBoundsForIndex(activeIdx);
-      if (latestBounds && latestBounds.width > 0) {
-        thumbX.value = latestBounds.x;
-        thumbY.value = latestBounds.y;
-        thumbW.value = latestBounds.width;
-        thumbH.value = latestBounds.height;
-      }
-    }
+    updateBoundsForIndex(activeIdx);
 
     expandProgress.value = withTiming(
       0,
@@ -235,7 +234,7 @@ export function EditorialLightbox({
         }
       }
     );
-  }, [expandProgress, activeIdx, onClose, onGetBoundsForIndex, pauseAutoHideTimer, thumbX, thumbY, thumbW, thumbH]);
+  }, [expandProgress, activeIdx, onClose, updateBoundsForIndex, pauseAutoHideTimer]);
 
   const currentItem = images[activeIdx] || null;
   const currentUrl = currentItem

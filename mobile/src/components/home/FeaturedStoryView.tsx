@@ -113,22 +113,39 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 
   const [lightboxBounds, setLightboxBounds] = useState<LightboxBounds | null>(null);
 
-  const getBoundsForIndex = useCallback((idx: number): LightboxBounds | null => {
-    if (idx < 0 || idx >= filteredGalleryImages.length) return null;
+  const getBoundsForIndex = useCallback((idx: number, callback: (bounds: LightboxBounds) => void) => {
+    if (idx < 0 || idx >= filteredGalleryImages.length) return;
     const img = filteredGalleryImages[idx];
-    if (!img) return null;
+    if (!img) return;
     const cardId = img.id || img.uri || `idx-${idx}`;
     const targetCard = cardRefs.current[cardId];
+
     if (targetCard) {
-      let bounds: LightboxBounds | null = null;
-      targetCard.measureInWindow((x, y, width, height) => {
-        if (width > 0 && height > 0) {
-          bounds = { x, y, width, height };
+      targetCard.measureInWindow((x, y, cardWidth, cardHeight) => {
+        if (cardWidth > 0 && cardHeight > 0) {
+          if (y < 80 || y + cardHeight > screenHeight - 60) {
+            // Off screen! Auto-scroll background page ScrollView to target card!
+            targetCard.measureLayout(
+              mainScrollRef.current as any,
+              (left, top, w, h) => {
+                const targetScrollY = Math.max(0, top - screenHeight / 2 + h / 2);
+                mainScrollRef.current?.scrollTo({ y: targetScrollY, animated: false });
+                requestAnimationFrame(() => {
+                  targetCard.measureInWindow((nx, ny, nw, nh) => {
+                    if (nw > 0 && nh > 0) {
+                      callback({ x: nx, y: ny, width: nw, height: nh });
+                    }
+                  });
+                });
+              },
+              () => {}
+            );
+          } else {
+            callback({ x, y, width: cardWidth, height: cardHeight });
+          }
         }
       });
-      return bounds;
     }
-    return null;
   }, [filteredGalleryImages]);
 
   const openLightbox = useCallback((img: any, bounds: { x: number; y: number; width: number; height: number } | null) => {
