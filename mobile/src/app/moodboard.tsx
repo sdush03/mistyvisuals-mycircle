@@ -123,13 +123,16 @@ export default function MoodboardScreen() {
     return { column0: cols[0], column1: cols[1] };
   }, [filteredSaves]);
 
+  const cardRefs = useRef<{ [key: string]: View | null }>({});
+
   const renderMasonryCard = (item: any) => {
     const photoMine = isMine(item);
-    const cardRef = useRef<View>(null);
+    const cardId = item.id || item.photoUrl || `save-${item.globalIndex}`;
 
     const handlePress = () => {
-      if (cardRef.current) {
-        cardRef.current.measureInWindow((x, y, w, h) => {
+      const ref = cardRefs.current[cardId];
+      if (ref) {
+        ref.measureInWindow((x, y, w, h) => {
           setSelectedBounds({ x, y, width: w, height: h });
           setSelectedPhotoIdx(item.globalIndex ?? 0);
         });
@@ -142,7 +145,9 @@ export default function MoodboardScreen() {
     return (
       <Pressable
         key={item.id}
-        ref={cardRef}
+        ref={(ref) => {
+          if (cardId) cardRefs.current[cardId] = ref;
+        }}
         style={[styles.masonryCard, { aspectRatio: item.cardAspect }]}
         onPress={handlePress}
       >

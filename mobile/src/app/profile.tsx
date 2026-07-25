@@ -235,14 +235,17 @@ export default function ProfileScreen() {
     }
   };
 
+  const cardRefs = useRef<{ [key: string]: View | null }>({});
+
   const renderMasonryCard = (p: any, index: number, isSavedTab: boolean = false) => {
     const imgUri = getPhotoUri(p);
-    const cardRef = useRef<View>(null);
+    const cardId = p.id || p.uri || `photo-${index}`;
 
     const handlePress = () => {
       if (isSavedTab) {
-        if (cardRef.current) {
-          cardRef.current.measureInWindow((x, y, w, h) => {
+        const ref = cardRefs.current[cardId];
+        if (ref) {
+          ref.measureInWindow((x, y, w, h) => {
             setSelectedSavedBounds({ x, y, width: w, height: h });
             setSelectedSavedIdx(p.globalIndex ?? 0);
           });
@@ -258,7 +261,9 @@ export default function ProfileScreen() {
     return (
       <Pressable
         key={p.id || index}
-        ref={cardRef}
+        ref={(ref) => {
+          if (cardId) cardRefs.current[cardId] = ref;
+        }}
         style={[styles.masonryCard, { aspectRatio: p.cardAspect || 0.75 }]}
         onPress={handlePress}
       >
