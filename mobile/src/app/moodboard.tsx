@@ -17,6 +17,7 @@ import { savesService, SavedPhotoItem } from '../services/savesService';
 import { useAuthStore } from '../store/authStore';
 import { tabEvents, EVENT_SAVES_UPDATED } from '../lib/tabEvents';
 import { EditorialLightbox, LightboxBounds } from '../components/home/lightbox/EditorialLightbox';
+import { MasonryCard } from '../components/home/lightbox/components/MasonryCard';
 import {
   FONT_FUTURA,
   FONT_FUTURA_BOLD,
@@ -172,44 +173,40 @@ export default function MoodboardScreen() {
     }
   }, [filteredSaves]);
 
-  const renderMasonryCard = (item: any) => {
+  const renderMasonryCard = (item: any, isColumn0: boolean) => {
     const photoMine = isMine(item);
     const cardId = item.id || item.photoUrl || `save-${item.globalIndex}`;
 
-    const handlePress = () => {
-      const ref = cardRefs.current[cardId];
-      if (ref) {
-        ref.measureInWindow((x, y, w, h) => {
-          setSelectedBounds({ x, y, width: w, height: h });
-          setSelectedPhotoIdx(item.globalIndex ?? 0);
-        });
-      } else {
-        setSelectedBounds(null);
-        setSelectedPhotoIdx(item.globalIndex ?? 0);
-      }
-    };
-
     return (
-      <Pressable
-        key={item.id}
-        ref={(ref) => {
-          if (cardId) cardRefs.current[cardId] = ref;
-        }}
-        style={[styles.masonryCard, { aspectRatio: item.cardAspect }]}
-        onPress={handlePress}
-      >
-        <Image source={{ uri: item.photoUrl }} style={styles.masonryImage} resizeMode="cover" />
+      <View key={cardId} style={styles.masonryCardWrapper}>
+        <MasonryCard
+          img={{
+            ...item,
+            uri: item.photoUrl || item.r2Url || item.file_url || item.uri || '',
+            fullUri: item.photoUrl || item.r2Url || item.file_url || item.uri || '',
+          }}
+          index={item.globalIndex ?? 0}
+          isColumn0={isColumn0}
+          onSelect={(bounds) => {
+            setSelectedBounds(bounds);
+            setSelectedPhotoIdx(item.globalIndex ?? 0);
+          }}
+          onRegisterRef={(id, ref) => {
+            if (id) cardRefs.current[id] = ref;
+            if (cardId) cardRefs.current[cardId] = ref;
+          }}
+        />
 
         {/* Top Heart Badge */}
-        <View style={styles.cardBadgeOverlay}>
-          <Ionicons name="heart" size={13} color="#ef4444" />
-          {item.savedBy?.displayRole && (
+        {item.savedBy?.displayRole && (
+          <View style={styles.cardBadgeOverlay}>
+            <Ionicons name="heart" size={13} color="#ef4444" />
             <Text style={styles.badgeRoleText}>
               {photoMine ? 'YOU' : item.savedBy.displayRole}
             </Text>
-          )}
-        </View>
-      </Pressable>
+          </View>
+        )}
+      </View>
     );
   };
 
@@ -293,10 +290,10 @@ export default function MoodboardScreen() {
           /* ── Featured Story Style Balanced 2-Column Masonry Grid ── */
           <View style={styles.masonryGridContainer}>
             <View style={styles.masonryColumn}>
-              {column0.map((item) => renderMasonryCard(item))}
+              {column0.map((item) => renderMasonryCard(item, true))}
             </View>
             <View style={styles.masonryColumn}>
-              {column1.map((item) => renderMasonryCard(item))}
+              {column1.map((item) => renderMasonryCard(item, false))}
             </View>
           </View>
         )}
@@ -454,24 +451,17 @@ const styles = StyleSheet.create({
   // Featured Story style 2-Column Masonry Grid
   masonryGridContainer: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     paddingHorizontal: 16,
   },
   masonryColumn: {
     flex: 1,
     flexDirection: 'column',
-    gap: 8,
+    gap: 6,
   },
-  masonryCard: {
+  masonryCardWrapper: {
     width: '100%',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 6,
-    overflow: 'hidden',
     position: 'relative',
-  },
-  masonryImage: {
-    width: '100%',
-    height: '100%',
   },
   cardBadgeOverlay: {
     position: 'absolute',
