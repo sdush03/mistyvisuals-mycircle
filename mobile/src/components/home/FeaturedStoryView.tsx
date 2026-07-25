@@ -32,9 +32,7 @@ import {
 import { savesService } from '../../services/savesService';
 import { formatDateText } from './lightbox/utils/date';
 import { MasonryCard } from './lightbox/components/MasonryCard';
-import { LightboxImageItem } from './lightbox/components/LightboxImageItem';
-import { useAutoHideTimer } from './lightbox/hooks/useAutoHideTimer';
-import { EditorialLightbox } from './lightbox/EditorialLightbox';
+import { EditorialLightbox, LightboxBounds } from './lightbox/EditorialLightbox';
 
 const { width, height: screenHeight } = Dimensions.get('screen');
 
@@ -106,26 +104,6 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     return filtered;
   }, [galleryImages, activeTab]);
 
-  const {
-    isZoomed,
-    showControls,
-    setShowControls,
-    pauseAutoHideTimer,
-    resetAutoHideTimer,
-    handleZoomChange,
-    handleToggleControls,
-  } = useAutoHideTimer({
-    activeImageIndex,
-    filteredGalleryImages,
-  });
-
-  // iPhone Photos style Hero Expansion shared values & callbacks
-  const expandProgress = useSharedValue(0);
-  const thumbX = useSharedValue(0);
-  const thumbY = useSharedValue(0);
-  const thumbW = useSharedValue(100);
-  const thumbH = useSharedValue(100);
-
   const mainScrollRef = useRef<ScrollView>(null);
   const cardRefs = useRef<{ [key: string]: View | null }>({});
 
@@ -133,52 +111,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     cardRefs.current[cardId] = ref;
   }, []);
 
-  const updateThumbForIndex = useCallback((idx: number) => {
-    if (idx < 0 || idx >= filteredGalleryImages.length) return;
-    const img = filteredGalleryImages[idx];
-    if (!img) return;
-    const cardId = img.id || img.uri || `idx-${idx}`;
-    const targetCard = cardRefs.current[cardId];
-
-    if (targetCard) {
-      targetCard.measureInWindow((x, y, cardWidth, cardHeight) => {
-        if (cardWidth > 0 && cardHeight > 0) {
-          if (y < 80 || y + cardHeight > screenHeight - 60) {
-            targetCard.measureLayout(
-              mainScrollRef.current as any,
-              (left, top, w, h) => {
-                const targetScrollY = Math.max(0, top - screenHeight / 2 + h / 2);
-                mainScrollRef.current?.scrollTo({ y: targetScrollY, animated: false });
-                requestAnimationFrame(() => {
-                  targetCard.measureInWindow((nx, ny, nw, nh) => {
-                    if (nw > 0 && nh > 0) {
-                      thumbX.value = nx;
-                      thumbY.value = ny;
-                      thumbW.value = nw;
-                      thumbH.value = nh;
-                    }
-                  });
-                });
-              },
-              () => {}
-            );
-          } else {
-            thumbX.value = x;
-            thumbY.value = y;
-            thumbW.value = cardWidth;
-            thumbH.value = cardHeight;
-          }
-        }
-      });
-    }
-  }, [filteredGalleryImages]);
-
-  // Keep thumbnail target position updated whenever activeImageIndex changes in Lightbox
-  React.useEffect(() => {
-    if (activeImageIndex !== null) {
-      updateThumbForIndex(activeImageIndex);
-    }
-  }, [activeImageIndex, updateThumbForIndex]);
+  const [lightboxBounds, setLightboxBounds] = useState<LightboxBounds | null>(null);
 
   const openLightbox = useCallback((img: any, bounds: { x: number; y: number; width: number; height: number } | null) => {
     const targetIdx = filteredGalleryImages.findIndex(item => {
@@ -190,82 +123,9 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
       return Boolean(uriItem && uriImg && uriItem === uriImg);
     });
     const finalIdx = targetIdx !== -1 ? targetIdx : (img.originalIndex ?? 0);
-
-    if (bounds && bounds.width > 0 && bounds.height > 0) {
-      thumbX.value = bounds.x;
-      thumbY.value = bounds.y;
-      thumbW.value = bounds.width;
-      thumbH.value = bounds.height;
-    } else {
-      thumbX.value = width / 2 - 60;
-      thumbY.value = screenHeight / 2 - 60;
-      thumbW.value = 120;
-      thumbH.value = 120;
-    }
-
-    setShowControls(true);
-    handleZoomChange(false);
-    expandProgress.value = 0;
+    setLightboxBounds(bounds);
     setActiveImageIndex(finalIdx);
-
-    requestAnimationFrame(() => {
-      expandProgress.value = withTiming(1, {
-        duration: 400,
-        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-      });
-    });
-  }, [filteredGalleryImages, width]);
-
-  const closeLightbox = useCallback(() => {
-    if (activeImageIndex !== null) {
-      updateThumbForIndex(activeImageIndex);
-    }
-    expandProgress.value = withTiming(0, {
-      duration: 350,
-      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-    }, (finished) => {
-      if (finished) {
-        runOnJS(setActiveImageIndex)(null);
-      }
-    });
-  }, [activeImageIndex, updateThumbForIndex]);
-
-  const heroAnimatedStyle = useAnimatedStyle(() => {
-    'worklet';
-    const p = expandProgress.value;
-    const cx_grid = thumbX.value + thumbW.value / 2;
-    const cy_grid = thumbY.value + thumbH.value / 2;
-    const cx_screen = width / 2;
-    const cy_screen = screenHeight / 2;
-
-    const initialScale = Math.max(thumbW.value / width, 0.12);
-    const scale = initialScale + (1 - initialScale) * p;
-
-    const initialTx = cx_grid - cx_screen;
-    const initialTy = cy_grid - cy_screen;
-    const translateX = initialTx * (1 - p);
-    const translateY = initialTy * (1 - p);
-
-    return {
-      opacity: p > 0.002 ? 1 : 0,
-      transform: [
-        { translateX },
-        { translateY },
-        { scale },
-      ],
-      borderRadius: (1 - p) * 16,
-      overflow: 'hidden',
-    };
-  });
-
-  const backdropAnimatedStyle = useAnimatedStyle(() => ({
-    backgroundColor: '#000000',
-    opacity: expandProgress.value,
-  }));
-
-  const controlsFadeAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: expandProgress.value,
-  }));
+  }, [filteredGalleryImages]);
   // FIX 1: start at 40, bump to Infinity after 150ms
   const [renderLimit, setRenderLimit] = useState<number>(40);
   const insets = useSafeAreaInsets();
@@ -329,35 +189,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimeoutRef = useRef<any>(null);
 
-  const showToast = useCallback((msg: string) => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-    pauseAutoHideTimer();
-    setShowControls(true);
-    setToastMessage(msg);
 
-    toastTranslateY.value = -150;
-    toastOpacity.value = 0;
-    toastTranslateY.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
-    toastOpacity.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) });
-
-    toastTimeoutRef.current = setTimeout(() => {
-      toastTranslateY.value = withTiming(-150, { duration: 220, easing: Easing.in(Easing.quad) });
-      toastOpacity.value = withTiming(0, { duration: 200 });
-      setTimeout(() => {
-        setToastMessage(null);
-        resetAutoHideTimer();
-      }, 250);
-    }, 2200);
-  }, [pauseAutoHideTimer, resetAutoHideTimer]);
-
-  React.useEffect(() => {
-    return () => {
-      if (heartPopTimeoutRef.current) clearTimeout(heartPopTimeoutRef.current);
-      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    };
-  }, []);
 
   // Sync isLightboxOpen shared value whenever JS activeImageIndex state changes
   React.useEffect(() => {
@@ -370,7 +202,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 
   const handleCloseScreen = useCallback(() => {
     if (activeImageIndex !== null) {
-      closeLightbox();
+      setActiveImageIndex(null);
       return;
     }
     screenSwipeX.value = withTiming(width, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
@@ -378,7 +210,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
         runOnJS(onClose)();
       }
     });
-  }, [activeImageIndex, closeLightbox, onClose, width]);
+  }, [activeImageIndex, onClose, width]);
 
   // Android hardware back button handler
   React.useEffect(() => {
@@ -448,12 +280,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
     }
   }, [isOpen, story, activeTab]);
 
-  // Reset zoom & transform when photo changes
-  React.useEffect(() => {
-    handleZoomChange(false);
-    translateX.value = 0;
-    opacity.value = 1;
-  }, [activeImageIndex, handleZoomChange]);
+
 
   // High-performance background prefetching of adjacent lightbox photos (+/- 2 photos)
   React.useEffect(() => {
@@ -550,65 +377,11 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
   };
   const navigate = useCallback((dir: 'next' | 'prev') => navigateRef.current(dir), []);
 
-  // Stable toggleSave ref for double-tap gesture
-  const toggleSaveRef = useRef(() => {});
-  toggleSaveRef.current = () => {
-    if (activeImageIndex === null) return;
-    const currentImg = filteredGalleryImages[activeImageIndex];
-    if (!currentImg) return;
-    const currentUrl = typeof currentImg === 'object' && currentImg.fullUri
-      ? currentImg.fullUri
-      : (typeof currentImg === 'object' && currentImg.uri ? currentImg.uri : (typeof currentImg === 'string' ? currentImg : ''));
-    if (!currentUrl) return;
-
-    setSavedUrls(prev => {
-      const updated = new Set(prev);
-      if (updated.has(currentUrl)) {
-        // Double tap again -> dislike / unsave WITHOUT animation
-        updated.delete(currentUrl);
-        savesService.unsavePhoto(currentUrl);
-        showToast("Removed from Moodboard");
-      } else {
-        // Double tap first time -> like / save WITH translucent heart pop animation
-        updated.add(currentUrl);
-        savesService.savePhoto(currentUrl, story?.id);
-        triggerHeartPop();
-        showToast("Photo saved to Moodboard ✨");
-      }
-      return updated;
-    });
-  };
-  const toggleSave = useCallback(() => toggleSaveRef.current(), []);
 
 
 
-  const renderLightboxItem = useCallback(({ item }: { item: any }) => (
-    <LightboxImageItem
-      item={item}
-      width={width}
-      onDoubleTap={toggleSave}
-      onNavigate={navigate}
-      onZoomChange={handleZoomChange}
-      onToggleControls={handleToggleControls}
-      onCloseLightbox={closeLightbox}
-      onInteractionStart={pauseAutoHideTimer}
-      onInteractionEnd={resetAutoHideTimer}
-      expandProgress={expandProgress}
-      heartPopScale={heartPopScale}
-      heartPopOpacity={heartPopOpacity}
-    />
-  ), [
-    toggleSave,
-    navigate,
-    handleZoomChange,
-    handleToggleControls,
-    closeLightbox,
-    pauseAutoHideTimer,
-    resetAutoHideTimer,
-    expandProgress,
-    heartPopScale,
-    heartPopOpacity,
-  ]);
+
+
 
   if (!story) return null;
 
@@ -768,19 +541,20 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
       </Animated.View>
     </GestureDetector>
 
-        {/* ── Minimalist Editorial Lightbox (Vogue / Kinfolk Style) ── */}
-        {activeImageIndex !== null && (
-          <EditorialLightbox
-            visible={activeImageIndex !== null}
-            images={filteredGalleryImages}
-            initialIndex={activeImageIndex}
-            onClose={() => setActiveImageIndex(null)}
-            title={story?.title || 'MISTY VISUALS'}
-          />
-        )}
-      </GestureHandlerRootView>
-    </Modal>
-  );
+    {/* ── Universal Editorial Lightbox Component ── */}
+    {activeImageIndex !== null && (
+      <EditorialLightbox
+        visible={activeImageIndex !== null}
+        images={filteredGalleryImages}
+        initialIndex={activeImageIndex}
+        initialBounds={lightboxBounds}
+        onClose={() => setActiveImageIndex(null)}
+        title={story?.title || 'MISTY VISUALS'}
+      />
+    )}
+  </GestureHandlerRootView>
+</Modal>
+);
 }
 
 const styles = StyleSheet.create({

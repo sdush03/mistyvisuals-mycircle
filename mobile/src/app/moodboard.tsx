@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -14,7 +14,7 @@ import { router } from 'expo-router';
 import { useScrollTabBarCollapse } from '../hooks/useScrollTabBarCollapse';
 import { savesService, SavedPhotoItem } from '../services/savesService';
 import { useAuthStore } from '../store/authStore';
-import { EditorialLightbox } from '../components/home/lightbox/EditorialLightbox';
+import { EditorialLightbox, LightboxBounds } from '../components/home/lightbox/EditorialLightbox';
 import {
   FONT_FUTURA,
   FONT_FUTURA_BOLD,
@@ -36,6 +36,7 @@ export default function MoodboardScreen() {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [selectedFilter, setSelectedFilter] = useState<MoodboardFilterType>('all');
   const [selectedPhotoIdx, setSelectedPhotoIdx] = useState<number | null>(null);
+  const [selectedBounds, setSelectedBounds] = useState<LightboxBounds | null>(null);
 
   const fetchSaves = useCallback(async () => {
     try {
@@ -124,11 +125,26 @@ export default function MoodboardScreen() {
 
   const renderMasonryCard = (item: any) => {
     const photoMine = isMine(item);
+    const cardRef = useRef<View>(null);
+
+    const handlePress = () => {
+      if (cardRef.current) {
+        cardRef.current.measureInWindow((x, y, w, h) => {
+          setSelectedBounds({ x, y, width: w, height: h });
+          setSelectedPhotoIdx(item.globalIndex ?? 0);
+        });
+      } else {
+        setSelectedBounds(null);
+        setSelectedPhotoIdx(item.globalIndex ?? 0);
+      }
+    };
+
     return (
       <Pressable
         key={item.id}
+        ref={cardRef}
         style={[styles.masonryCard, { aspectRatio: item.cardAspect }]}
-        onPress={() => setSelectedPhotoIdx(item.globalIndex ?? 0)}
+        onPress={handlePress}
       >
         <Image source={{ uri: item.photoUrl }} style={styles.masonryImage} resizeMode="cover" />
 
@@ -233,13 +249,17 @@ export default function MoodboardScreen() {
         )}
       </ScrollView>
 
-      {/* ── Shared Featured Story Editorial Lightbox Modal ── */}
+      {/* ── Shared Universal Editorial Lightbox Modal ── */}
       {selectedPhotoIdx !== null && (
         <EditorialLightbox
           visible={selectedPhotoIdx !== null}
           images={filteredSaves}
           initialIndex={selectedPhotoIdx}
-          onClose={() => setSelectedPhotoIdx(null)}
+          initialBounds={selectedBounds}
+          onClose={() => {
+            setSelectedPhotoIdx(null);
+            setSelectedBounds(null);
+          }}
           onUnsave={handleUnsave}
           title="MY MOODBOARD"
         />

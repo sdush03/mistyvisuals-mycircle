@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -17,7 +17,7 @@ import { useScrollTabBarCollapse } from '../hooks/useScrollTabBarCollapse';
 import { useAuthStore } from '../store/authStore';
 import { savesService, SavedPhotoItem } from '../services/savesService';
 import { tabEvents, TAB_OPEN_PROFILE_SETTINGS } from '../lib/tabEvents';
-import { EditorialLightbox } from '../components/home/lightbox/EditorialLightbox';
+import { EditorialLightbox, LightboxBounds } from '../components/home/lightbox/EditorialLightbox';
 import api from '../services/api';
 import {
   FONT_FUTURA,
@@ -109,8 +109,9 @@ export default function ProfileScreen() {
   // MY PHOTOS lightbox state (kept separate as requested)
   const [selectedPhoto, setSelectedPhoto] = useState<any | null>(null);
 
-  // SAVED MOODBOARD Featured Story Lightbox state
+  // SAVED MOODBOARD Featured Story Lightbox state & bounds
   const [selectedSavedIdx, setSelectedSavedIdx] = useState<number | null>(null);
+  const [selectedSavedBounds, setSelectedSavedBounds] = useState<LightboxBounds | null>(null);
 
   // Fetch celebration events & matched photos grouped by event
   const fetchMyCelebrationPhotos = useCallback(async () => {
@@ -236,17 +237,30 @@ export default function ProfileScreen() {
 
   const renderMasonryCard = (p: any, index: number, isSavedTab: boolean = false) => {
     const imgUri = getPhotoUri(p);
+    const cardRef = useRef<View>(null);
+
+    const handlePress = () => {
+      if (isSavedTab) {
+        if (cardRef.current) {
+          cardRef.current.measureInWindow((x, y, w, h) => {
+            setSelectedSavedBounds({ x, y, width: w, height: h });
+            setSelectedSavedIdx(p.globalIndex ?? 0);
+          });
+        } else {
+          setSelectedSavedBounds(null);
+          setSelectedSavedIdx(p.globalIndex ?? 0);
+        }
+      } else {
+        setSelectedPhoto(p);
+      }
+    };
+
     return (
       <Pressable
         key={p.id || index}
+        ref={cardRef}
         style={[styles.masonryCard, { aspectRatio: p.cardAspect || 0.75 }]}
-        onPress={() => {
-          if (isSavedTab) {
-            setSelectedSavedIdx(p.globalIndex ?? 0);
-          } else {
-            setSelectedPhoto(p);
-          }
-        }}
+        onPress={handlePress}
       >
         <Image source={{ uri: imgUri }} style={styles.masonryImage} resizeMode="cover" />
       </Pressable>
@@ -436,13 +450,17 @@ export default function ProfileScreen() {
         </Pressable>
       </Modal>
 
-      {/* ── SAVED MOODBOARD Shared Editorial Lightbox Modal ── */}
+      {/* ── SAVED MOODBOARD Shared Universal Editorial Lightbox Modal ── */}
       {selectedSavedIdx !== null && (
         <EditorialLightbox
           visible={selectedSavedIdx !== null}
           images={savedPhotos}
           initialIndex={selectedSavedIdx}
-          onClose={() => setSelectedSavedIdx(null)}
+          initialBounds={selectedSavedBounds}
+          onClose={() => {
+            setSelectedSavedIdx(null);
+            setSelectedSavedBounds(null);
+          }}
           onUnsave={handleUnsaveFromProfile}
           title="SAVED MOODBOARD"
         />

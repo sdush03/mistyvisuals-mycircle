@@ -34,12 +34,20 @@ import {
   FONT_JOST_REGULAR,
 } from '../../../constants/fonts';
 
-const { width, height: screenHeight } = Dimensions.get('window');
+const { width, height: screenHeight } = Dimensions.get('screen');
+
+export interface LightboxBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export interface EditorialLightboxProps {
   visible: boolean;
   images: any[];
   initialIndex: number;
+  initialBounds?: LightboxBounds | null;
   onClose: () => void;
   onUnsave?: (item: any) => void;
   title?: string;
@@ -49,6 +57,7 @@ export function EditorialLightbox({
   visible,
   images,
   initialIndex,
+  initialBounds,
   onClose,
   onUnsave,
   title = 'MISTY VISUALS',
@@ -62,19 +71,51 @@ export function EditorialLightbox({
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [savedUrls, setSavedUrls] = useState<Set<string>>(new Set());
 
-  // Shared Values for Reanimated Gestures & Expansion Animations (Matching FeaturedStoryView)
+  // Universal Bounds & Animation Shared Values
   const expandProgress = useSharedValue(0);
+  const thumbX = useSharedValue(initialBounds?.x ?? width / 2 - 60);
+  const thumbY = useSharedValue(initialBounds?.y ?? screenHeight / 2 - 60);
+  const thumbW = useSharedValue(initialBounds?.width ?? 120);
+  const thumbH = useSharedValue(initialBounds?.height ?? 120);
+
   const toastOpacity = useSharedValue(0);
   const heartPopScale = useSharedValue(0);
   const heartPopOpacity = useSharedValue(0);
+
+  // Auto-hide controls timer reference
+  const autoHideTimerRef = useRef<any>(null);
+
+  const resetAutoHideTimer = useCallback(() => {
+    if (autoHideTimerRef.current) clearTimeout(autoHideTimerRef.current);
+    autoHideTimerRef.current = setTimeout(() => {
+      setShowControls(false);
+    }, 3500);
+  }, []);
+
+  const pauseAutoHideTimer = useCallback(() => {
+    if (autoHideTimerRef.current) clearTimeout(autoHideTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (visible) {
       setActiveIdx(initialIndex);
       setShowControls(true);
+      setIsZoomed(false);
       expandProgress.value = 0;
 
-      // Smooth Bezier 400ms expansion matching FeaturedStoryView
+      if (initialBounds && initialBounds.width > 0) {
+        thumbX.value = initialBounds.x;
+        thumbY.value = initialBounds.y;
+        thumbW.value = initialBounds.width;
+        thumbH.value = initialBounds.height;
+      } else {
+        thumbX.value = width / 2 - 60;
+        thumbY.value = screenHeight / 2 - 60;
+        thumbW.value = 120;
+        thumbH.value = 120;
+      }
+
+      // Smooth 400ms Bezier scale expansion from bounds to fullscreen
       requestAnimationFrame(() => {
         expandProgress.value = withTiming(1, {
           duration: 400,
@@ -82,21 +123,30 @@ export function EditorialLightbox({
         });
       });
 
+      resetAutoHideTimer();
+
       savesService.getSavedPhotos().then((items) => {
         const urls = new Set(items.map((i) => i.photoUrl));
         setSavedUrls(urls);
       });
     }
-  }, [visible, initialIndex]);
 
-  const showToast = useCallback((msg: string) => {
-    setToastMsg(msg);
-    toastOpacity.value = withTiming(1, { duration: 250 });
-    setTimeout(() => {
-      toastOpacity.value = withTiming(0, { duration: 300 });
-      setTimeout(() => setToastMsg(null), 300);
-    }, 1800);
-  }, [toastOpacity]);
+    return () => {
+      pauseAutoHideTimer();
+    };
+  }, [visible, initialIndex, initialBounds, resetAutoHideTimer, pauseAutoHideTimer]);
+
+  const showToast = useCallback(
+    (msg: string) => {
+      setToastMsg(msg);
+      toastOpacity.value = withTiming(1, { duration: 250 });
+      setTimeout(() => {
+        toastOpacity.value = withTiming(0, { duration: 300 });
+        setTimeout(() => setToastMsg(null), 300);
+      }, 1800);
+    },
+    [toastOpacity]
+  );
 
   const triggerHeartPop = useCallback(() => {
     heartPopScale.value = 0.4;
@@ -107,8 +157,9 @@ export function EditorialLightbox({
     });
   }, [heartPopScale, heartPopOpacity]);
 
-  // Smooth Bezier 350ms collapse matching FeaturedStoryView
+  // Smooth 350ms Bezier collapse back to original bounds on exit
   const handleClose = useCallback(() => {
+    pauseAutoHideTimer();
     expandProgress.value = withTiming(
       0,
       {
@@ -122,13 +173,21 @@ export function EditorialLightbox({
         }
       }
     );
-  }, [expandProgress, onClose]);
+  }, [expandProgress, onClose, pauseAutoHideTimer]);
 
   const currentItem = images[activeIdx] || null;
   const currentUrl = currentItem
     ? typeof currentItem === 'string'
       ? currentItem
-      : currentItem.photoUrl || currentItem.url || currentItem.r2Url || currentItem.file_url_mobile || ''
+      : currentItem.photoUrl ||
+        currentItem.url ||
+        currentItem.r2Url ||
+        currentItem.r2_url ||
+        currentItem.file_url_mobile ||
+        currentItem.file_url ||
+        currentItem.uri ||
+        currentItem.fullUri ||
+        ''
     : '';
 
   const isSaved = savedUrls.has(currentUrl);
@@ -173,16 +232,26 @@ export function EditorialLightbox({
     }
   };
 
-  // Exact FeaturedStoryView animated styles
+  // Universal hero expansion style calculated directly from thumbnail bounds
   const heroAnimatedStyle = useAnimatedStyle(() => {
     'worklet';
     const p = expandProgress.value;
-    const initialScale = 0.82;
+    const cx_grid = thumbX.value + thumbW.value / 2;
+    const cy_grid = thumbY.value + thumbH.value / 2;
+    const cx_screen = width / 2;
+    const cy_screen = screenHeight / 2;
+
+    const initialScale = Math.max(thumbW.value / width, 0.12);
     const scale = initialScale + (1 - initialScale) * p;
+
+    const initialTx = cx_grid - cx_screen;
+    const initialTy = cy_grid - cy_screen;
+    const translateX = initialTx * (1 - p);
+    const translateY = initialTy * (1 - p);
 
     return {
       opacity: p > 0.002 ? 1 : 0,
-      transform: [{ scale }],
+      transform: [{ translateX }, { translateY }, { scale }],
       borderRadius: (1 - p) * 16,
       overflow: 'hidden',
     };
@@ -194,12 +263,26 @@ export function EditorialLightbox({
   }));
 
   const controlsAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: expandProgress.value,
+    opacity: isZoomed ? 0 : expandProgress.value,
   }));
 
   const toastAnimatedStyle = useAnimatedStyle(() => ({
     opacity: toastOpacity.value,
   }));
+
+  // Auto-generate dynamic category label (e.g. "STORY TITLE · CATEGORY")
+  const getDisplaySubtitle = () => {
+    let cat = '';
+    if (currentItem && typeof currentItem === 'object') {
+      if (currentItem.category) cat = String(currentItem.category).toUpperCase();
+      else if (currentItem.eventTitle) cat = String(currentItem.eventTitle).toUpperCase();
+    }
+    const mainTitle = title.toUpperCase();
+    if (cat && cat !== mainTitle) {
+      return `${mainTitle}  ·  ${cat}`;
+    }
+    return mainTitle;
+  };
 
   const renderItem = useCallback(
     ({ item }: { item: any }) => (
@@ -214,19 +297,25 @@ export function EditorialLightbox({
             flatListRef.current?.scrollToIndex({ index: activeIdx - 1, animated: true });
           }
         }}
-        onZoomChange={(zoomed) => setIsZoomed(zoomed)}
+        onZoomChange={(zoomed) => {
+          setIsZoomed(zoomed);
+          if (zoomed) setShowControls(false);
+        }}
         onToggleControls={() => {
-          setShowControls((prev) => !prev);
+          if (!isZoomed) {
+            setShowControls((prev) => !prev);
+            resetAutoHideTimer();
+          }
         }}
         onCloseLightbox={handleClose}
-        onInteractionStart={() => {}}
-        onInteractionEnd={() => {}}
+        onInteractionStart={pauseAutoHideTimer}
+        onInteractionEnd={resetAutoHideTimer}
         expandProgress={expandProgress}
         heartPopScale={heartPopScale}
         heartPopOpacity={heartPopOpacity}
       />
     ),
-    [activeIdx, images.length, showControls, handleClose, handleToggleSave]
+    [activeIdx, images.length, isZoomed, handleClose, handleToggleSave, resetAutoHideTimer, pauseAutoHideTimer]
   );
 
   if (!visible || images.length === 0) return null;
@@ -244,7 +333,7 @@ export function EditorialLightbox({
         <Animated.View style={[StyleSheet.absoluteFillObject, backdropAnimatedStyle]} pointerEvents="none" />
 
         <View style={styles.lightboxContainer}>
-          <StatusBar barStyle="light-content" translucent backgroundColor="transparent" animated />
+          <StatusBar barStyle="light-content" translucent backgroundColor="transparent" hidden={!showControls || isZoomed} animated />
 
           {/* Toast Notification Banner */}
           {toastMsg && (
@@ -258,7 +347,7 @@ export function EditorialLightbox({
           )}
 
           {/* Top Editorial Header Gradient Overlay */}
-          {showControls && (
+          {showControls && !isZoomed && (
             <Animated.View style={[{ zIndex: 100 }, controlsAnimatedStyle]} pointerEvents="box-none">
               <LinearGradient
                 colors={['rgba(0, 0, 0, 0.45)', 'rgba(0, 0, 0, 0.1)', 'transparent']}
@@ -286,7 +375,7 @@ export function EditorialLightbox({
             </Animated.View>
           )}
 
-          {/* Animated Hero Stage (Matching FeaturedStoryView bezier scale expansion) */}
+          {/* Animated Hero Stage (Scale and Translate directly from Thumbnail Bounds) */}
           <Animated.View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center' }, heroAnimatedStyle]}>
             <View style={styles.lightboxImageContainer}>
               <FlatList
@@ -304,11 +393,16 @@ export function EditorialLightbox({
                   offset: (width + 18) * index,
                   index,
                 })}
+                onScrollBeginDrag={() => {
+                  setShowControls(true);
+                  pauseAutoHideTimer();
+                }}
                 onMomentumScrollEnd={(e) => {
                   const nextIdx = Math.round(e.nativeEvent.contentOffset.x / (width + 18));
                   if (nextIdx >= 0 && nextIdx < images.length) {
                     setActiveIdx(nextIdx);
                   }
+                  resetAutoHideTimer();
                 }}
                 keyExtractor={(item, index) => item.id || `lightbox-${index}`}
                 ItemSeparatorComponent={() => <View style={{ width: 18, backgroundColor: '#000000' }} />}
@@ -318,7 +412,7 @@ export function EditorialLightbox({
           </Animated.View>
 
           {/* Bottom Editorial Footer Gradient Overlay */}
-          {showControls && (
+          {showControls && !isZoomed && (
             <Animated.View style={[{ zIndex: 100 }, controlsAnimatedStyle]} pointerEvents="box-none">
               <LinearGradient
                 colors={['transparent', 'rgba(0, 0, 0, 0.4)', 'rgba(0, 0, 0, 0.85)']}
@@ -326,7 +420,7 @@ export function EditorialLightbox({
                 pointerEvents="box-none"
               >
                 <View style={{ alignItems: 'center', width: '100%' }}>
-                  {/* High-Fashion Format Counter: e.g. "01 // 24" */}
+                  {/* High-Fashion Counter: e.g. "01 // 24" */}
                   <View style={styles.lightboxCounterContainer}>
                     <Text style={styles.lightboxCounterCurrent}>
                       {String(activeIdx + 1).padStart(2, '0')}
@@ -337,7 +431,7 @@ export function EditorialLightbox({
                     </Text>
                   </View>
 
-                  <Text style={styles.lightboxCategoryText}>{title.toUpperCase()}</Text>
+                  <Text style={styles.lightboxCategoryText}>{getDisplaySubtitle()}</Text>
 
                   {/* Actions Row */}
                   <View style={styles.lightboxActionRow}>
