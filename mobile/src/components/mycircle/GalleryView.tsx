@@ -285,10 +285,13 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
       if (mapped.length > 0) {
         setAllPhotos((prev) => {
           const next = [...prev, ...mapped];
-          if (totalAllPhotosCount !== null && next.length >= totalAllPhotosCount) {
+          const dedupped = next.filter((item, index, self) =>
+            index === self.findIndex((t) => (t.id && item.id ? t.id === item.id : t.r2Url === item.r2Url))
+          );
+          if (totalAllPhotosCount !== null && dedupped.length >= totalAllPhotosCount) {
             setHasMorePhotos(false);
           }
-          return next;
+          return dedupped;
         });
         setAllPhotosOffset((prev) => prev + mapped.length);
       } else {
@@ -554,7 +557,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.tabsScrollContent}
                 >
-                  {availableTabs.map((tabName) => {
+                  {availableTabs.map((tabName, tabIdx) => {
                     const isActive = activeTab.toUpperCase() === tabName.toUpperCase();
                     let tabCount: number | null = null;
                     if (tabName === 'MY PHOTOS') {
@@ -567,7 +570,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
 
                     return (
                       <Pressable
-                        key={tabName}
+                        key={`tab-${tabName}-${tabIdx}`}
                         onPress={() => setActiveTab(tabName)}
                         style={[styles.tabButton, isActive && styles.tabButtonActive]}
                       >
@@ -606,7 +609,8 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
                 <View style={styles.masonryGridContainer}>
                   <View style={styles.masonryColumn}>
                     {column0.map((img, idx) => {
-                      const cardId = img.id ? String(img.id) : (img.r2Url || `col0-${idx}`);
+                      const cardId = img.id ? `c0-${img.id}-${idx}` : (img.r2Url ? `c0-${img.r2Url}-${idx}` : `c0-${idx}`);
+                      const refId = img.id ? String(img.id) : (img.r2Url || `photo-${idx}`);
                       return (
                         <MasonryCard
                           key={cardId}
@@ -616,7 +620,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
                           onSelect={(bounds) => openLightbox(img, bounds)}
                           onRegisterRef={(id, ref) => {
                             if (id) cardRefs.current[id] = ref;
-                            if (cardId) cardRefs.current[cardId] = ref;
+                            if (refId) cardRefs.current[refId] = ref;
                           }}
                         />
                       );
@@ -624,7 +628,8 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
                   </View>
                   <View style={styles.masonryColumn}>
                     {column1.map((img, idx) => {
-                      const cardId = img.id ? String(img.id) : (img.r2Url || `col1-${idx}`);
+                      const cardId = img.id ? `c1-${img.id}-${idx}` : (img.r2Url ? `c1-${img.r2Url}-${idx}` : `c1-${idx}`);
+                      const refId = img.id ? String(img.id) : (img.r2Url || `photo-${idx}`);
                       return (
                         <MasonryCard
                           key={cardId}
@@ -634,7 +639,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
                           onSelect={(bounds) => openLightbox(img, bounds)}
                           onRegisterRef={(id, ref) => {
                             if (id) cardRefs.current[id] = ref;
-                            if (cardId) cardRefs.current[cardId] = ref;
+                            if (refId) cardRefs.current[refId] = ref;
                           }}
                         />
                       );
