@@ -612,7 +612,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: 'transparent',
   },
   editorialBackButton: {
     position: 'absolute',
