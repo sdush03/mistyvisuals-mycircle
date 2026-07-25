@@ -100,6 +100,7 @@ export function EditorialLightbox({
   }, []);
 
   useEffect(() => {
+    let animTimer: any = null;
     if (visible) {
       setActiveIdx(initialIndex);
       setShowControls(true);
@@ -118,13 +119,15 @@ export function EditorialLightbox({
         thumbH.value = 120;
       }
 
-      // Smooth 400ms Bezier scale expansion from bounds to fullscreen
-      requestAnimationFrame(() => {
-        expandProgress.value = withTiming(1, {
-          duration: 400,
-          easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      // 60fps smooth opening: Wait for native Modal mount & layout pass to complete before animating expansion
+      animTimer = setTimeout(() => {
+        requestAnimationFrame(() => {
+          expandProgress.value = withTiming(1, {
+            duration: 360,
+            easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+          });
         });
-      });
+      }, 20);
 
       resetAutoHideTimer();
 
@@ -135,6 +138,7 @@ export function EditorialLightbox({
     }
 
     return () => {
+      clearTimeout(animTimer);
       pauseAutoHideTimer();
     };
   }, [visible, initialIndex, initialBounds, resetAutoHideTimer, pauseAutoHideTimer]);
