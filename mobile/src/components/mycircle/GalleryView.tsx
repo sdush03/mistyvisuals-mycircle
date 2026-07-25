@@ -306,11 +306,57 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   }, [eventSlug]);
 
   const hasFullAccess = profile?.hasFullAccess ?? true;
+  const [tabCache, setTabCache] = useState<Record<string, Photo[]>>({});
+
   const favoritesCount = React.useMemo(() => allPhotos.filter((p: any) => p.isLiked).length, [allPhotos]);
 
   const highlightsCount = React.useMemo(() => {
+    if (eventDetails?.tabCounts?.['HIGHLIGHTS']) {
+      return eventDetails.tabCounts['HIGHLIGHTS'];
+    }
     return allPhotos.filter((p: any) => p.tabName && p.tabName.trim().toUpperCase() === 'HIGHLIGHTS').length;
-  }, [allPhotos]);
+  }, [allPhotos, eventDetails?.tabCounts]);
+
+  // Per-tab server loader (matching web 1:1)
+  const fetchTabPhotos = useCallback(async (tabName: string) => {
+    const norm = tabName.trim().toUpperCase();
+    if (norm === 'ALL' || norm === 'MY PHOTOS' || norm === 'MY FAVOURITES') return;
+    if (tabCache[norm]) return; // Already cached
+
+    try {
+      const eventHeaders = eventHeadersRef.current;
+      const res = await guestApi.get(
+        `/api/gallery/public/events/${eventSlug}/photos?limit=120&tab=${encodeURIComponent(tabName)}`,
+        { headers: eventHeaders }
+      );
+      const rawList = res.data.photos || (Array.isArray(res.data) ? res.data : []);
+      const mapPhotoItem = (p: any): Photo => {
+        const uri = p.r2Url || p.thumbnailUrl || p.r2_url || p.file_url_mobile || p.file_url || p.url || '';
+        return {
+          id: p.id,
+          r2Url: uri,
+          uri,
+          fullUri: uri,
+          photoUrl: uri,
+          width: p.width,
+          height: p.height,
+          tabName: p.tabName || p.tab_name || null,
+          isLiked: !!(p.likes && p.likes.length > 0),
+          likeCount: p._count?.likes || 0,
+        };
+      };
+      const mapped = Array.isArray(rawList) ? rawList.map(mapPhotoItem) : [];
+      setTabCache((prev) => ({ ...prev, [norm]: mapped }));
+    } catch (err) {
+      console.warn(`Failed to fetch photos for tab ${tabName}:`, err);
+    }
+  }, [eventSlug, tabCache]);
+
+  useEffect(() => {
+    if (activeTab && activeTab !== 'ALL' && activeTab !== 'MY PHOTOS' && activeTab !== 'MY FAVOURITES') {
+      fetchTabPhotos(activeTab);
+    }
+  }, [activeTab, fetchTabPhotos]);
 
   // Dynamic Available Tabs (Matching website ordering and access rules 1:1)
   const availableTabs = React.useMemo(() => {
@@ -387,11 +433,14 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     if (currentUpper === 'ALL') {
       return allPhotos;
     }
+    if (tabCache[currentUpper] && tabCache[currentUpper].length > 0) {
+      return tabCache[currentUpper];
+    }
     return allPhotos.filter((p: any) => {
       if (!p.tabName) return false;
       return p.tabName.trim().toUpperCase() === currentUpper;
     });
-  }, [activeTab, photos, allPhotos]);
+  }, [activeTab, photos, allPhotos, tabCache]);
 
   // Progressive render limit matching FeaturedStoryView 1:1
   useEffect(() => {
@@ -595,9 +644,10 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
                     } else if (tabName === 'MY FAVOURITES') {
                       tabCount = favoritesCount;
                     } else if (tabName === 'ALL') {
-                      tabCount = totalAllPhotosCount !== null ? totalAllPhotosCount : allPhotos.length;
+                      tabCount = eventDetails?.tabCounts?.['ALL'] ?? (totalAllPhotosCount !== null ? totalAllPhotosCount : allPhotos.length);
                     } else {
-                      tabCount = allPhotos.filter((p: any) => p.tabName && p.tabName.trim().toUpperCase() === tabName.toUpperCase()).length;
+                      const normKey = tabName.trim().toUpperCase();
+                      tabCount = eventDetails?.tabCounts?.[normKey] ?? allPhotos.filter((p: any) => p.tabName && p.tabName.trim().toUpperCase() === normKey).length;
                     }
 
                     return (

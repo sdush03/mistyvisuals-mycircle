@@ -1416,17 +1416,30 @@ module.exports = async function galleryRoutes(fastify, opts) {
       delete event.partialCode;
       event.isPreviewMode = !!isPreview;
 
-      // Filter tabs to only return those containing at least 1 photo
+      // Filter tabs to only return those containing at least 1 photo, and compute exact tabCounts
       const activePhotoTabs = await prisma.photo.groupBy({
         by: ['tabName'],
         where: { 
           eventId: event.id, 
           tabName: { not: null } 
         },
+        _count: {
+          _all: true
+        }
       });
       const activeTabNames = activePhotoTabs.map(t => t.tabName);
-      
+      const tabCounts: Record<string, number> = {};
+      activePhotoTabs.forEach(t => {
+        if (t.tabName) {
+          tabCounts[t.tabName.trim().toUpperCase()] = t._count._all;
+        }
+      });
+
+      const totalAllCount = await prisma.photo.count({ where: { eventId: event.id } });
+      tabCounts['ALL'] = totalAllCount;
+
       event.tabs = (event.tabs || []).filter(tab => activeTabNames.includes(tab));
+      (event as any).tabCounts = tabCounts;
 
       return event;
     } catch (err) {
