@@ -28,6 +28,8 @@ import {
   FONT_JOST_MEDIUM,
 } from '../constants/fonts';
 
+const { width } = Dimensions.get('window');
+
 type ProfileSubTab = 'my_photos' | 'saved_moodboard';
 
 interface EventMatchedGroup {
@@ -54,6 +56,37 @@ const getPhotoUri = (p: any): string => {
     p.src ||
     ''
   );
+};
+
+// Column Balancing Algorithm — EXACTLY matching FeaturedStoryView
+const balancePhotosIntoColumns = (photosList: any[]) => {
+  const cols: [any[], any[]] = [[], []];
+  const colHeights = [0, 0];
+
+  photosList.forEach((photo: any, index: number) => {
+    const realAspect =
+      photo.width && photo.height && Number(photo.height) > 0
+        ? Number(photo.width) / Number(photo.height)
+        : photo.aspectRatio || null;
+
+    const isLandscape = realAspect ? realAspect > 1.05 : photo.isHorizontal;
+
+    let cardAspect = 0.75;
+    if (isLandscape) {
+      cardAspect = realAspect && realAspect > 1.0 ? realAspect : 1.5;
+    } else {
+      const cycle = index % 3;
+      cardAspect = cycle === 0 ? 2 / 3 : cycle === 1 ? 3 / 4 : 4 / 5;
+    }
+
+    const photoWithAspect = { ...photo, cardAspect };
+    const heightContribution = 1 / cardAspect;
+    const shortestIdx = colHeights[0] <= colHeights[1] ? 0 : 1;
+    cols[shortestIdx].push(photoWithAspect);
+    colHeights[shortestIdx] += heightContribution;
+  });
+
+  return { column0: cols[0], column1: cols[1] };
 };
 
 export default function ProfileScreen() {
@@ -189,22 +222,12 @@ export default function ProfileScreen() {
     return '✨ CIRCLE MEMBER';
   };
 
-  const renderMasonryItem = (p: any, index: number) => {
+  const renderMasonryCard = (p: any, index: number) => {
     const imgUri = getPhotoUri(p);
-    const aspect =
-      p.aspectRatio ||
-      (p.width && p.height
-        ? p.width / p.height
-        : index % 3 === 0
-        ? 0.72
-        : index % 3 === 1
-        ? 1.05
-        : 0.85);
-
     return (
       <Pressable
         key={p.id || index}
-        style={[styles.masonryCard, { aspectRatio: aspect }]}
+        style={[styles.masonryCard, { aspectRatio: p.cardAspect || 0.75 }]}
         onPress={() => setSelectedPhoto(p)}
       >
         <Image source={{ uri: imgUri }} style={styles.masonryImage} resizeMode="cover" />
@@ -212,22 +235,17 @@ export default function ProfileScreen() {
     );
   };
 
-  // Helper to render 2-column Featured Story style masonry grid for any list of photos
+  // Render 2-column Featured Story balanced masonry grid for any list of photos
   const renderPhotoListMasonry = (photosList: any[]) => {
-    const col0: any[] = [];
-    const col1: any[] = [];
-    photosList.forEach((p, idx) => {
-      if (idx % 2 === 0) col0.push(p);
-      else col1.push(p);
-    });
+    const { column0, column1 } = balancePhotosIntoColumns(photosList);
 
     return (
       <View style={styles.masonryGridContainer}>
         <View style={styles.masonryColumn}>
-          {col0.map((p, idx) => renderMasonryItem(p, idx * 2))}
+          {column0.map((p, idx) => renderMasonryCard(p, idx * 2))}
         </View>
         <View style={styles.masonryColumn}>
-          {col1.map((p, idx) => renderMasonryItem(p, idx * 2 + 1))}
+          {column1.map((p, idx) => renderMasonryCard(p, idx * 2 + 1))}
         </View>
       </View>
     );
@@ -336,7 +354,7 @@ export default function ProfileScreen() {
                       </View>
                     </View>
 
-                    {/* 2-Column Featured Story Masonry Grid for this Event */}
+                    {/* 2-Column Featured Story Balanced Masonry Grid for this Event */}
                     {renderPhotoListMasonry(group.photos)}
                   </View>
                 );
@@ -363,7 +381,7 @@ export default function ProfileScreen() {
               </Pressable>
             </View>
           ) : (
-            /* 2-Column Featured Story Masonry Grid for Saved Moodboard */
+            /* 2-Column Featured Story Balanced Masonry Grid for Saved Moodboard */
             renderPhotoListMasonry(savedPhotos)
           )
         )}

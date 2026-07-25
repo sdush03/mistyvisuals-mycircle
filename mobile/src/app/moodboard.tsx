@@ -96,30 +96,43 @@ export default function MoodboardScreen() {
     return true;
   });
 
-  // Split items into 2 columns for Featured Story style Masonry Grid
-  const col0: SavedPhotoItem[] = [];
-  const col1: SavedPhotoItem[] = [];
-  filteredSaves.forEach((item, idx) => {
-    if (idx % 2 === 0) col0.push(item);
-    else col1.push(item);
-  });
+  // Shortest Column Height Balancing algorithm — EXACTLY matching FeaturedStoryView
+  const { column0, column1 } = React.useMemo(() => {
+    const cols: [any[], any[]] = [[], []];
+    const colHeights = [0, 0];
 
-  const renderMasonryCard = (item: SavedPhotoItem, index: number) => {
+    filteredSaves.forEach((photo: any, index: number) => {
+      const realAspect =
+        photo.width && photo.height && Number(photo.height) > 0
+          ? Number(photo.width) / Number(photo.height)
+          : photo.aspectRatio || null;
+
+      const isLandscape = realAspect ? realAspect > 1.05 : photo.isHorizontal;
+
+      let cardAspect = 0.75;
+      if (isLandscape) {
+        cardAspect = realAspect && realAspect > 1.0 ? realAspect : 1.5;
+      } else {
+        const cycle = index % 3;
+        cardAspect = cycle === 0 ? 2 / 3 : cycle === 1 ? 3 / 4 : 4 / 5;
+      }
+
+      const photoWithAspect = { ...photo, cardAspect };
+      const heightContribution = 1 / cardAspect;
+      const shortestIdx = colHeights[0] <= colHeights[1] ? 0 : 1;
+      cols[shortestIdx].push(photoWithAspect);
+      colHeights[shortestIdx] += heightContribution;
+    });
+
+    return { column0: cols[0], column1: cols[1] };
+  }, [filteredSaves]);
+
+  const renderMasonryCard = (item: any) => {
     const photoMine = isMine(item);
-    const aspect =
-      (item as any).aspectRatio ||
-      ((item as any).width && (item as any).height
-        ? (item as any).width / (item as any).height
-        : index % 3 === 0
-        ? 0.72
-        : index % 3 === 1
-        ? 1.05
-        : 0.85);
-
     return (
       <Pressable
         key={item.id}
-        style={[styles.masonryCard, { aspectRatio: aspect }]}
+        style={[styles.masonryCard, { aspectRatio: item.cardAspect }]}
         onPress={() => setSelectedPhoto(item)}
       >
         <Image source={{ uri: item.photoUrl }} style={styles.masonryImage} resizeMode="cover" />
@@ -213,13 +226,13 @@ export default function MoodboardScreen() {
             </Pressable>
           </View>
         ) : (
-          /* ── Featured Story Style 2-Column Masonry Grid ── */
+          /* ── Featured Story Style Balanced 2-Column Masonry Grid ── */
           <View style={styles.masonryGridContainer}>
             <View style={styles.masonryColumn}>
-              {col0.map((item, idx) => renderMasonryCard(item, idx * 2))}
+              {column0.map((item) => renderMasonryCard(item))}
             </View>
             <View style={styles.masonryColumn}>
-              {col1.map((item, idx) => renderMasonryCard(item, idx * 2 + 1))}
+              {column1.map((item) => renderMasonryCard(item))}
             </View>
           </View>
         )}
