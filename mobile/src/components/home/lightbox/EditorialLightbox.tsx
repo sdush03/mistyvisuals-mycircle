@@ -415,37 +415,14 @@ export function EditorialLightbox({
             </Animated.View>
           )}
 
-          {/* Top Editorial Header Gradient Overlay */}
-          {showControls && !isZoomed && (
-            <Animated.View style={[{ zIndex: 100 }, controlsAnimatedStyle]} pointerEvents="box-none">
-              <LinearGradient
-                colors={['rgba(0, 0, 0, 0.45)', 'rgba(0, 0, 0, 0.1)', 'transparent']}
-                style={[styles.lightboxHeaderGradient, { paddingTop: Math.max(insets.top + 18, 54) }]}
-                pointerEvents="box-none"
-              >
-                <View style={styles.lightboxHeaderInner}>
-                  <View style={styles.headerSpacer} />
-                  <View style={styles.lightboxHeaderBrand}>
-                    <Text style={styles.lightboxBrandText}>MISTY VISUALS</Text>
-                    <Text style={styles.lightboxBrandSub}>EDITORIAL</Text>
-                  </View>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.lightboxCloseEditorial,
-                      pressed && { opacity: 0.6 },
-                    ]}
-                    onPress={handleClose}
-                    hitSlop={14}
-                  >
-                    <Text style={styles.lightboxCloseIcon}>✕</Text>
-                  </Pressable>
-                </View>
-              </LinearGradient>
-            </Animated.View>
-          )}
-
           {/* Animated Hero Stage (Scale and Translate directly from Thumbnail Bounds) */}
-          <Animated.View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center' }, heroAnimatedStyle]}>
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFillObject,
+              { justifyContent: 'center', alignItems: 'center' },
+              heroAnimatedStyle,
+            ]}
+          >
             <View style={styles.lightboxImageContainer}>
               <FlatList
                 ref={flatListRef}
@@ -484,12 +461,41 @@ export function EditorialLightbox({
             </View>
           </Animated.View>
 
+          {/* Top Editorial Header Gradient Overlay */}
+          {showControls && !isZoomed && (
+            <Animated.View style={[styles.lightboxHeaderGradient, controlsAnimatedStyle]} pointerEvents="box-none">
+              <LinearGradient
+                colors={['rgba(0, 0, 0, 0.45)', 'rgba(0, 0, 0, 0.1)', 'transparent']}
+                style={[{ width: '100%', paddingTop: Math.max(insets.top + 18, 54) }]}
+                pointerEvents="box-none"
+              >
+                <View style={styles.lightboxHeaderInner}>
+                  <View style={styles.headerSpacer} />
+                  <View style={styles.lightboxHeaderBrand}>
+                    <Text style={styles.lightboxBrandText}>MISTY VISUALS</Text>
+                    <Text style={styles.lightboxBrandSub}>EDITORIAL</Text>
+                  </View>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.lightboxCloseEditorial,
+                      pressed && { opacity: 0.6 },
+                    ]}
+                    onPress={handleClose}
+                    hitSlop={14}
+                  >
+                    <Text style={styles.lightboxCloseIcon}>✕</Text>
+                  </Pressable>
+                </View>
+              </LinearGradient>
+            </Animated.View>
+          )}
+
           {/* Bottom Editorial Footer Gradient Overlay */}
           {showControls && !isZoomed && (
-            <Animated.View style={[{ zIndex: 100 }, controlsAnimatedStyle]} pointerEvents="box-none">
+            <Animated.View style={[styles.lightboxFooterGradient, controlsAnimatedStyle]} pointerEvents="box-none">
               <LinearGradient
                 colors={['transparent', 'rgba(0, 0, 0, 0.4)', 'rgba(0, 0, 0, 0.85)']}
-                style={[styles.lightboxFooterGradient, { paddingBottom: Math.max(insets.bottom, 24) + 8 }]}
+                style={[{ width: '100%', alignItems: 'center', paddingHorizontal: 24, paddingBottom: Math.max(insets.bottom, 24) + 8 }]}
                 pointerEvents="box-none"
               >
                 <View style={{ alignItems: 'center', width: '100%' }}>
