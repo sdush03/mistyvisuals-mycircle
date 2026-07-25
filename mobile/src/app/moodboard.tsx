@@ -4,7 +4,7 @@ import {
   View,
   Text,
   ScrollView,
-  Image,
+  Image as RNImage,
   Pressable,
   ActivityIndicator,
   RefreshControl,
@@ -105,6 +105,25 @@ export default function MoodboardScreen() {
     return true;
   });
 
+  const [aspectMap, setAspectMap] = useState<{ [url: string]: number }>({});
+
+  useEffect(() => {
+    saves.forEach((item) => {
+      const url = item.photoUrl;
+      if (url && !aspectMap[url]) {
+        RNImage.getSize(
+          url,
+          (w, h) => {
+            if (w > 0 && h > 0) {
+              setAspectMap((prev) => ({ ...prev, [url]: w / h }));
+            }
+          },
+          () => {}
+        );
+      }
+    });
+  }, [saves]);
+
   // Shortest Column Height Balancing algorithm — EXACTLY matching FeaturedStoryView
   const { column0, column1 } = React.useMemo(() => {
     const cols: [any[], any[]] = [[], []];
@@ -114,7 +133,7 @@ export default function MoodboardScreen() {
       const realAspect =
         photo.width && photo.height && Number(photo.height) > 0
           ? Number(photo.width) / Number(photo.height)
-          : photo.aspectRatio || null;
+          : photo.aspectRatio || aspectMap[photo.photoUrl] || null;
 
       const isLandscape = realAspect ? realAspect > 1.05 : photo.isHorizontal;
 
@@ -126,7 +145,12 @@ export default function MoodboardScreen() {
         cardAspect = cycle === 0 ? 2 / 3 : cycle === 1 ? 3 / 4 : 4 / 5;
       }
 
-      const photoWithAspect = { ...photo, cardAspect, globalIndex: index };
+      const photoWithAspect = {
+        ...photo,
+        aspectRatio: cardAspect,
+        cardAspect,
+        globalIndex: index,
+      };
       const heightContribution = 1 / cardAspect;
       const shortestIdx = colHeights[0] <= colHeights[1] ? 0 : 1;
       cols[shortestIdx].push(photoWithAspect);
@@ -134,7 +158,7 @@ export default function MoodboardScreen() {
     });
 
     return { column0: cols[0], column1: cols[1] };
-  }, [filteredSaves]);
+  }, [filteredSaves, aspectMap]);
 
   const mainScrollRef = useRef<ScrollView>(null);
   const cardRefs = useRef<{ [key: string]: View | null }>({});

@@ -4,12 +4,13 @@ import {
   View,
   Text,
   ScrollView,
-  Image,
+  Image as RNImage,
   Pressable,
   Dimensions,
   Modal,
   ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -60,15 +61,16 @@ const getPhotoUri = (p: any): string => {
 };
 
 // Column Balancing Algorithm — EXACTLY matching FeaturedStoryView
-const balancePhotosIntoColumns = (photosList: any[]) => {
+const balancePhotosIntoColumns = (photosList: any[], aspectMap: { [url: string]: number } = {}) => {
   const cols: [any[], any[]] = [[], []];
   const colHeights = [0, 0];
 
   photosList.forEach((photo: any, index: number) => {
+    const photoUri = getPhotoUri(photo);
     const realAspect =
       photo.width && photo.height && Number(photo.height) > 0
         ? Number(photo.width) / Number(photo.height)
-        : photo.aspectRatio || null;
+        : photo.aspectRatio || aspectMap[photoUri] || null;
 
     const isLandscape = realAspect ? realAspect > 1.05 : photo.isHorizontal;
 
@@ -80,7 +82,7 @@ const balancePhotosIntoColumns = (photosList: any[]) => {
       cardAspect = cycle === 0 ? 2 / 3 : cycle === 1 ? 3 / 4 : 4 / 5;
     }
 
-    const photoWithAspect = { ...photo, cardAspect, globalIndex: index };
+    const photoWithAspect = { ...photo, aspectRatio: cardAspect, cardAspect, globalIndex: index };
     const heightContribution = 1 / cardAspect;
     const shortestIdx = colHeights[0] <= colHeights[1] ? 0 : 1;
     cols[shortestIdx].push(photoWithAspect);
@@ -203,6 +205,25 @@ export default function ProfileScreen() {
     }
   }, []);
 
+  const [aspectMap, setAspectMap] = useState<{ [url: string]: number }>({});
+
+  useEffect(() => {
+    savedPhotos.forEach((item) => {
+      const url = getPhotoUri(item);
+      if (url && !aspectMap[url]) {
+        RNImage.getSize(
+          url,
+          (w, h) => {
+            if (w > 0 && h > 0) {
+              setAspectMap((prev) => ({ ...prev, [url]: w / h }));
+            }
+          },
+          () => {}
+        );
+      }
+    });
+  }, [savedPhotos]);
+
   useEffect(() => {
     fetchMyCelebrationPhotos();
     fetchSavedPhotos();
@@ -320,7 +341,7 @@ export default function ProfileScreen() {
 
   // Render 2-column Featured Story balanced masonry grid
   const renderPhotoListMasonry = (photosList: any[], isSavedTab: boolean = false) => {
-    const { column0, column1 } = balancePhotosIntoColumns(photosList);
+    const { column0, column1 } = balancePhotosIntoColumns(photosList, aspectMap);
 
     return (
       <View style={styles.masonryGridContainer}>
