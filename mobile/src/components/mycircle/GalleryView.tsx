@@ -220,25 +220,22 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         };
       };
 
-      // 2. Fetch matched photos independently using guest token
+      // 2. Fetch matched photos & first page of all photos IN PARALLEL using Promise.all
       try {
-        const matchedRes = await guestApi.get(
-          `/api/gallery/public/events/${eventSlug}/matched-photos`,
-          { headers: eventHeaders }
-        );
+        const [matchedRes, allRes] = await Promise.all([
+          guestApi.get(`/api/gallery/public/events/${eventSlug}/matched-photos`, { headers: eventHeaders }).catch((e) => {
+            console.warn('Matched photos fetch error:', e?.response?.status);
+            return { data: [] };
+          }),
+          guestApi.get(`/api/gallery/public/events/${eventSlug}/photos?limit=${PAGE_SIZE}&offset=0`, { headers: eventHeaders }).catch((e) => {
+            console.warn('All photos fetch error:', e?.response?.status);
+            return { data: [] };
+          }),
+        ]);
+
         const matchedList = matchedRes.data.photos || matchedRes.data.matchedPhotos || (Array.isArray(matchedRes.data) ? matchedRes.data : []);
         setPhotos(Array.isArray(matchedList) ? matchedList.map(mapPhotoItem) : []);
-      } catch (e: any) {
-        console.warn('Matched photos fetch error:', e?.response?.status, e?.response?.data?.error);
-        setPhotos([]);
-      }
 
-      // 3. Fetch first page of all photos using guest token
-      try {
-        const allRes = await guestApi.get(
-          `/api/gallery/public/events/${eventSlug}/photos?limit=${PAGE_SIZE}&offset=0`,
-          { headers: eventHeaders }
-        );
         const allList = allRes.data.photos || (Array.isArray(allRes.data) ? allRes.data : []);
         const mapped = Array.isArray(allList) ? allList.map(mapPhotoItem) : [];
         const total = typeof allRes.data.total === 'number' ? allRes.data.total : mapped.length;
@@ -247,8 +244,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         setAllPhotosOffset(mapped.length);
         setHasMorePhotos(mapped.length < total);
       } catch (e: any) {
-        console.warn('All photos fetch error:', e?.response?.status, e?.response?.data?.error);
-        setAllPhotos([]);
+        console.warn('Parallel photo fetch error:', e);
       }
     } catch (err) {
       console.warn('Failed to fetch gallery photos', err);
