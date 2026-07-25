@@ -19,6 +19,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withSpring,
+  runOnJS,
 } from 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -98,8 +99,11 @@ export function EditorialLightbox({
   }, [heartPopScale, heartPopOpacity]);
 
   const handleClose = useCallback(() => {
-    expandProgress.value = withTiming(0, { duration: 220 }, () => {
-      onClose();
+    expandProgress.value = withTiming(0, { duration: 180 }, (finished) => {
+      'worklet';
+      if (finished) {
+        runOnJS(onClose)();
+      }
     });
   }, [expandProgress, onClose]);
 
