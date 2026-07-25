@@ -11,6 +11,7 @@ import {
   StatusBar,
   BackHandler,
   Modal,
+  InteractionManager,
   Image as RNImage,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -54,7 +55,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const [totalAllPhotosCount, setTotalAllPhotosCount] = useState<number | null>(null);
   const [eventDetails, setEventDetailsData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<string>('ALL');
-  const [renderLimit, setRenderLimit] = useState<number>(40);
+  const [renderLimit, setRenderLimit] = useState<number>(20);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [allPhotosOffset, setAllPhotosOffset] = useState(0);
@@ -302,7 +303,10 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   };
 
   useEffect(() => {
-    fetchPhotos();
+    const task = InteractionManager.runAfterInteractions(() => {
+      fetchPhotos();
+    });
+    return () => task.cancel();
   }, [eventSlug]);
 
   const hasFullAccess = profile?.hasFullAccess ?? true;
@@ -444,8 +448,8 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
 
   // Progressive render limit matching FeaturedStoryView 1:1
   useEffect(() => {
-    setRenderLimit(40);
-    const timer = setTimeout(() => setRenderLimit(Infinity as any), 150);
+    setRenderLimit(20);
+    const timer = setTimeout(() => setRenderLimit(Infinity as any), 250);
     return () => clearTimeout(timer);
   }, [activeTab]);
 
@@ -486,19 +490,6 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
 
     return { column0: cols[0], column1: cols[1] };
   }, [activeList, renderLimit]);
-
-  // Simultaneous Interleaved Prefetching for top photos across both columns
-  useEffect(() => {
-    const topUris: string[] = [];
-    const maxTop = Math.max(column0.length, column1.length);
-    for (let i = 0; i < Math.min(maxTop, 6); i++) {
-      if (column0[i]?.r2Url) topUris.push(column0[i].r2Url);
-      if (column1[i]?.r2Url) topUris.push(column1[i].r2Url);
-    }
-    if (topUris.length > 0) {
-      Image.prefetch(topUris);
-    }
-  }, [column0, column1]);
 
   // Bounds measurement for smooth Lightbox opening & background page auto-scrolling
   const getBoundsForIndex = useCallback((idx: number, callback: (bounds: LightboxBounds) => void) => {
