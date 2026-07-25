@@ -9,11 +9,14 @@ import {
   Dimensions,
   Alert,
   StatusBar,
+  BackHandler,
   Image as RNImage,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS, Easing } from 'react-native-reanimated';
 import { useAuthStore } from '../../store/authStore';
 import { useScrollTabBarCollapse } from '../../hooks/useScrollTabBarCollapse';
 import api, { guestApi } from '../../services/api';
@@ -62,6 +65,67 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const mainScrollRef = useRef<ScrollView>(null);
   const cardRefs = useRef<{ [key: string]: View | null }>({});
   const eventHeadersRef = useRef<Record<string, string>>({});
+
+  // Reanimated values for edge-swipe back gesture
+  const screenSwipeX = useSharedValue(0);
+  const touchStartedOnLeftEdge = useSharedValue(false);
+  const isLightboxOpen = useSharedValue(false);
+
+  useEffect(() => {
+    isLightboxOpen.value = activeImageIndex !== null;
+  }, [activeImageIndex]);
+
+  const handleBackAction = useCallback(() => {
+    if (activeImageIndex !== null) {
+      setActiveImageIndex(null);
+    } else {
+      onChangeEvent();
+    }
+  }, [activeImageIndex, onChangeEvent]);
+
+  // Native Android Back Button Listener
+  useEffect(() => {
+    const onBack = () => {
+      handleBackAction();
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => subscription.remove();
+  }, [handleBackAction]);
+
+  // Left-Edge Pan Swipe Back Gesture (matching FeaturedStoryView)
+  const edgeSwipeGesture = Gesture.Pan()
+    .activeOffsetX(5)
+    .failOffsetY([-20, 20])
+    .onBegin((e) => {
+      'worklet';
+      touchStartedOnLeftEdge.value = e.x <= 65 && !isLightboxOpen.value;
+    })
+    .onUpdate((e) => {
+      'worklet';
+      if (!touchStartedOnLeftEdge.value) return;
+      if (e.translationX > 0) {
+        screenSwipeX.value = e.translationX;
+      }
+    })
+    .onEnd((e) => {
+      'worklet';
+      if (!touchStartedOnLeftEdge.value) return;
+      if (e.translationX > width * 0.20 || e.velocityX > 250) {
+        screenSwipeX.value = withTiming(width, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
+          if (finished) {
+            runOnJS(onChangeEvent)();
+          }
+        });
+      } else {
+        screenSwipeX.value = withSpring(0, { damping: 25, stiffness: 200 });
+      }
+      touchStartedOnLeftEdge.value = false;
+    });
+
+  const screenSwipeAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: screenSwipeX.value }],
+  }));
 
   const PAGE_SIZE = 100;
 
@@ -334,188 +398,192 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     : '';
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      <ScrollView
-        ref={mainScrollRef}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        bounces={true}
-        scrollEventThrottle={16}
-        onScroll={(e) => {
-          handleScroll(e);
-          // Infinite Scroll threshold listener
-          const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-          const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 800;
-          if (isNearBottom && viewMode === 'all') {
-            loadMorePhotos();
-          }
-        }}
-      >
-        {/* ── 1. Hero Cover Banner (Exact Featured Story Style) ── */}
-        <View style={[styles.heroContainer, { height: Math.round(screenHeight * 0.70) + insets.top, marginTop: -insets.top }]}>
-          {coverUrl ? (
-            <Image
-              source={{ uri: coverUrl }}
-              style={styles.heroImage}
-              contentFit="cover"
-              priority="high"
-              cachePolicy="memory-disk"
-              transition={200}
-            />
-          ) : (
-            <View style={[styles.heroImage, { backgroundColor: '#1c1a18', justifyContent: 'center', alignItems: 'center' }]}>
-              <ActivityIndicator size="small" color="#ffffff" />
-            </View>
-          )}
+    <GestureHandlerRootView style={styles.container}>
+      <GestureDetector gesture={edgeSwipeGesture}>
+        <Animated.View style={[{ flex: 1, backgroundColor: '#ffffff' }, screenSwipeAnimatedStyle]}>
+          <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-          {/* White Brand Logo on Cover */}
-          <View style={[styles.coverHeaderLogoContainer, { top: insets.top + 6 }]} pointerEvents="none">
-            <RNImage
-              source={require('../../../assets/images/logo-white.png')}
-              style={styles.coverHeaderLogo}
-              resizeMode="contain"
-            />
-          </View>
+          {/* Borderless Editorial Back Button (Exact Featured Story Style) */}
+          <Pressable
+            style={[styles.editorialBackButton, { top: Math.max(insets.top + 10, 42) }]}
+            onPress={onChangeEvent}
+            hitSlop={16}
+          >
+            <Text style={styles.editorialBackText}>← BACK</Text>
+          </Pressable>
 
-          {/* Action Row: Events / Logout floating top right */}
-          <View style={[styles.headerActionsOverlay, { top: insets.top + 10 }]}>
-            <Pressable style={styles.actionPillBtn} onPress={onChangeEvent}>
-              <Text style={styles.actionPillText}>EVENTS</Text>
-            </Pressable>
-            <Pressable style={styles.actionPillBtn} onPress={onLogout}>
-              <Text style={styles.actionPillText}>LOGOUT</Text>
-            </Pressable>
-          </View>
+          <ScrollView
+            ref={mainScrollRef}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            bounces={true}
+            scrollEventThrottle={16}
+            onScroll={(e) => {
+              handleScroll(e);
+              // Infinite Scroll threshold listener
+              const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+              const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 800;
+              if (isNearBottom && viewMode === 'all') {
+                loadMorePhotos();
+              }
+            }}
+          >
+            {/* ── 1. Hero Cover Banner (Exact Featured Story Style) ── */}
+            <View style={styles.heroContainer}>
+              {coverUrl ? (
+                <Image
+                  source={{ uri: coverUrl }}
+                  style={styles.heroImage}
+                  contentFit="cover"
+                  priority="high"
+                  cachePolicy="memory-disk"
+                  transition={200}
+                />
+              ) : (
+                <View style={[styles.heroImage, { backgroundColor: '#1c1a18', justifyContent: 'center', alignItems: 'center' }]}>
+                  <ActivityIndicator size="small" color="#ffffff" />
+                </View>
+              )}
 
-          {/* Vignette Gradient Overlay */}
-          <LinearGradient
-            colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.75)']}
-            locations={[0, 0.45, 1]}
-            style={styles.heroOverlay}
-          />
-
-          {/* Cover Title Container */}
-          <View style={[styles.titleContainer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-            <Text style={styles.storyLocation}>{locationText}</Text>
-            <Text style={styles.storyTitle}>{cleanTitle}</Text>
-            {dateText ? <Text style={styles.storyDate}>{dateText}</Text> : null}
-          </View>
-        </View>
-
-        {/* ── 2. Editorial Description ── */}
-        <View style={styles.editorialContainer}>
-          <Text style={styles.subtitleText}>
-            {totalAllPhotosCount !== null
-              ? `${totalAllPhotosCount.toLocaleString()} PHOTOGRAPHS IN CELEBRATION GALLERY`
-              : 'CELEBRATION GALLERY'}
-          </Text>
-          {profile?.name ? (
-            <Text style={styles.descriptionText}>
-              Welcome {profile.name}! Explore matched face memories and complete story highlights below.
-            </Text>
-          ) : null}
-        </View>
-
-        {/* ── 3. Category Tabs (Exact Featured Story Style) ── */}
-        <View style={styles.galleryContainer}>
-          <View style={styles.tabsWrapper}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.tabsScrollContent}
-            >
-              <Pressable
-                onPress={() => setViewMode('matched')}
-                style={[styles.tabButton, viewMode === 'matched' && styles.tabButtonActive]}
-              >
-                <Text style={[styles.tabText, viewMode === 'matched' && styles.tabTextActive]}>
-                  MATCHED ({photos.length})
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setViewMode('all')}
-                style={[styles.tabButton, viewMode === 'all' && styles.tabButtonActive]}
-              >
-                <Text style={[styles.tabText, viewMode === 'all' && styles.tabTextActive]}>
-                  ALL PHOTOS ({totalAllPhotosCount !== null ? totalAllPhotosCount.toLocaleString() : allPhotos.length})
-                </Text>
-              </Pressable>
-            </ScrollView>
-          </View>
-
-          {/* ── 4. 2-Column Balanced Masonry Grid ── */}
-          {isLoading ? (
-            <View style={styles.masonryGridContainer}>
-              <View style={styles.masonryColumn}>
-                {[0.75, 0.67, 0.8].map((aspect, i) => (
-                  <View key={`sk0-${i}`} style={[styles.masonryCard, styles.skeletonCard, { aspectRatio: aspect }]} />
-                ))}
+              {/* White Brand Logo on Cover */}
+              <View style={[styles.coverHeaderLogoContainer, { top: insets.top + 6 }]} pointerEvents="none">
+                <RNImage
+                  source={require('../../../assets/images/logo-white.png')}
+                  style={styles.coverHeaderLogo}
+                  resizeMode="contain"
+                />
               </View>
-              <View style={styles.masonryColumn}>
-                {[0.67, 0.8, 0.75].map((aspect, i) => (
-                  <View key={`sk1-${i}`} style={[styles.masonryCard, styles.skeletonCard, { aspectRatio: aspect }]} />
-                ))}
+
+              {/* Vignette Gradient Overlay */}
+              <LinearGradient
+                colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.75)']}
+                locations={[0, 0.45, 1]}
+                style={styles.heroOverlay}
+              />
+
+              {/* Cover Title Container */}
+              <View style={[styles.titleContainer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+                <Text style={styles.storyLocation}>{locationText}</Text>
+                <Text style={styles.storyTitle}>{cleanTitle}</Text>
+                {dateText ? <Text style={styles.storyDate}>{dateText}</Text> : null}
               </View>
             </View>
-          ) : activeList.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                {viewMode === 'matched'
-                  ? "We couldn't find any photos matched with your face yet. Switch to ALL PHOTOS to view the full gallery!"
-                  : 'No photos have been uploaded to this gallery yet.'}
+
+            {/* ── 2. Editorial Description ── */}
+            <View style={styles.editorialContainer}>
+              <Text style={styles.subtitleText}>
+                {totalAllPhotosCount !== null
+                  ? `${totalAllPhotosCount.toLocaleString()} PHOTOGRAPHS IN CELEBRATION GALLERY`
+                  : 'CELEBRATION GALLERY'}
               </Text>
+              {profile?.name ? (
+                <Text style={styles.descriptionText}>
+                  Welcome {profile.name}! Explore matched face memories and complete story highlights below.
+                </Text>
+              ) : null}
             </View>
-          ) : (
-            <View style={styles.masonryGridContainer}>
-              <View style={styles.masonryColumn}>
-                {column0.map((img, idx) => {
-                  const cardId = img.id ? String(img.id) : (img.r2Url || `col0-${idx}`);
-                  return (
-                    <MasonryCard
-                      key={cardId}
-                      img={img}
-                      index={idx}
-                      isColumn0={true}
-                      onSelect={(bounds) => openLightbox(img, bounds)}
-                      onRegisterRef={(id, ref) => {
-                        if (id) cardRefs.current[id] = ref;
-                        if (cardId) cardRefs.current[cardId] = ref;
-                      }}
-                    />
-                  );
-                })}
-              </View>
-              <View style={styles.masonryColumn}>
-                {column1.map((img, idx) => {
-                  const cardId = img.id ? String(img.id) : (img.r2Url || `col1-${idx}`);
-                  return (
-                    <MasonryCard
-                      key={cardId}
-                      img={img}
-                      index={idx}
-                      isColumn0={false}
-                      onSelect={(bounds) => openLightbox(img, bounds)}
-                      onRegisterRef={(id, ref) => {
-                        if (id) cardRefs.current[id] = ref;
-                        if (cardId) cardRefs.current[cardId] = ref;
-                      }}
-                    />
-                  );
-                })}
-              </View>
-            </View>
-          )}
 
-          {/* Loading indicator when fetching next page */}
-          {viewMode === 'all' && isLoadingMore ? (
-            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-              <ActivityIndicator size="small" color="#8c867e" />
+            {/* ── 3. Category Tabs (Exact Featured Story Style) ── */}
+            <View style={styles.galleryContainer}>
+              <View style={styles.tabsWrapper}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.tabsScrollContent}
+                >
+                  <Pressable
+                    onPress={() => setViewMode('matched')}
+                    style={[styles.tabButton, viewMode === 'matched' && styles.tabButtonActive]}
+                  >
+                    <Text style={[styles.tabText, viewMode === 'matched' && styles.tabTextActive]}>
+                      MATCHED ({photos.length})
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => setViewMode('all')}
+                    style={[styles.tabButton, viewMode === 'all' && styles.tabButtonActive]}
+                  >
+                    <Text style={[styles.tabText, viewMode === 'all' && styles.tabTextActive]}>
+                      ALL PHOTOS ({totalAllPhotosCount !== null ? totalAllPhotosCount.toLocaleString() : allPhotos.length})
+                    </Text>
+                  </Pressable>
+                </ScrollView>
+              </View>
+
+              {/* ── 4. 2-Column Balanced Masonry Grid ── */}
+              {isLoading ? (
+                <View style={styles.masonryGridContainer}>
+                  <View style={styles.masonryColumn}>
+                    {[0.75, 0.67, 0.8].map((aspect, i) => (
+                      <View key={`sk0-${i}`} style={[styles.masonryCard, styles.skeletonCard, { aspectRatio: aspect }]} />
+                    ))}
+                  </View>
+                  <View style={styles.masonryColumn}>
+                    {[0.67, 0.8, 0.75].map((aspect, i) => (
+                      <View key={`sk1-${i}`} style={[styles.masonryCard, styles.skeletonCard, { aspectRatio: aspect }]} />
+                    ))}
+                  </View>
+                </View>
+              ) : activeList.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>
+                    {viewMode === 'matched'
+                      ? "We couldn't find any photos matched with your face yet. Switch to ALL PHOTOS to view the full gallery!"
+                      : 'No photos have been uploaded to this gallery yet.'}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.masonryGridContainer}>
+                  <View style={styles.masonryColumn}>
+                    {column0.map((img, idx) => {
+                      const cardId = img.id ? String(img.id) : (img.r2Url || `col0-${idx}`);
+                      return (
+                        <MasonryCard
+                          key={cardId}
+                          img={img}
+                          index={idx}
+                          isColumn0={true}
+                          onSelect={(bounds) => openLightbox(img, bounds)}
+                          onRegisterRef={(id, ref) => {
+                            if (id) cardRefs.current[id] = ref;
+                            if (cardId) cardRefs.current[cardId] = ref;
+                          }}
+                        />
+                      );
+                    })}
+                  </View>
+                  <View style={styles.masonryColumn}>
+                    {column1.map((img, idx) => {
+                      const cardId = img.id ? String(img.id) : (img.r2Url || `col1-${idx}`);
+                      return (
+                        <MasonryCard
+                          key={cardId}
+                          img={img}
+                          index={idx}
+                          isColumn0={false}
+                          onSelect={(bounds) => openLightbox(img, bounds)}
+                          onRegisterRef={(id, ref) => {
+                            if (id) cardRefs.current[id] = ref;
+                            if (cardId) cardRefs.current[cardId] = ref;
+                          }}
+                        />
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {/* Loading indicator when fetching next page */}
+              {viewMode === 'all' && isLoadingMore ? (
+                <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="#8c867e" />
+                </View>
+              ) : null}
             </View>
-          ) : null}
-        </View>
-      </ScrollView>
+          </ScrollView>
+        </Animated.View>
+      </GestureDetector>
 
       {/* ── 5. Universal Editorial Lightbox Component ── */}
       {activeImageIndex !== null && (
@@ -530,7 +598,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           subtitle={viewMode === 'matched' ? 'MATCHED MEMORIES' : 'CELEBRATION GALLERY'}
         />
       )}
-    </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -539,12 +607,31 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ffffff',
   },
+  editorialBackButton: {
+    position: 'absolute',
+    left: 24,
+    zIndex: 100,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  editorialBackText: {
+    fontFamily: FONT_JOST_SEMIBOLD,
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 1.5,
+    color: '#ffffff',
+    textShadowColor: 'rgba(0, 0, 0, 0.65)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
   scrollContent: {
     paddingBottom: 40,
   },
   heroContainer: {
     width: '100%',
-    height: Math.round(screenHeight * 0.68),
+    height: Math.round(screenHeight * 0.70),
     position: 'relative',
     backgroundColor: '#1c1a18',
   },
@@ -566,29 +653,6 @@ const styles = StyleSheet.create({
   coverHeaderLogo: {
     width: 135,
     height: 38,
-  },
-  headerActionsOverlay: {
-    position: 'absolute',
-    right: 20,
-    zIndex: 100,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  actionPillBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  actionPillText: {
-    fontFamily: FONT_MONTSERRAT_REGULAR,
-    fontSize: 9,
-    letterSpacing: 1.5,
-    color: '#ffffff',
-    fontWeight: '600',
   },
   titleContainer: {
     position: 'absolute',
