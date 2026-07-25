@@ -113,6 +113,24 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
 
   const [lightboxBounds, setLightboxBounds] = useState<LightboxBounds | null>(null);
 
+  const getBoundsForIndex = useCallback((idx: number): LightboxBounds | null => {
+    if (idx < 0 || idx >= filteredGalleryImages.length) return null;
+    const img = filteredGalleryImages[idx];
+    if (!img) return null;
+    const cardId = img.id || img.uri || `idx-${idx}`;
+    const targetCard = cardRefs.current[cardId];
+    if (targetCard) {
+      let bounds: LightboxBounds | null = null;
+      targetCard.measureInWindow((x, y, width, height) => {
+        if (width > 0 && height > 0) {
+          bounds = { x, y, width, height };
+        }
+      });
+      return bounds;
+    }
+    return null;
+  }, [filteredGalleryImages]);
+
   const openLightbox = useCallback((img: any, bounds: { x: number; y: number; width: number; height: number } | null) => {
     const targetIdx = filteredGalleryImages.findIndex(item => {
       if (!item || !img) return false;
@@ -548,6 +566,7 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
         images={filteredGalleryImages}
         initialIndex={activeImageIndex}
         initialBounds={lightboxBounds}
+        onGetBoundsForIndex={getBoundsForIndex}
         onClose={() => setActiveImageIndex(null)}
         title={story?.title || 'MISTY VISUALS'}
       />
