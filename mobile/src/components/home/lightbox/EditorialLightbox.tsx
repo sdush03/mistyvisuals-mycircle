@@ -53,6 +53,7 @@ export interface EditorialLightboxProps {
   onClose: () => void;
   onUnsave?: (item: any) => void;
   title?: string;
+  subtitle?: string;
 }
 
 export function EditorialLightbox({
@@ -64,6 +65,7 @@ export function EditorialLightbox({
   onClose,
   onUnsave,
   title = 'MISTY VISUALS',
+  subtitle,
 }: EditorialLightboxProps) {
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList>(null);
@@ -354,6 +356,7 @@ export function EditorialLightbox({
 
   // Auto-generate dynamic category label (e.g. "STORY TITLE · CATEGORY")
   const getDisplaySubtitle = () => {
+    if (subtitle) return subtitle.toUpperCase();
     let cat = '';
     if (currentItem && typeof currentItem === 'object') {
       if (currentItem.category) cat = String(currentItem.category).toUpperCase();
