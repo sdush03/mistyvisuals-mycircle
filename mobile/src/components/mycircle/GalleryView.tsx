@@ -353,7 +353,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         }}
       >
         {/* ── 1. Hero Cover Banner (Exact Featured Story Style) ── */}
-        <View style={styles.heroContainer}>
+        <View style={[styles.heroContainer, { height: Math.round(screenHeight * 0.70) + insets.top, marginTop: -insets.top }]}>
           {coverUrl ? (
             <Image
               source={{ uri: coverUrl }}
