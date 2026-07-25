@@ -457,6 +457,10 @@ export function EditorialLightbox({
                 scrollEnabled={!isZoomed}
                 showsHorizontalScrollIndicator={false}
                 initialScrollIndex={initialIndex}
+                contentOffset={{ x: (width + 18) * initialIndex, y: 0 }}
+                initialNumToRender={Math.max(initialIndex + 3, 10)}
+                maxToRenderPerBatch={5}
+                windowSize={7}
                 getItemLayout={(_data, index) => ({
                   length: width + 18,
                   offset: (width + 18) * index,
