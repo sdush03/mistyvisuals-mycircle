@@ -75,13 +75,24 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     isLightboxOpen.value = activeImageIndex !== null;
   }, [activeImageIndex]);
 
+  // Opening entrance animation: slide in from right on mount
+  useEffect(() => {
+    screenSwipeX.value = width;
+    screenSwipeX.value = withTiming(0, { duration: 260, easing: Easing.out(Easing.quad) });
+  }, []);
+
   const handleBackAction = useCallback(() => {
     if (activeImageIndex !== null) {
       setActiveImageIndex(null);
-    } else {
-      onChangeEvent();
+      return;
     }
-  }, [activeImageIndex, onChangeEvent]);
+    screenSwipeX.value = withTiming(width, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => {
+      'worklet';
+      if (finished) {
+        runOnJS(onChangeEvent)();
+      }
+    });
+  }, [activeImageIndex, onChangeEvent, screenSwipeX]);
 
   // Native Android Back Button Listener
   useEffect(() => {
@@ -406,7 +417,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           {/* Borderless Editorial Back Button (Exact Featured Story Style) */}
           <Pressable
             style={[styles.editorialBackButton, { top: Math.max(insets.top + 10, 42) }]}
-            onPress={onChangeEvent}
+            onPress={handleBackAction}
             hitSlop={16}
           >
             <Text style={styles.editorialBackText}>← BACK</Text>
