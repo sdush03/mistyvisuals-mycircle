@@ -53,7 +53,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const [allPhotos, setAllPhotos] = useState<Photo[]>([]);
   const [totalAllPhotosCount, setTotalAllPhotosCount] = useState<number | null>(null);
   const [eventDetails, setEventDetailsData] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<'matched' | 'all'>('matched');
+  const [activeTab, setActiveTab] = useState<string>('ALL');
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [allPhotosOffset, setAllPhotosOffset] = useState(0);
@@ -213,6 +213,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           photoUrl: uri,
           width: p.width,
           height: p.height,
+          tabName: p.tabName || p.tab_name || null,
           isLiked: !!(p.likes && p.likes.length > 0),
           likeCount: p._count?.likes || 0,
         };
@@ -275,6 +276,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           photoUrl: uri,
           width: p.width,
           height: p.height,
+          tabName: p.tabName || p.tab_name || null,
           isLiked: !!(p.likes && p.likes.length > 0),
           likeCount: p._count?.likes || 0,
         };
@@ -303,14 +305,69 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     fetchPhotos();
   }, [eventSlug]);
 
-  // Auto-switch to 'all' photos tab if matched photos count is 0
-  useEffect(() => {
-    if (!isLoading && photos.length === 0 && allPhotos.length > 0) {
-      setViewMode('all');
-    }
-  }, [isLoading, photos.length, allPhotos.length]);
+  // Dynamic Available Tabs (Matching website logic 1:1)
+  const availableTabs = React.useMemo(() => {
+    const list: string[] = [];
 
-  const activeList = viewMode === 'matched' ? photos : allPhotos;
+    // 1. Show 'MY PHOTOS' if user has face-matched photos
+    if (photos.length > 0) {
+      list.push('MY PHOTOS');
+    }
+
+    // 2. Always include 'ALL'
+    list.push('ALL');
+
+    // 3. Add ceremony/event tabs from eventDetails.tabs (from DB)
+    const ceremonyTabsSet = new Set<string>();
+    if (Array.isArray(eventDetails?.tabs)) {
+      eventDetails.tabs.forEach((t: string) => {
+        if (t && typeof t === 'string' && t.trim().length > 0) {
+          ceremonyTabsSet.add(t.trim().toUpperCase());
+        }
+      });
+    }
+
+    // Also include any unique tabNames found in loaded photos
+    allPhotos.forEach((p: any) => {
+      if (p.tabName && typeof p.tabName === 'string' && p.tabName.trim().length > 0) {
+        ceremonyTabsSet.add(p.tabName.trim().toUpperCase());
+      }
+    });
+
+    ceremonyTabsSet.forEach((tab) => {
+      if (tab !== 'ALL' && tab !== 'MY PHOTOS' && !list.includes(tab)) {
+        list.push(tab);
+      }
+    });
+
+    return list;
+  }, [photos.length, eventDetails?.tabs, allPhotos]);
+
+  // Default landing tab logic (matching website 1:1):
+  // Land on 'MY PHOTOS' if matched photos exist, else land on 'ALL'
+  useEffect(() => {
+    if (!isLoading) {
+      if (photos.length > 0) {
+        setActiveTab('MY PHOTOS');
+      } else {
+        setActiveTab('ALL');
+      }
+    }
+  }, [isLoading, photos.length]);
+
+  const activeList = React.useMemo(() => {
+    const currentUpper = activeTab.toUpperCase();
+    if (currentUpper === 'MY PHOTOS') {
+      return photos;
+    }
+    if (currentUpper === 'ALL') {
+      return allPhotos;
+    }
+    return allPhotos.filter((p: any) => {
+      if (!p.tabName) return false;
+      return p.tabName.trim().toUpperCase() === currentUpper;
+    });
+  }, [activeTab, photos, allPhotos]);
 
   // Shortest Column Height Balancing — EXACTLY matching FeaturedStoryView
   const { column0, column1 } = React.useMemo(() => {
@@ -443,7 +500,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
               // Infinite Scroll threshold listener
               const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
               const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 800;
-              if (isNearBottom && viewMode === 'all') {
+              if (isNearBottom && activeTab.toUpperCase() === 'ALL') {
                 loadMorePhotos();
               }
             }}
@@ -489,7 +546,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
               </View>
             </View>
 
-            {/* ── 2. Category Tabs (Exact Featured Story Style) ── */}
+            {/* ── 2. Category Tabs (Dynamic website parity) ── */}
             <View style={styles.galleryContainer}>
               <View style={styles.tabsWrapper}>
                 <ScrollView
@@ -497,27 +554,33 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.tabsScrollContent}
                 >
-                  <Pressable
-                    onPress={() => setViewMode('matched')}
-                    style={[styles.tabButton, viewMode === 'matched' && styles.tabButtonActive]}
-                  >
-                    <Text style={[styles.tabText, viewMode === 'matched' && styles.tabTextActive]}>
-                      MATCHED ({photos.length})
-                    </Text>
-                  </Pressable>
+                  {availableTabs.map((tabName) => {
+                    const isActive = activeTab.toUpperCase() === tabName.toUpperCase();
+                    let tabCount: number | null = null;
+                    if (tabName === 'MY PHOTOS') {
+                      tabCount = photos.length;
+                    } else if (tabName === 'ALL') {
+                      tabCount = totalAllPhotosCount !== null ? totalAllPhotosCount : allPhotos.length;
+                    } else {
+                      tabCount = allPhotos.filter((p: any) => p.tabName && p.tabName.trim().toUpperCase() === tabName.toUpperCase()).length;
+                    }
 
-                  <Pressable
-                    onPress={() => setViewMode('all')}
-                    style={[styles.tabButton, viewMode === 'all' && styles.tabButtonActive]}
-                  >
-                    <Text style={[styles.tabText, viewMode === 'all' && styles.tabTextActive]}>
-                      ALL PHOTOS ({totalAllPhotosCount !== null ? totalAllPhotosCount.toLocaleString() : allPhotos.length})
-                    </Text>
-                  </Pressable>
+                    return (
+                      <Pressable
+                        key={tabName}
+                        onPress={() => setActiveTab(tabName)}
+                        style={[styles.tabButton, isActive && styles.tabButtonActive]}
+                      >
+                        <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+                          {tabName} {tabCount !== null ? `(${tabCount})` : ''}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </ScrollView>
               </View>
 
-              {/* ── 4. 2-Column Balanced Masonry Grid ── */}
+              {/* ── 3. 2-Column Balanced Masonry Grid ── */}
               {isLoading ? (
                 <View style={styles.masonryGridContainer}>
                   <View style={styles.masonryColumn}>
@@ -534,9 +597,9 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
               ) : activeList.length === 0 ? (
                 <View style={styles.emptyContainer}>
                   <Text style={styles.emptyText}>
-                    {viewMode === 'matched'
-                      ? "We couldn't find any photos matched with your face yet. Switch to ALL PHOTOS to view the full gallery!"
-                      : 'No photos have been uploaded to this gallery yet.'}
+                    {activeTab.toUpperCase() === 'MY PHOTOS'
+                      ? "We couldn't find any photos matched with your face yet. Switch to ALL or ceremony tabs to view the full gallery!"
+                      : `No photos found in ${activeTab}.`}
                   </Text>
                 </View>
               ) : (
@@ -581,7 +644,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
               )}
 
               {/* Loading indicator when fetching next page */}
-              {viewMode === 'all' && isLoadingMore ? (
+              {activeTab.toUpperCase() === 'ALL' && isLoadingMore ? (
                 <View style={{ paddingVertical: 24, alignItems: 'center' }}>
                   <ActivityIndicator size="small" color="#8c867e" />
                 </View>
@@ -591,7 +654,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         </Animated.View>
       </GestureDetector>
 
-      {/* ── 5. Universal Editorial Lightbox Component ── */}
+      {/* ── 4. Universal Editorial Lightbox Component ── */}
       {activeImageIndex !== null && (
         <EditorialLightbox
           visible={activeImageIndex !== null}
@@ -601,7 +664,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           onGetBoundsForIndex={getBoundsForIndex}
           onClose={() => setActiveImageIndex(null)}
           title={cleanTitle}
-          subtitle={viewMode === 'matched' ? 'MATCHED MEMORIES' : 'CELEBRATION GALLERY'}
+          subtitle={activeTab.toUpperCase()}
         />
       )}
     </GestureHandlerRootView>
