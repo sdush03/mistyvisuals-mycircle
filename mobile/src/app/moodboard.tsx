@@ -6,17 +6,15 @@ import {
   ScrollView,
   Image,
   Pressable,
-  Dimensions,
   ActivityIndicator,
-  Modal,
   RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useScrollTabBarCollapse } from '../hooks/useScrollTabBarCollapse';
 import { savesService, SavedPhotoItem } from '../services/savesService';
 import { useAuthStore } from '../store/authStore';
+import FeaturedStoryLightboxModal from '../components/home/lightbox/FeaturedStoryLightboxModal';
 import {
   FONT_FUTURA,
   FONT_FUTURA_BOLD,
@@ -37,7 +35,7 @@ export default function MoodboardScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [selectedFilter, setSelectedFilter] = useState<MoodboardFilterType>('all');
-  const [selectedPhoto, setSelectedPhoto] = useState<SavedPhotoItem | null>(null);
+  const [selectedPhotoIdx, setSelectedPhotoIdx] = useState<number | null>(null);
 
   const fetchSaves = useCallback(async () => {
     try {
@@ -60,13 +58,10 @@ export default function MoodboardScreen() {
     fetchSaves();
   };
 
-  const handleUnsave = async (item: SavedPhotoItem) => {
-    const success = await savesService.unsavePhoto(item.photoUrl, item.id);
-    if (success) {
-      setSaves((prev) => prev.filter((s) => s.id !== item.id));
-      if (selectedPhoto?.id === item.id) {
-        setSelectedPhoto(null);
-      }
+  const handleUnsave = (item: SavedPhotoItem) => {
+    setSaves((prev) => prev.filter((s) => s.id !== item.id));
+    if (selectedPhotoIdx !== null) {
+      setSelectedPhotoIdx(null);
     }
   };
 
@@ -117,7 +112,7 @@ export default function MoodboardScreen() {
         cardAspect = cycle === 0 ? 2 / 3 : cycle === 1 ? 3 / 4 : 4 / 5;
       }
 
-      const photoWithAspect = { ...photo, cardAspect };
+      const photoWithAspect = { ...photo, cardAspect, globalIndex: index };
       const heightContribution = 1 / cardAspect;
       const shortestIdx = colHeights[0] <= colHeights[1] ? 0 : 1;
       cols[shortestIdx].push(photoWithAspect);
@@ -133,7 +128,7 @@ export default function MoodboardScreen() {
       <Pressable
         key={item.id}
         style={[styles.masonryCard, { aspectRatio: item.cardAspect }]}
-        onPress={() => setSelectedPhoto(item)}
+        onPress={() => setSelectedPhotoIdx(item.globalIndex ?? 0)}
       >
         <Image source={{ uri: item.photoUrl }} style={styles.masonryImage} resizeMode="cover" />
 
@@ -238,56 +233,16 @@ export default function MoodboardScreen() {
         )}
       </ScrollView>
 
-      {/* ── Photo Detail Lightbox Modal ── */}
-      {selectedPhoto && (
-        <Modal
-          visible={!!selectedPhoto}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setSelectedPhoto(null)}
-        >
-          <View style={styles.lightboxOverlay}>
-            <SafeAreaView style={styles.lightboxSafeArea}>
-              {/* Top Close Header */}
-              <View style={styles.lightboxHeader}>
-                <Text style={styles.lightboxTitle}>MOODBOARD DETAIL</Text>
-                <Pressable style={styles.lightboxCloseBtn} onPress={() => setSelectedPhoto(null)}>
-                  <Ionicons name="close" size={24} color="#ffffff" />
-                </Pressable>
-              </View>
-
-              {/* High-Res Image Display */}
-              <View style={styles.lightboxImageContainer}>
-                <Image
-                  source={{ uri: selectedPhoto.photoUrl }}
-                  style={styles.lightboxImage}
-                  resizeMode="contain"
-                />
-              </View>
-
-              {/* Bottom Action Footer */}
-              <View style={styles.lightboxFooter}>
-                <View style={styles.lightboxMeta}>
-                  <Text style={styles.lightboxSavedByText}>
-                    Saved by {isMine(selectedPhoto) ? 'You' : (selectedPhoto.savedBy?.displayRole || selectedPhoto.savedBy?.name || 'Partner')}
-                  </Text>
-                  <Text style={styles.lightboxDateText}>
-                    {new Date(selectedPhoto.createdAt).toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
-                  </Text>
-                </View>
-
-                <Pressable style={styles.unsaveBtn} onPress={() => handleUnsave(selectedPhoto)}>
-                  <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                  <Text style={styles.unsaveBtnText}>REMOVE FROM MOODBOARD</Text>
-                </Pressable>
-              </View>
-            </SafeAreaView>
-          </View>
-        </Modal>
+      {/* ── Featured Story Style Editorial Lightbox Modal ── */}
+      {selectedPhotoIdx !== null && (
+        <FeaturedStoryLightboxModal
+          visible={selectedPhotoIdx !== null}
+          images={filteredSaves}
+          initialIndex={selectedPhotoIdx}
+          onClose={() => setSelectedPhotoIdx(null)}
+          onUnsave={handleUnsave}
+          title="MY MOODBOARD"
+        />
       )}
     </View>
   );
@@ -461,78 +416,5 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontFamily: FONT_MONTSERRAT_SEMIBOLD,
     letterSpacing: 0.5,
-  },
-  lightboxOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.94)',
-  },
-  lightboxSafeArea: {
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  lightboxHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  lightboxTitle: {
-    fontSize: 12,
-    fontFamily: FONT_MONTSERRAT_SEMIBOLD,
-    letterSpacing: 1.5,
-    color: '#ffffff',
-  },
-  lightboxCloseBtn: {
-    padding: 4,
-  },
-  lightboxImageContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-  },
-  lightboxImage: {
-    width: '100%',
-    height: '100%',
-  },
-  lightboxFooter: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  lightboxMeta: {
-    gap: 2,
-  },
-  lightboxSavedByText: {
-    fontSize: 13,
-    fontFamily: FONT_JOST_MEDIUM,
-    color: '#ffffff',
-  },
-  lightboxDateText: {
-    fontSize: 10,
-    fontFamily: FONT_MONTSERRAT_REGULAR,
-    color: '#aaaaaa',
-  },
-  unsaveBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-  },
-  unsaveBtnText: {
-    color: '#ef4444',
-    fontSize: 9,
-    fontFamily: FONT_MONTSERRAT_SEMIBOLD,
-    letterSpacing: 0.8,
   },
 });

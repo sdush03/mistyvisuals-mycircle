@@ -17,6 +17,7 @@ import { useScrollTabBarCollapse } from '../hooks/useScrollTabBarCollapse';
 import { useAuthStore } from '../store/authStore';
 import { savesService, SavedPhotoItem } from '../services/savesService';
 import { tabEvents, TAB_OPEN_PROFILE_SETTINGS } from '../lib/tabEvents';
+import FeaturedStoryLightboxModal from '../components/home/lightbox/FeaturedStoryLightboxModal';
 import api from '../services/api';
 import {
   FONT_FUTURA,
@@ -79,7 +80,7 @@ const balancePhotosIntoColumns = (photosList: any[]) => {
       cardAspect = cycle === 0 ? 2 / 3 : cycle === 1 ? 3 / 4 : 4 / 5;
     }
 
-    const photoWithAspect = { ...photo, cardAspect };
+    const photoWithAspect = { ...photo, cardAspect, globalIndex: index };
     const heightContribution = 1 / cardAspect;
     const shortestIdx = colHeights[0] <= colHeights[1] ? 0 : 1;
     cols[shortestIdx].push(photoWithAspect);
@@ -105,7 +106,11 @@ export default function ProfileScreen() {
   const [savedPhotos, setSavedPhotos] = useState<SavedPhotoItem[]>([]);
   const [loadingSaves, setLoadingSaves] = useState(false);
 
+  // MY PHOTOS lightbox state (kept separate as requested)
   const [selectedPhoto, setSelectedPhoto] = useState<any | null>(null);
+
+  // SAVED MOODBOARD Featured Story Lightbox state
+  const [selectedSavedIdx, setSelectedSavedIdx] = useState<number | null>(null);
 
   // Fetch celebration events & matched photos grouped by event
   const fetchMyCelebrationPhotos = useCallback(async () => {
@@ -222,30 +227,43 @@ export default function ProfileScreen() {
     return '✨ CIRCLE MEMBER';
   };
 
-  const renderMasonryCard = (p: any, index: number) => {
+  const handleUnsaveFromProfile = (item: SavedPhotoItem) => {
+    setSavedPhotos((prev) => prev.filter((s) => s.id !== item.id));
+    if (selectedSavedIdx !== null) {
+      setSelectedSavedIdx(null);
+    }
+  };
+
+  const renderMasonryCard = (p: any, index: number, isSavedTab: boolean = false) => {
     const imgUri = getPhotoUri(p);
     return (
       <Pressable
         key={p.id || index}
         style={[styles.masonryCard, { aspectRatio: p.cardAspect || 0.75 }]}
-        onPress={() => setSelectedPhoto(p)}
+        onPress={() => {
+          if (isSavedTab) {
+            setSelectedSavedIdx(p.globalIndex ?? 0);
+          } else {
+            setSelectedPhoto(p);
+          }
+        }}
       >
         <Image source={{ uri: imgUri }} style={styles.masonryImage} resizeMode="cover" />
       </Pressable>
     );
   };
 
-  // Render 2-column Featured Story balanced masonry grid for any list of photos
-  const renderPhotoListMasonry = (photosList: any[]) => {
+  // Render 2-column Featured Story balanced masonry grid
+  const renderPhotoListMasonry = (photosList: any[], isSavedTab: boolean = false) => {
     const { column0, column1 } = balancePhotosIntoColumns(photosList);
 
     return (
       <View style={styles.masonryGridContainer}>
         <View style={styles.masonryColumn}>
-          {column0.map((p, idx) => renderMasonryCard(p, idx * 2))}
+          {column0.map((p, idx) => renderMasonryCard(p, idx * 2, isSavedTab))}
         </View>
         <View style={styles.masonryColumn}>
-          {column1.map((p, idx) => renderMasonryCard(p, idx * 2 + 1))}
+          {column1.map((p, idx) => renderMasonryCard(p, idx * 2 + 1, isSavedTab))}
         </View>
       </View>
     );
@@ -355,7 +373,7 @@ export default function ProfileScreen() {
                     </View>
 
                     {/* 2-Column Featured Story Balanced Masonry Grid for this Event */}
-                    {renderPhotoListMasonry(group.photos)}
+                    {renderPhotoListMasonry(group.photos, false)}
                   </View>
                 );
               })}
@@ -382,7 +400,7 @@ export default function ProfileScreen() {
             </View>
           ) : (
             /* 2-Column Featured Story Balanced Masonry Grid for Saved Moodboard */
-            renderPhotoListMasonry(savedPhotos)
+            renderPhotoListMasonry(savedPhotos, true)
           )
         )}
       </ScrollView>
@@ -418,7 +436,19 @@ export default function ProfileScreen() {
         </Pressable>
       </Modal>
 
-      {/* ── Photo Lightbox Modal ── */}
+      {/* ── SAVED MOODBOARD Featured Story Style Lightbox Modal ── */}
+      {selectedSavedIdx !== null && (
+        <FeaturedStoryLightboxModal
+          visible={selectedSavedIdx !== null}
+          images={savedPhotos}
+          initialIndex={selectedSavedIdx}
+          onClose={() => setSelectedSavedIdx(null)}
+          onUnsave={handleUnsaveFromProfile}
+          title="SAVED MOODBOARD"
+        />
+      )}
+
+      {/* ── MY PHOTOS Standard Lightbox Modal (Kept separate as requested) ── */}
       {selectedPhoto && (
         <Modal
           visible={!!selectedPhoto}
