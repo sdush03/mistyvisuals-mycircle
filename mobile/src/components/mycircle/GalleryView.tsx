@@ -487,6 +487,19 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     return { column0: cols[0], column1: cols[1] };
   }, [activeList, renderLimit]);
 
+  // Simultaneous Interleaved Prefetching for top photos across both columns
+  useEffect(() => {
+    const topUris: string[] = [];
+    const maxTop = Math.max(column0.length, column1.length);
+    for (let i = 0; i < Math.min(maxTop, 6); i++) {
+      if (column0[i]?.r2Url) topUris.push(column0[i].r2Url);
+      if (column1[i]?.r2Url) topUris.push(column1[i].r2Url);
+    }
+    if (topUris.length > 0) {
+      Image.prefetch(topUris);
+    }
+  }, [column0, column1]);
+
   // Bounds measurement for smooth Lightbox opening & background page auto-scrolling
   const getBoundsForIndex = useCallback((idx: number, callback: (bounds: LightboxBounds) => void) => {
     if (idx < 0 || idx >= activeList.length) return;
