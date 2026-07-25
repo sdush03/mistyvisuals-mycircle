@@ -27,9 +27,6 @@ import {
   FONT_JOST_MEDIUM,
 } from '../constants/fonts';
 
-const { width } = Dimensions.get('window');
-const COLUMN_WIDTH = (width - 44) / 2;
-
 type MoodboardFilterType = 'all' | 'mine' | 'partner';
 
 export default function MoodboardScreen() {
@@ -98,6 +95,47 @@ export default function MoodboardScreen() {
     if (selectedFilter === 'partner') return !isMine(item);
     return true;
   });
+
+  // Split items into 2 columns for Featured Story style Masonry Grid
+  const col0: SavedPhotoItem[] = [];
+  const col1: SavedPhotoItem[] = [];
+  filteredSaves.forEach((item, idx) => {
+    if (idx % 2 === 0) col0.push(item);
+    else col1.push(item);
+  });
+
+  const renderMasonryCard = (item: SavedPhotoItem, index: number) => {
+    const photoMine = isMine(item);
+    const aspect =
+      (item as any).aspectRatio ||
+      ((item as any).width && (item as any).height
+        ? (item as any).width / (item as any).height
+        : index % 3 === 0
+        ? 0.72
+        : index % 3 === 1
+        ? 1.05
+        : 0.85);
+
+    return (
+      <Pressable
+        key={item.id}
+        style={[styles.masonryCard, { aspectRatio: aspect }]}
+        onPress={() => setSelectedPhoto(item)}
+      >
+        <Image source={{ uri: item.photoUrl }} style={styles.masonryImage} resizeMode="cover" />
+
+        {/* Top Heart Badge */}
+        <View style={styles.cardBadgeOverlay}>
+          <Ionicons name="heart" size={13} color="#ef4444" />
+          {item.savedBy?.displayRole && (
+            <Text style={styles.badgeRoleText}>
+              {photoMine ? 'YOU' : item.savedBy.displayRole}
+            </Text>
+          )}
+        </View>
+      </Pressable>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -175,36 +213,14 @@ export default function MoodboardScreen() {
             </Pressable>
           </View>
         ) : (
-          /* ── Personal Saved Photos 2-Column Masonry Grid ── */
-          <View style={styles.masonryGrid}>
-            {filteredSaves.map((item) => {
-              const photoMine = isMine(item);
-              return (
-                <Pressable
-                  key={item.id}
-                  style={styles.gridCard}
-                  onPress={() => setSelectedPhoto(item)}
-                >
-                  <Image source={{ uri: item.photoUrl }} style={styles.gridCardImage} resizeMode="cover" />
-
-                  {/* Top Heart Badge */}
-                  <View style={styles.cardBadgeOverlay}>
-                    <Ionicons name="heart" size={14} color="#ef4444" />
-                    {item.savedBy?.displayRole && (
-                      <Text style={styles.badgeRoleText}>
-                        {photoMine ? 'YOU' : item.savedBy.displayRole}
-                      </Text>
-                    )}
-                  </View>
-
-                  <View style={styles.cardFooter}>
-                    <Text style={styles.cardTitle} numberOfLines={1}>
-                      {item.storyId ? item.storyId.replace(/-/g, ' ').toUpperCase() : 'SAVED PHOTO'}
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            })}
+          /* ── Featured Story Style 2-Column Masonry Grid ── */
+          <View style={styles.masonryGridContainer}>
+            <View style={styles.masonryColumn}>
+              {col0.map((item, idx) => renderMasonryCard(item, idx * 2))}
+            </View>
+            <View style={styles.masonryColumn}>
+              {col1.map((item, idx) => renderMasonryCard(item, idx * 2 + 1))}
+            </View>
           </View>
         )}
       </ScrollView>
@@ -393,23 +409,25 @@ const styles = StyleSheet.create({
     fontFamily: FONT_MONTSERRAT_SEMIBOLD,
     letterSpacing: 1.2,
   },
-  masonryGrid: {
+  // Featured Story style 2-Column Masonry Grid
+  masonryGridContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    gap: 8,
     paddingHorizontal: 16,
-    gap: 12,
   },
-  gridCard: {
-    width: COLUMN_WIDTH,
-    height: 200,
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
+  masonryColumn: {
+    flex: 1,
+    flexDirection: 'column',
+    gap: 8,
+  },
+  masonryCard: {
+    width: '100%',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 6,
     overflow: 'hidden',
     position: 'relative',
-    borderWidth: 1,
-    borderColor: '#eeeeee',
   },
-  gridCardImage: {
+  masonryImage: {
     width: '100%',
     height: '100%',
   },
@@ -430,19 +448,6 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontFamily: FONT_MONTSERRAT_SEMIBOLD,
     letterSpacing: 0.5,
-  },
-  cardFooter: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-  },
-  cardTitle: {
-    fontSize: 10,
-    fontFamily: FONT_JOST_MEDIUM,
-    color: '#ffffff',
   },
   lightboxOverlay: {
     flex: 1,

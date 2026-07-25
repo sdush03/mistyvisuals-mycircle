@@ -28,9 +28,6 @@ import {
   FONT_JOST_MEDIUM,
 } from '../constants/fonts';
 
-const { width } = Dimensions.get('window');
-const GRID_SIZE = (width - 48) / 3;
-
 type ProfileSubTab = 'my_photos' | 'saved_moodboard';
 
 interface EventMatchedGroup {
@@ -192,6 +189,50 @@ export default function ProfileScreen() {
     return '✨ CIRCLE MEMBER';
   };
 
+  const renderMasonryItem = (p: any, index: number) => {
+    const imgUri = getPhotoUri(p);
+    const aspect =
+      p.aspectRatio ||
+      (p.width && p.height
+        ? p.width / p.height
+        : index % 3 === 0
+        ? 0.72
+        : index % 3 === 1
+        ? 1.05
+        : 0.85);
+
+    return (
+      <Pressable
+        key={p.id || index}
+        style={[styles.masonryCard, { aspectRatio: aspect }]}
+        onPress={() => setSelectedPhoto(p)}
+      >
+        <Image source={{ uri: imgUri }} style={styles.masonryImage} resizeMode="cover" />
+      </Pressable>
+    );
+  };
+
+  // Helper to render 2-column Featured Story style masonry grid for any list of photos
+  const renderPhotoListMasonry = (photosList: any[]) => {
+    const col0: any[] = [];
+    const col1: any[] = [];
+    photosList.forEach((p, idx) => {
+      if (idx % 2 === 0) col0.push(p);
+      else col1.push(p);
+    });
+
+    return (
+      <View style={styles.masonryGridContainer}>
+        <View style={styles.masonryColumn}>
+          {col0.map((p, idx) => renderMasonryItem(p, idx * 2))}
+        </View>
+        <View style={styles.masonryColumn}>
+          {col1.map((p, idx) => renderMasonryItem(p, idx * 2 + 1))}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -295,25 +336,8 @@ export default function ProfileScreen() {
                       </View>
                     </View>
 
-                    {/* 3-Column Photos Grid for this Event */}
-                    <View style={styles.photoGrid}>
-                      {group.photos.map((p, idx) => {
-                        const imgUri = getPhotoUri(p);
-                        return (
-                          <Pressable
-                            key={p.id || idx}
-                            style={styles.gridItem}
-                            onPress={() => setSelectedPhoto(p)}
-                          >
-                            <Image
-                              source={{ uri: imgUri }}
-                              style={styles.gridImage}
-                              resizeMode="cover"
-                            />
-                          </Pressable>
-                        );
-                      })}
-                    </View>
+                    {/* 2-Column Featured Story Masonry Grid for this Event */}
+                    {renderPhotoListMasonry(group.photos)}
                   </View>
                 );
               })}
@@ -339,20 +363,8 @@ export default function ProfileScreen() {
               </Pressable>
             </View>
           ) : (
-            <View style={styles.photoGrid}>
-              {savedPhotos.map((p) => {
-                const imgUri = getPhotoUri(p);
-                return (
-                  <Pressable
-                    key={p.id}
-                    style={styles.gridItem}
-                    onPress={() => setSelectedPhoto(p)}
-                  >
-                    <Image source={{ uri: imgUri }} style={styles.gridImage} resizeMode="cover" />
-                  </Pressable>
-                );
-              })}
-            </View>
+            /* 2-Column Featured Story Masonry Grid for Saved Moodboard */
+            renderPhotoListMasonry(savedPhotos)
           )
         )}
       </ScrollView>
@@ -518,7 +530,7 @@ const styles = StyleSheet.create({
     gap: 24,
   },
   eventGroupContainer: {
-    marginBottom: 8,
+    marginBottom: 16,
   },
   eventHeaderRow: {
     flexDirection: 'row',
@@ -607,19 +619,25 @@ const styles = StyleSheet.create({
     fontFamily: FONT_MONTSERRAT_SEMIBOLD,
     letterSpacing: 1,
   },
-  photoGrid: {
+  // Featured Story style 2-Column Masonry Grid
+  masonryGridContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  masonryColumn: {
+    flex: 1,
+    flexDirection: 'column',
     gap: 8,
   },
-  gridItem: {
-    width: GRID_SIZE,
-    height: GRID_SIZE,
-    borderRadius: 8,
-    overflow: 'hidden',
+  masonryCard: {
+    width: '100%',
     backgroundColor: '#f5f5f5',
+    borderRadius: 6,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  gridImage: {
+  masonryImage: {
     width: '100%',
     height: '100%',
   },
