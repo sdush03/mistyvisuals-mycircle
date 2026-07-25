@@ -162,7 +162,8 @@ export default function MyCircleScreen() {
   };
 
   // State Machine Controller
-  if (isLoading || isValidatingEvent) {
+  // Initial auth loading
+  if ((isLoading || isValidatingEvent) && !token) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#000000" />
