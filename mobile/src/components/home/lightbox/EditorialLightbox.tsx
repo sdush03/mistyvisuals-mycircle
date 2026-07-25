@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue,
@@ -29,6 +29,8 @@ import {
   FONT_FUTURA_BOLD,
   FONT_MONTSERRAT_REGULAR,
   FONT_MONTSERRAT_SEMIBOLD,
+  FONT_JOST_MEDIUM,
+  FONT_JOST_REGULAR,
 } from '../../../constants/fonts';
 
 const { width } = Dimensions.get('window');
@@ -94,6 +96,7 @@ export function EditorialLightbox({
     heartPopScale.value = 0.4;
     heartPopOpacity.value = 1;
     heartPopScale.value = withSpring(1.2, { damping: 10, stiffness: 200 }, () => {
+      'worklet';
       heartPopOpacity.value = withTiming(0, { duration: 350 });
     });
   }, [heartPopScale, heartPopOpacity]);
@@ -211,13 +214,13 @@ export function EditorialLightbox({
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Animated.View style={[StyleSheet.absoluteFillObject, backdropAnimatedStyle]} pointerEvents="none" />
 
-        <View style={styles.container}>
+        <View style={styles.lightboxContainer}>
           <StatusBar barStyle="light-content" translucent backgroundColor="transparent" animated />
 
           {/* Toast Notification Banner */}
           {toastMsg && (
             <Animated.View
-              style={[styles.toastBanner, { top: Math.max(insets.top + 60, 80) }, toastAnimatedStyle]}
+              style={[styles.toastBanner, { top: Math.max(insets.top + 75, 100) }, toastAnimatedStyle]}
               pointerEvents="none"
             >
               <Ionicons name="bookmark" size={14} color="#FFD700" style={{ marginRight: 8 }} />
@@ -225,22 +228,29 @@ export function EditorialLightbox({
             </Animated.View>
           )}
 
-          {/* Top Editorial Header Gradient */}
+          {/* Top Editorial Header Gradient Overlay */}
           {showControls && (
             <Animated.View style={[{ zIndex: 100 }, controlsAnimatedStyle]} pointerEvents="box-none">
               <LinearGradient
-                colors={['rgba(0, 0, 0, 0.6)', 'rgba(0, 0, 0, 0.15)', 'transparent']}
-                style={[styles.headerGradient, { paddingTop: Math.max(insets.top + 14, 44) }]}
+                colors={['rgba(0, 0, 0, 0.45)', 'rgba(0, 0, 0, 0.1)', 'transparent']}
+                style={[styles.lightboxHeaderGradient, { paddingTop: Math.max(insets.top + 18, 54) }]}
                 pointerEvents="box-none"
               >
-                <View style={styles.headerInner}>
+                <View style={styles.lightboxHeaderInner}>
                   <View style={styles.headerSpacer} />
-                  <View style={styles.headerBrand}>
-                    <Text style={styles.brandTitle}>MISTY VISUALS</Text>
-                    <Text style={styles.brandSub}>EDITORIAL</Text>
+                  <View style={styles.lightboxHeaderBrand}>
+                    <Text style={styles.lightboxBrandText}>MISTY VISUALS</Text>
+                    <Text style={styles.lightboxBrandSub}>EDITORIAL</Text>
                   </View>
-                  <Pressable style={styles.closeBtn} onPress={handleClose} hitSlop={14}>
-                    <Text style={styles.closeIcon}>✕</Text>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.lightboxCloseEditorial,
+                      pressed && { opacity: 0.6 },
+                    ]}
+                    onPress={handleClose}
+                    hitSlop={14}
+                  >
+                    <Text style={styles.lightboxCloseIcon}>✕</Text>
                   </Pressable>
                 </View>
               </LinearGradient>
@@ -248,67 +258,82 @@ export function EditorialLightbox({
           )}
 
           {/* Horizontal Paging Stage */}
-          <View style={styles.imageStage}>
+          <View style={styles.lightboxImageContainer}>
             <FlatList
               ref={flatListRef}
               data={images}
               horizontal
               pagingEnabled
               decelerationRate="fast"
-              snapToInterval={width}
+              snapToInterval={width + 18}
               scrollEnabled={!isZoomed}
               showsHorizontalScrollIndicator={false}
               initialScrollIndex={initialIndex}
               getItemLayout={(_data, index) => ({
-                length: width,
-                offset: width * index,
+                length: width + 18,
+                offset: (width + 18) * index,
                 index,
               })}
               onMomentumScrollEnd={(e) => {
-                const nextIdx = Math.round(e.nativeEvent.contentOffset.x / width);
+                const nextIdx = Math.round(e.nativeEvent.contentOffset.x / (width + 18));
                 if (nextIdx >= 0 && nextIdx < images.length) {
                   setActiveIdx(nextIdx);
                 }
               }}
               keyExtractor={(item, index) => item.id || `lightbox-${index}`}
+              ItemSeparatorComponent={() => <View style={{ width: 18, backgroundColor: '#000000' }} />}
               renderItem={renderItem}
             />
           </View>
 
-          {/* Bottom Editorial Footer */}
+          {/* Bottom Editorial Footer Gradient Overlay */}
           {showControls && (
             <Animated.View style={[{ zIndex: 100 }, controlsAnimatedStyle]} pointerEvents="box-none">
               <LinearGradient
                 colors={['transparent', 'rgba(0, 0, 0, 0.4)', 'rgba(0, 0, 0, 0.85)']}
-                style={[styles.footerGradient, { paddingBottom: Math.max(insets.bottom, 24) + 8 }]}
+                style={[styles.lightboxFooterGradient, { paddingBottom: Math.max(insets.bottom, 24) + 8 }]}
                 pointerEvents="box-none"
               >
                 <View style={{ alignItems: 'center', width: '100%' }}>
-                  {/* High-Fashion Counter: e.g. "01 // 15" */}
-                  <View style={styles.counterContainer}>
-                    <Text style={styles.counterCurrent}>
+                  {/* High-Fashion Format Counter: e.g. "01 // 24" */}
+                  <View style={styles.lightboxCounterContainer}>
+                    <Text style={styles.lightboxCounterCurrent}>
                       {String(activeIdx + 1).padStart(2, '0')}
                     </Text>
-                    <Text style={styles.counterDivider}>//</Text>
-                    <Text style={styles.counterTotal}>
+                    <Text style={styles.lightboxCounterDivider}>//</Text>
+                    <Text style={styles.lightboxCounterTotal}>
                       {String(images.length).padStart(2, '0')}
                     </Text>
                   </View>
 
-                  <Text style={styles.categoryText}>{title.toUpperCase()}</Text>
+                  <Text style={styles.lightboxCategoryText}>{title.toUpperCase()}</Text>
 
                   {/* Actions Row */}
-                  <View style={styles.actionRow}>
-                    <Pressable style={styles.iconBtn} onPress={handleToggleSave} hitSlop={14}>
+                  <View style={styles.lightboxActionRow}>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.lightboxIconOnlyBtn,
+                        pressed && { opacity: 0.6 },
+                      ]}
+                      onPress={handleToggleSave}
+                      hitSlop={14}
+                    >
                       <Ionicons
                         name={isSaved ? 'heart' : 'heart-outline'}
-                        size={22}
+                        size={21}
                         color={isSaved ? '#ef4444' : '#ffffff'}
                       />
                     </Pressable>
 
-                    <Pressable style={styles.iconBtn} onPress={handleShare} hitSlop={14}>
-                      <Ionicons name="share-outline" size={22} color="#ffffff" />
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.lightboxIconOnlyBtn,
+                        pressed && { opacity: 0.6 },
+                      ]}
+                      onPress={handleShare}
+                      hitSlop={14}
+                    >
+                      <Feather name="share-2" size={18} color="#ffffff" />
                     </Pressable>
                   </View>
                 </View>
@@ -322,9 +347,9 @@ export function EditorialLightbox({
 }
 
 const styles = StyleSheet.create({
-  container: {
+  lightboxContainer: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: 'transparent',
   },
   toastBanner: {
     position: 'absolute',
@@ -345,100 +370,116 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
   },
-  headerGradient: {
+  lightboxHeaderGradient: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     zIndex: 100,
   },
-  headerInner: {
+  lightboxHeaderInner: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
-    height: 48,
+    paddingBottom: 16,
   },
   headerSpacer: {
-    width: 32,
+    width: 34,
+    height: 34,
   },
-  headerBrand: {
-    alignItems: 'center',
-  },
-  brandTitle: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontFamily: FONT_FUTURA_BOLD,
-    letterSpacing: 3,
-  },
-  brandSub: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 7,
-    fontFamily: FONT_MONTSERRAT_SEMIBOLD,
-    letterSpacing: 2,
-    marginTop: 1,
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
+  lightboxHeaderBrand: {
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 2,
   },
-  closeIcon: {
-    color: '#ffffff',
-    fontSize: 18,
+  lightboxBrandText: {
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 12,
+    letterSpacing: 3.5,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontWeight: '600',
+  },
+  lightboxBrandSub: {
+    fontFamily: FONT_JOST_MEDIUM,
+    fontSize: 9,
+    letterSpacing: 4.5,
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontWeight: '500',
+  },
+  lightboxCloseEditorial: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lightboxCloseIcon: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 14,
+    lineHeight: 14,
     fontWeight: '300',
   },
-  imageStage: {
+  lightboxImageContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  footerGradient: {
+  lightboxFooterGradient: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    paddingTop: 40,
-    paddingHorizontal: 20,
     zIndex: 100,
-  },
-  counterContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginBottom: 4,
+    paddingHorizontal: 24,
   },
-  counterCurrent: {
-    fontSize: 13,
-    fontFamily: FONT_FUTURA_BOLD,
-    color: '#ffffff',
-    letterSpacing: 1,
-  },
-  counterDivider: {
+  lightboxCategoryText: {
+    fontFamily: FONT_JOST_MEDIUM,
     fontSize: 11,
-    fontFamily: FONT_MONTSERRAT_REGULAR,
-    color: 'rgba(255, 255, 255, 0.4)',
-  },
-  counterTotal: {
-    fontSize: 11,
-    fontFamily: FONT_MONTSERRAT_REGULAR,
-    color: 'rgba(255, 255, 255, 0.5)',
-    letterSpacing: 1,
-  },
-  categoryText: {
-    fontSize: 10,
-    fontFamily: FONT_MONTSERRAT_SEMIBOLD,
     letterSpacing: 2,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginBottom: 12,
+    color: '#8c867e',
+    fontWeight: '500',
+    marginBottom: 10,
+    textAlign: 'center',
   },
-  actionRow: {
+  lightboxCounterContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 28,
+    gap: 6,
+    marginBottom: 6,
   },
-  iconBtn: {
-    padding: 6,
+  lightboxCounterCurrent: {
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#ffffff',
+    letterSpacing: 2,
+  },
+  lightboxCounterDivider: {
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 12,
+    color: '#6e6962',
+  },
+  lightboxCounterTotal: {
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 12,
+    color: '#8c867e',
+    letterSpacing: 2,
+  },
+  lightboxActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 24,
+    marginTop: 6,
+  },
+  lightboxIconOnlyBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
