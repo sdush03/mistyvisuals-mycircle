@@ -10,7 +10,7 @@ import {
   Share,
   StatusBar,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -30,9 +30,9 @@ import {
   FONT_MONTSERRAT_SEMIBOLD,
 } from '../../../constants/fonts';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
-interface FeaturedStoryLightboxModalProps {
+export interface EditorialLightboxProps {
   visible: boolean;
   images: any[];
   initialIndex: number;
@@ -41,14 +41,14 @@ interface FeaturedStoryLightboxModalProps {
   title?: string;
 }
 
-export default function FeaturedStoryLightboxModal({
+export function EditorialLightbox({
   visible,
   images,
   initialIndex,
   onClose,
   onUnsave,
-  title = 'MY MOODBOARD',
-}: FeaturedStoryLightboxModalProps) {
+  title = 'MISTY VISUALS',
+}: EditorialLightboxProps) {
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList>(null);
 
@@ -58,7 +58,7 @@ export default function FeaturedStoryLightboxModal({
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [savedUrls, setSavedUrls] = useState<Set<string>>(new Set());
 
-  // Shared Values for Animations
+  // Shared Values for Reanimated Gestures & Animations
   const expandProgress = useSharedValue(1);
   const backdropOpacity = useSharedValue(1);
   const controlsOpacity = useSharedValue(1);
@@ -72,8 +72,7 @@ export default function FeaturedStoryLightboxModal({
       expandProgress.value = 1;
       backdropOpacity.value = 1;
       controlsOpacity.value = 1;
-      
-      // Load current saved URLs state
+
       savesService.getSavedPhotos().then((items) => {
         const urls = new Set(items.map((i) => i.photoUrl));
         setSavedUrls(urls);

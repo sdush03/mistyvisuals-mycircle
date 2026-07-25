@@ -17,7 +17,7 @@ import { useScrollTabBarCollapse } from '../hooks/useScrollTabBarCollapse';
 import { useAuthStore } from '../store/authStore';
 import { savesService, SavedPhotoItem } from '../services/savesService';
 import { tabEvents, TAB_OPEN_PROFILE_SETTINGS } from '../lib/tabEvents';
-import FeaturedStoryLightboxModal from '../components/home/lightbox/FeaturedStoryLightboxModal';
+import { EditorialLightbox } from '../components/home/lightbox/EditorialLightbox';
 import api from '../services/api';
 import {
   FONT_FUTURA,
@@ -436,9 +436,9 @@ export default function ProfileScreen() {
         </Pressable>
       </Modal>
 
-      {/* ── SAVED MOODBOARD Featured Story Style Lightbox Modal ── */}
+      {/* ── SAVED MOODBOARD Shared Editorial Lightbox Modal ── */}
       {selectedSavedIdx !== null && (
-        <FeaturedStoryLightboxModal
+        <EditorialLightbox
           visible={selectedSavedIdx !== null}
           images={savedPhotos}
           initialIndex={selectedSavedIdx}

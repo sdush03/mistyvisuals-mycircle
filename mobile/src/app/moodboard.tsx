@@ -14,7 +14,7 @@ import { router } from 'expo-router';
 import { useScrollTabBarCollapse } from '../hooks/useScrollTabBarCollapse';
 import { savesService, SavedPhotoItem } from '../services/savesService';
 import { useAuthStore } from '../store/authStore';
-import FeaturedStoryLightboxModal from '../components/home/lightbox/FeaturedStoryLightboxModal';
+import { EditorialLightbox } from '../components/home/lightbox/EditorialLightbox';
 import {
   FONT_FUTURA,
   FONT_FUTURA_BOLD,
@@ -233,9 +233,9 @@ export default function MoodboardScreen() {
         )}
       </ScrollView>
 
-      {/* ── Featured Story Style Editorial Lightbox Modal ── */}
+      {/* ── Shared Featured Story Editorial Lightbox Modal ── */}
       {selectedPhotoIdx !== null && (
-        <FeaturedStoryLightboxModal
+        <EditorialLightbox
           visible={selectedPhotoIdx !== null}
           images={filteredSaves}
           initialIndex={selectedPhotoIdx}
