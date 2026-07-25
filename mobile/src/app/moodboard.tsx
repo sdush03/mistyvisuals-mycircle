@@ -8,6 +8,7 @@ import {
   Pressable,
   ActivityIndicator,
   RefreshControl,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -123,7 +124,42 @@ export default function MoodboardScreen() {
     return { column0: cols[0], column1: cols[1] };
   }, [filteredSaves]);
 
+  const mainScrollRef = useRef<ScrollView>(null);
   const cardRefs = useRef<{ [key: string]: View | null }>({});
+
+  const getBoundsForIndex = useCallback((idx: number, callback: (bounds: LightboxBounds) => void) => {
+    if (idx < 0 || idx >= filteredSaves.length) return;
+    const item = filteredSaves[idx];
+    if (!item) return;
+    const cardId = item.id || item.photoUrl || `save-${(item as any).globalIndex ?? idx}`;
+    const targetCard = cardRefs.current[cardId];
+
+    if (targetCard) {
+      targetCard.measureInWindow((x, y, cardWidth, cardHeight) => {
+        if (cardWidth > 0 && cardHeight > 0) {
+          if (y < 80 || y + cardHeight > Dimensions.get('screen').height - 60) {
+            targetCard.measureLayout(
+              mainScrollRef.current as any,
+              (left, top, w, h) => {
+                const targetScrollY = Math.max(0, top - Dimensions.get('screen').height / 2 + h / 2);
+                mainScrollRef.current?.scrollTo({ y: targetScrollY, animated: false });
+                requestAnimationFrame(() => {
+                  targetCard.measureInWindow((nx, ny, nw, nh) => {
+                    if (nw > 0 && nh > 0) {
+                      callback({ x: nx, y: ny, width: nw, height: nh });
+                    }
+                  });
+                });
+              },
+              () => {}
+            );
+          } else {
+            callback({ x, y, width: cardWidth, height: cardHeight });
+          }
+        }
+      });
+    }
+  }, [filteredSaves]);
 
   const renderMasonryCard = (item: any) => {
     const photoMine = isMine(item);
@@ -169,6 +205,7 @@ export default function MoodboardScreen() {
   return (
     <View style={styles.container}>
       <ScrollView
+        ref={mainScrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         onScroll={handleScroll}
@@ -261,6 +298,7 @@ export default function MoodboardScreen() {
           images={filteredSaves}
           initialIndex={selectedPhotoIdx}
           initialBounds={selectedBounds}
+          onGetBoundsForIndex={getBoundsForIndex}
           onClose={() => {
             setSelectedPhotoIdx(null);
             setSelectedBounds(null);

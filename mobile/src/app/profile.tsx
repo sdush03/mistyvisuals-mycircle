@@ -235,7 +235,42 @@ export default function ProfileScreen() {
     }
   };
 
+  const mainScrollRef = useRef<ScrollView>(null);
   const cardRefs = useRef<{ [key: string]: View | null }>({});
+
+  const getBoundsForIndex = useCallback((idx: number, callback: (bounds: LightboxBounds) => void) => {
+    if (idx < 0 || idx >= savedPhotos.length) return;
+    const p = savedPhotos[idx];
+    if (!p) return;
+    const cardId = p.id || (p as any).uri || `photo-${idx}`;
+    const targetCard = cardRefs.current[cardId];
+
+    if (targetCard) {
+      targetCard.measureInWindow((x, y, cardWidth, cardHeight) => {
+        if (cardWidth > 0 && cardHeight > 0) {
+          if (y < 80 || y + cardHeight > Dimensions.get('screen').height - 60) {
+            targetCard.measureLayout(
+              mainScrollRef.current as any,
+              (left, top, w, h) => {
+                const targetScrollY = Math.max(0, top - Dimensions.get('screen').height / 2 + h / 2);
+                mainScrollRef.current?.scrollTo({ y: targetScrollY, animated: false });
+                requestAnimationFrame(() => {
+                  targetCard.measureInWindow((nx, ny, nw, nh) => {
+                    if (nw > 0 && nh > 0) {
+                      callback({ x: nx, y: ny, width: nw, height: nh });
+                    }
+                  });
+                });
+              },
+              () => {}
+            );
+          } else {
+            callback({ x, y, width: cardWidth, height: cardHeight });
+          }
+        }
+      });
+    }
+  }, [savedPhotos]);
 
   const renderMasonryCard = (p: any, index: number, isSavedTab: boolean = false) => {
     const imgUri = getPhotoUri(p);
@@ -291,6 +326,7 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
       <ScrollView
+        ref={mainScrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         onScroll={handleScroll}
@@ -462,6 +498,7 @@ export default function ProfileScreen() {
           images={savedPhotos}
           initialIndex={selectedSavedIdx}
           initialBounds={selectedSavedBounds}
+          onGetBoundsForIndex={getBoundsForIndex}
           onClose={() => {
             setSelectedSavedIdx(null);
             setSelectedSavedBounds(null);
