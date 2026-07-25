@@ -202,27 +202,34 @@ function RootLayoutContent() {
     return <LoginView onSuccess={() => {}} startAnimation={isSplashHidden} />;
   }
 
+  const eventSlug = useAuthStore((state) => state.eventSlug);
+  const isHeaderHidden = currentTab === 'mycircle' && Boolean(eventSlug);
+
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Animated.View entering={FadeIn.duration(350)} style={{ flex: 1, backgroundColor: '#ffffff' }}>
-        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
-        {/* Global Header — Centered Logo */}
-        <View style={[styles.globalHeader, { height: headerHeight, paddingTop: topInset }]}>
-          <Image
-            source={require('@/assets/images/logo-black.png')}
-            style={styles.headerLogo}
-            resizeMode="contain"
-          />
-          {currentTab === 'profile' && (
-            <Pressable
-              style={styles.headerSettingsBtn}
-              onPress={() => tabEvents.emit(TAB_OPEN_PROFILE_SETTINGS)}
-              hitSlop={12}
-            >
-              <Ionicons name="menu-outline" size={26} color="#111111" />
-            </Pressable>
-          )}
-        </View>
+        {!isHeaderHidden && (
+          <>
+            <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
+            {/* Global Header — Centered Logo */}
+            <View style={[styles.globalHeader, { height: headerHeight, paddingTop: topInset }]}>
+              <Image
+                source={require('@/assets/images/logo-black.png')}
+                style={styles.headerLogo}
+                resizeMode="contain"
+              />
+              {currentTab === 'profile' && (
+                <Pressable
+                  style={styles.headerSettingsBtn}
+                  onPress={() => tabEvents.emit(TAB_OPEN_PROFILE_SETTINGS)}
+                  hitSlop={12}
+                >
+                  <Ionicons name="menu-outline" size={26} color="#111111" />
+                </Pressable>
+              )}
+            </View>
+          </>
+        )}
 
         <Tabs
           screenOptions={{
