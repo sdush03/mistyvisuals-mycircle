@@ -49,6 +49,7 @@ export interface EditorialLightboxProps {
   images: any[];
   initialIndex: number;
   initialBounds?: LightboxBounds | null;
+  onGetBoundsForIndex?: (index: number) => LightboxBounds | null;
   onClose: () => void;
   onUnsave?: (item: any) => void;
   title?: string;
@@ -59,6 +60,7 @@ export function EditorialLightbox({
   images,
   initialIndex,
   initialBounds,
+  onGetBoundsForIndex,
   onClose,
   onUnsave,
   title = 'MISTY VISUALS',
@@ -137,6 +139,19 @@ export function EditorialLightbox({
     };
   }, [visible, initialIndex, initialBounds, resetAutoHideTimer, pauseAutoHideTimer]);
 
+  // FIX 1: Update target bounds whenever active index changes (e.g. user scrolled 3-4 photos ahead)
+  useEffect(() => {
+    if (visible && onGetBoundsForIndex) {
+      const newBounds = onGetBoundsForIndex(activeIdx);
+      if (newBounds && newBounds.width > 0) {
+        thumbX.value = newBounds.x;
+        thumbY.value = newBounds.y;
+        thumbW.value = newBounds.width;
+        thumbH.value = newBounds.height;
+      }
+    }
+  }, [visible, activeIdx, onGetBoundsForIndex, thumbX, thumbY, thumbW, thumbH]);
+
   // Imperative StatusBar visibility control matching native iOS/Android Photos app
   useEffect(() => {
     if (visible) {
@@ -193,6 +208,16 @@ export function EditorialLightbox({
   // Smooth 350ms Bezier collapse back to original bounds on exit
   const handleClose = useCallback(() => {
     pauseAutoHideTimer();
+    if (onGetBoundsForIndex) {
+      const latestBounds = onGetBoundsForIndex(activeIdx);
+      if (latestBounds && latestBounds.width > 0) {
+        thumbX.value = latestBounds.x;
+        thumbY.value = latestBounds.y;
+        thumbW.value = latestBounds.width;
+        thumbH.value = latestBounds.height;
+      }
+    }
+
     expandProgress.value = withTiming(
       0,
       {
@@ -206,7 +231,7 @@ export function EditorialLightbox({
         }
       }
     );
-  }, [expandProgress, onClose, pauseAutoHideTimer]);
+  }, [expandProgress, activeIdx, onClose, onGetBoundsForIndex, pauseAutoHideTimer, thumbX, thumbY, thumbW, thumbH]);
 
   const currentItem = images[activeIdx] || null;
   const currentUrl = currentItem
@@ -331,8 +356,15 @@ export function EditorialLightbox({
           }
         }}
         onZoomChange={(zoomed) => {
+          // FIX 2: Re-appear controls and restart auto-hide timer when zooming back out (zoomed === false)
           setIsZoomed(zoomed);
-          if (zoomed) setShowControls(false);
+          if (zoomed) {
+            setShowControls(false);
+            pauseAutoHideTimer();
+          } else {
+            setShowControls(true);
+            resetAutoHideTimer();
+          }
         }}
         onToggleControls={() => {
           if (!isZoomed) {
@@ -453,7 +485,7 @@ export function EditorialLightbox({
                 pointerEvents="box-none"
               >
                 <View style={{ alignItems: 'center', width: '100%' }}>
-                  {/* High-Fashion Counter: e.g. "01 // 24" */}
+                  {/* High-Fashion Format Counter: e.g. "01 // 24" */}
                   <View style={styles.lightboxCounterContainer}>
                     <Text style={styles.lightboxCounterCurrent}>
                       {String(activeIdx + 1).padStart(2, '0')}
