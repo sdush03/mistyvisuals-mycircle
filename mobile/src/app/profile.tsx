@@ -30,12 +30,12 @@ import {
 
 type ProfileSubTab = 'my_photos' | 'saved_moodboard';
 
-interface EventMatchedGroup {
-  eventSlug: string;
-  eventTitle: string;
-  eventDate?: string;
-  coverImage?: string;
-  photos: any[];
+interface MatchedPhotoWithEvent {
+  id: string | number;
+  uri: string;
+  eventTitle?: string;
+  eventSlug?: string;
+  rawItem: any;
 }
 
 // Helper to extract valid image URI from any backend photo object format
@@ -63,9 +63,8 @@ export default function ProfileScreen() {
   const [activeSubTab, setActiveSubTab] = useState<ProfileSubTab>('my_photos');
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
-  // Event-grouped photos
-  const [eventGroups, setEventGroups] = useState<EventMatchedGroup[]>([]);
-  const [totalMatchedCount, setTotalMatchedCount] = useState<number>(0);
+  // Single unified list of all matched celebration photos
+  const [allMatchedPhotos, setAllMatchedPhotos] = useState<MatchedPhotoWithEvent[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState<boolean>(true);
 
   // Saved Moodboard photos
@@ -74,7 +73,7 @@ export default function ProfileScreen() {
 
   const [selectedPhoto, setSelectedPhoto] = useState<any | null>(null);
 
-  // Fetch celebration events & matched photos grouped by event
+  // Fetch all celebration events & combine into ONE single unified photo stream
   const fetchMyCelebrationPhotos = useCallback(async () => {
     setLoadingPhotos(true);
     try {
@@ -82,17 +81,17 @@ export default function ProfileScreen() {
       const eventsRes = await api.get('/api/gallery/family/events');
       const eventsList = eventsRes.data?.events || [];
 
-      // 2. Fetch all matched photos for user from my-photos endpoint as fallback/supplement
-      let allMatched: any[] = [];
+      // 2. Fetch all matched photos for user from my-photos endpoint as supplement/fallback
+      let flatMatchedList: any[] = [];
       try {
         const myPhotosRes = await api.get('/api/my-photos');
         if (myPhotosRes.data?.photos && Array.isArray(myPhotosRes.data.photos)) {
-          allMatched = myPhotosRes.data.photos;
+          flatMatchedList = myPhotosRes.data.photos;
         }
       } catch (_e) {}
 
-      let grandTotal = 0;
-      const groups: EventMatchedGroup[] = [];
+      const combinedPhotos: MatchedPhotoWithEvent[] = [];
+      const seenUris = new Set<string>();
 
       if (Array.isArray(eventsList) && eventsList.length > 0) {
         for (const ev of eventsList) {
@@ -108,9 +107,9 @@ export default function ProfileScreen() {
             }
           } catch (_e) {}
 
-          // Fallback: match from allMatched list if event endpoint returned empty
-          if (evPhotos.length === 0 && allMatched.length > 0) {
-            evPhotos = allMatched.filter(
+          // Fallback: match from flatMatchedList if event endpoint returned empty
+          if (evPhotos.length === 0 && flatMatchedList.length > 0) {
+            evPhotos = flatMatchedList.filter(
               (p) =>
                 String(p.eventSlug || '') === String(ev.slug || '') ||
                 String(p.eventId || '') === String(ev.id || '') ||
@@ -118,35 +117,41 @@ export default function ProfileScreen() {
             );
           }
 
-          const validPhotos = evPhotos.filter((p) => !!getPhotoUri(p));
-          grandTotal += validPhotos.length;
-
-          groups.push({
-            eventSlug: ev.slug,
-            eventTitle: ev.title || ev.name || 'Celebration',
-            eventDate: ev.date || ev.eventDate,
-            coverImage: ev.coverImage || ev.imageUrl,
-            photos: validPhotos,
+          evPhotos.forEach((p, idx) => {
+            const uri = getPhotoUri(p);
+            if (uri && !seenUris.has(uri)) {
+              seenUris.add(uri);
+              combinedPhotos.push({
+                id: p.id || `${ev.slug}-${idx}`,
+                uri,
+                eventTitle: ev.title || ev.name || 'Celebration',
+                eventSlug: ev.slug,
+                rawItem: p,
+              });
+            }
           });
         }
       }
 
-      // Fallback: if no events created groups, render allMatched as single celebration group
-      if (grandTotal === 0 && allMatched.length > 0) {
-        const validPhotos = allMatched.filter((p) => !!getPhotoUri(p));
-        grandTotal = validPhotos.length;
-        groups.push({
-          eventSlug: 'all-photos',
-          eventTitle: 'My Celebration Photos',
-          photos: validPhotos,
+      // Fallback: if combined is empty, load flatMatchedList
+      if (combinedPhotos.length === 0 && flatMatchedList.length > 0) {
+        flatMatchedList.forEach((p, idx) => {
+          const uri = getPhotoUri(p);
+          if (uri && !seenUris.has(uri)) {
+            seenUris.add(uri);
+            combinedPhotos.push({
+              id: p.id || `flat-${idx}`,
+              uri,
+              eventTitle: p.eventTitle || p.eventName || 'Celebration',
+              rawItem: p,
+            });
+          }
         });
       }
 
-      setEventGroups(groups);
-      setTotalMatchedCount(grandTotal);
+      setAllMatchedPhotos(combinedPhotos);
     } catch (_err) {
-      setEventGroups([]);
-      setTotalMatchedCount(0);
+      setAllMatchedPhotos([]);
     } finally {
       setLoadingPhotos(false);
     }
@@ -189,45 +194,62 @@ export default function ProfileScreen() {
     return '✨ CIRCLE MEMBER';
   };
 
-  const renderMasonryItem = (p: any, index: number) => {
-    const imgUri = getPhotoUri(p);
-    const aspect =
-      p.aspectRatio ||
-      (p.width && p.height
-        ? p.width / p.height
-        : index % 3 === 0
-        ? 0.72
-        : index % 3 === 1
-        ? 1.05
-        : 0.85);
-
-    return (
-      <Pressable
-        key={p.id || index}
-        style={[styles.masonryCard, { aspectRatio: aspect }]}
-        onPress={() => setSelectedPhoto(p)}
-      >
-        <Image source={{ uri: imgUri }} style={styles.masonryImage} resizeMode="cover" />
-      </Pressable>
-    );
-  };
-
-  // Helper to render 2-column Featured Story style masonry grid for any list of photos
-  const renderPhotoListMasonry = (photosList: any[]) => {
+  // Render unified 2-Column Featured Story style Masonry Grid
+  const renderUnifiedMasonryGrid = (items: any[], isSavedList = false) => {
     const col0: any[] = [];
     const col1: any[] = [];
-    photosList.forEach((p, idx) => {
-      if (idx % 2 === 0) col0.push(p);
-      else col1.push(p);
+    items.forEach((item, idx) => {
+      if (idx % 2 === 0) col0.push(item);
+      else col1.push(item);
     });
+
+    const renderCard = (p: any, index: number) => {
+      const uri = isSavedList ? p.photoUrl : p.uri || getPhotoUri(p);
+      const aspect =
+        p.aspectRatio ||
+        (p.width && p.height
+          ? p.width / p.height
+          : index % 3 === 0
+          ? 0.72
+          : index % 3 === 1
+          ? 1.05
+          : 0.85);
+
+      return (
+        <Pressable
+          key={p.id || index}
+          style={[styles.masonryCard, { aspectRatio: aspect }]}
+          onPress={() => setSelectedPhoto(p.rawItem || p)}
+        >
+          <Image source={{ uri }} style={styles.masonryImage} resizeMode="cover" />
+
+          {/* Event title badge for My Photos */}
+          {!isSavedList && p.eventTitle && (
+            <View style={styles.cardEventBadge}>
+              <Text style={styles.cardEventBadgeText} numberOfLines={1}>
+                {p.eventTitle.toUpperCase()}
+              </Text>
+            </View>
+          )}
+
+          {/* Heart badge for Saved Moodboard */}
+          {isSavedList && (
+            <View style={styles.cardEventBadge}>
+              <Ionicons name="heart" size={12} color="#ef4444" />
+              <Text style={styles.cardEventBadgeText}>SAVED</Text>
+            </View>
+          )}
+        </Pressable>
+      );
+    };
 
     return (
       <View style={styles.masonryGridContainer}>
         <View style={styles.masonryColumn}>
-          {col0.map((p, idx) => renderMasonryItem(p, idx * 2))}
+          {col0.map((p, idx) => renderCard(p, idx * 2))}
         </View>
         <View style={styles.masonryColumn}>
-          {col1.map((p, idx) => renderMasonryItem(p, idx * 2 + 1))}
+          {col1.map((p, idx) => renderCard(p, idx * 2 + 1))}
         </View>
       </View>
     );
@@ -274,7 +296,7 @@ export default function ProfileScreen() {
               color={activeSubTab === 'my_photos' ? '#111111' : '#888888'}
             />
             <Text style={[styles.subTabText, activeSubTab === 'my_photos' && styles.subTabTextActive]}>
-              MY PHOTOS ({totalMatchedCount})
+              MY PHOTOS ({allMatchedPhotos.length})
             </Text>
           </Pressable>
 
@@ -295,12 +317,12 @@ export default function ProfileScreen() {
 
         {/* ── Sub-Tab Content ── */}
         {activeSubTab === 'my_photos' ? (
-          /* MY CELEBRATION PHOTOS CONTENT (Grouped by Events) */
+          /* MY CELEBRATION PHOTOS — ONE SINGLE UNIFIED 2-COLUMN MASONRY GRID */
           loadingPhotos ? (
             <View style={styles.loadingBox}>
               <ActivityIndicator size="small" color="#111111" />
             </View>
-          ) : eventGroups.length === 0 || totalMatchedCount === 0 ? (
+          ) : allMatchedPhotos.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconCircle}>
                 <Ionicons name="camera-outline" size={30} color="#888888" />
@@ -311,40 +333,10 @@ export default function ProfileScreen() {
               </Text>
             </View>
           ) : (
-            <View style={styles.eventsSection}>
-              {eventGroups.map((group) => {
-                if (!group.photos || group.photos.length === 0) return null;
-                return (
-                  <View key={group.eventSlug} style={styles.eventGroupContainer}>
-                    {/* Event Title Header */}
-                    <View style={styles.eventHeaderRow}>
-                      <View style={styles.eventHeaderInfo}>
-                        <Text style={styles.eventGroupCategory}>CELEBRATION MATCHES</Text>
-                        <Text style={styles.eventGroupTitle}>{group.eventTitle.toUpperCase()}</Text>
-                        {group.eventDate && (
-                          <Text style={styles.eventGroupDate}>
-                            {new Date(group.eventDate).toLocaleDateString(undefined, {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })}
-                          </Text>
-                        )}
-                      </View>
-                      <View style={styles.eventCountPill}>
-                        <Text style={styles.eventCountText}>{group.photos.length} MATCHES</Text>
-                      </View>
-                    </View>
-
-                    {/* 2-Column Featured Story Masonry Grid for this Event */}
-                    {renderPhotoListMasonry(group.photos)}
-                  </View>
-                );
-              })}
-            </View>
+            renderUnifiedMasonryGrid(allMatchedPhotos, false)
           )
         ) : (
-          /* SAVED MOODBOARD CONTENT */
+          /* SAVED MOODBOARD — ONE SINGLE UNIFIED 2-COLUMN MASONRY GRID */
           loadingSaves ? (
             <View style={styles.loadingBox}>
               <ActivityIndicator size="small" color="#111111" />
@@ -363,8 +355,7 @@ export default function ProfileScreen() {
               </Pressable>
             </View>
           ) : (
-            /* 2-Column Featured Story Masonry Grid for Saved Moodboard */
-            renderPhotoListMasonry(savedPhotos)
+            renderUnifiedMasonryGrid(savedPhotos, true)
           )
         )}
       </ScrollView>
@@ -525,53 +516,6 @@ const styles = StyleSheet.create({
   subTabTextActive: {
     color: '#111111',
   },
-  eventsSection: {
-    paddingHorizontal: 16,
-    gap: 24,
-  },
-  eventGroupContainer: {
-    marginBottom: 16,
-  },
-  eventHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  eventHeaderInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  eventGroupCategory: {
-    fontSize: 8,
-    fontFamily: FONT_MONTSERRAT_SEMIBOLD,
-    letterSpacing: 1.5,
-    color: '#888888',
-  },
-  eventGroupTitle: {
-    fontSize: 14,
-    fontFamily: FONT_FUTURA_BOLD,
-    letterSpacing: 1,
-    color: '#111111',
-  },
-  eventGroupDate: {
-    fontSize: 10,
-    fontFamily: FONT_JOST_REGULAR,
-    color: '#666666',
-  },
-  eventCountPill: {
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  eventCountText: {
-    fontSize: 8,
-    fontFamily: FONT_MONTSERRAT_SEMIBOLD,
-    letterSpacing: 0.8,
-    color: '#111111',
-  },
   loadingBox: {
     paddingVertical: 40,
     alignItems: 'center',
@@ -619,7 +563,7 @@ const styles = StyleSheet.create({
     fontFamily: FONT_MONTSERRAT_SEMIBOLD,
     letterSpacing: 1,
   },
-  // Featured Story style 2-Column Masonry Grid
+  // Single Unified 2-Column Featured Story Masonry Grid
   masonryGridContainer: {
     flexDirection: 'row',
     gap: 8,
@@ -640,6 +584,25 @@ const styles = StyleSheet.create({
   masonryImage: {
     width: '100%',
     height: '100%',
+  },
+  cardEventBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    maxWidth: '85%',
+  },
+  cardEventBadgeText: {
+    color: '#ffffff',
+    fontSize: 8,
+    fontFamily: FONT_MONTSERRAT_SEMIBOLD,
+    letterSpacing: 0.5,
   },
   modalOverlay: {
     flex: 1,
