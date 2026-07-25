@@ -1428,7 +1428,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       });
       const activeTabNames = activePhotoTabs.map(t => t.tabName);
-      const tabCounts: Record<string, number> = {};
+      const tabCounts = {};
       activePhotoTabs.forEach(t => {
         if (t.tabName) {
           tabCounts[t.tabName.trim().toUpperCase()] = t._count._all;
@@ -1439,7 +1439,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
       tabCounts['ALL'] = totalAllCount;
 
       event.tabs = (event.tabs || []).filter(tab => activeTabNames.includes(tab));
-      (event as any).tabCounts = tabCounts;
+      event.tabCounts = tabCounts;
 
       return event;
     } catch (err) {
