@@ -24,4 +24,5 @@ export const tabEvents = {
 export const TAB_OPEN_MOODBOARDS   = 'tab:openMoodboards';
 export const TAB_OPEN_INSPIRATIONS = 'tab:openInspirations';
 export const TAB_OPEN_PROFILE_SETTINGS = 'tab:openProfileSettings';
+export const EVENT_SAVES_UPDATED = 'saves:updated';
 

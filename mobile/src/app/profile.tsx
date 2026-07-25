@@ -12,11 +12,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useScrollTabBarCollapse } from '../hooks/useScrollTabBarCollapse';
 import { useAuthStore } from '../store/authStore';
 import { savesService, SavedPhotoItem } from '../services/savesService';
-import { tabEvents, TAB_OPEN_PROFILE_SETTINGS } from '../lib/tabEvents';
+import { tabEvents, TAB_OPEN_PROFILE_SETTINGS, EVENT_SAVES_UPDATED } from '../lib/tabEvents';
 import { EditorialLightbox, LightboxBounds } from '../components/home/lightbox/EditorialLightbox';
 import api from '../services/api';
 import {
@@ -211,10 +211,21 @@ export default function ProfileScreen() {
       setShowSettingsModal(true);
     });
 
+    const unsubSaves = tabEvents.on(EVENT_SAVES_UPDATED, () => {
+      fetchSavedPhotos();
+    });
+
     return () => {
       unsubscribe();
+      unsubSaves();
     };
   }, [fetchMyCelebrationPhotos, fetchSavedPhotos]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchSavedPhotos();
+    }, [fetchSavedPhotos])
+  );
 
   const handleLogout = async () => {
     setShowSettingsModal(false);

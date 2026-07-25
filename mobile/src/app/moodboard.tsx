@@ -11,10 +11,11 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useScrollTabBarCollapse } from '../hooks/useScrollTabBarCollapse';
 import { savesService, SavedPhotoItem } from '../services/savesService';
 import { useAuthStore } from '../store/authStore';
+import { tabEvents, EVENT_SAVES_UPDATED } from '../lib/tabEvents';
 import { EditorialLightbox, LightboxBounds } from '../components/home/lightbox/EditorialLightbox';
 import {
   FONT_FUTURA,
@@ -53,7 +54,17 @@ export default function MoodboardScreen() {
 
   useEffect(() => {
     fetchSaves();
+    const unsub = tabEvents.on(EVENT_SAVES_UPDATED, fetchSaves);
+    return () => {
+      unsub();
+    };
   }, [fetchSaves]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchSaves();
+    }, [fetchSaves])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
