@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
+  StatusBar,
   Image as RNImage,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -334,6 +335,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       <ScrollView
         ref={mainScrollRef}
         contentContainerStyle={styles.scrollContent}
