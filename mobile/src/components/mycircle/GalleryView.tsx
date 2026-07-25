@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS, Easing } from 'react-native-reanimated';
+import { usePathname } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { useScrollTabBarCollapse } from '../../hooks/useScrollTabBarCollapse';
 import api, { guestApi } from '../../services/api';
@@ -552,9 +553,16 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     ? new Date(eventDetails.date).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()
     : '';
 
+  const pathname = usePathname();
+  const isMyCircleActive = pathname ? pathname.includes('mycircle') : true;
+
+  if (!isMyCircleActive) {
+    return null;
+  }
+
   return (
     <Modal
-      visible={true}
+      visible={isMyCircleActive}
       animationType="none"
       transparent={true}
       presentationStyle="overFullScreen"
