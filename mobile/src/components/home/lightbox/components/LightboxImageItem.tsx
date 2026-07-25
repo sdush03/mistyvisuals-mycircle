@@ -76,8 +76,26 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
     ],
   }));
 
-  const thumbnailUri = typeof item === 'object' && item.uri ? item.uri : (typeof item === 'string' ? item : null);
-  const fullUri = typeof item === 'object' && item.fullUri ? item.fullUri : thumbnailUri;
+  const getMediaUri = (i: any): string | null => {
+    if (!i) return null;
+    if (typeof i === 'string') return i;
+    return (
+      i.fullUri ||
+      i.uri ||
+      i.photoUrl ||
+      i.r2Url ||
+      i.r2_url ||
+      i.file_url_mobile ||
+      i.file_url ||
+      i.thumbnailUrl ||
+      i.url ||
+      i.imageUrl ||
+      null
+    );
+  };
+
+  const thumbnailUri = getMediaUri(item);
+  const fullUri = (typeof item === 'object' && item?.fullUri) ? item.fullUri : thumbnailUri;
 
   return (
     <GestureDetector gesture={composedGesture}>
