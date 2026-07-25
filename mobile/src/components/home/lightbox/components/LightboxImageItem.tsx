@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 // @ts-ignore
@@ -38,11 +38,15 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
   heartPopScale,
   heartPopOpacity,
 }: LightboxImageItemProps) {
-  const imageAspect = typeof item === 'object' && (item.aspectRatio || item.cardAspect)
+  const [loadedAspect, setLoadedAspect] = useState<number | null>(null);
+
+  const rawAspect = typeof item === 'object' && (item.aspectRatio || item.cardAspect)
     ? (item.aspectRatio || item.cardAspect)
     : (typeof item === 'object' && item.width && item.height && item.height > 0
       ? item.width / item.height
       : null);
+
+  const imageAspect = rawAspect || loadedAspect;
 
   const {
     scale,
@@ -53,7 +57,7 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
     width,
     screenHeight: defaultScreenHeight,
     containerW: width,
-    containerH: defaultScreenHeight * 0.82,
+    containerH: defaultScreenHeight,
     imageAspect,
     expandProgress,
     onZoomChange,
@@ -110,6 +114,11 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
               cachePolicy="memory-disk"
               priority="high"
               transition={150}
+              onLoad={(e) => {
+                if (e.source && e.source.width && e.source.height && e.source.height > 0) {
+                  setLoadedAspect(e.source.width / e.source.height);
+                }
+              }}
             />
           )}
           {/* Layer 3: Heart Pop Center Animation Overlay */}
@@ -131,7 +140,7 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
 const styles = StyleSheet.create({
   lightboxImageStack: {
     width: defaultScreenWidth,
-    height: '82%',
+    height: '100%',
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
