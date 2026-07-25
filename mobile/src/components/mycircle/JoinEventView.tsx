@@ -141,7 +141,7 @@ export default function JoinEventView({ onSuccess }: JoinEventViewProps) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       
       {/* Editorial Header */}
@@ -241,7 +241,7 @@ export default function JoinEventView({ onSuccess }: JoinEventViewProps) {
           fetchEvents();
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

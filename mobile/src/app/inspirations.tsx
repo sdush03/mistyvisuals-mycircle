@@ -169,7 +169,7 @@ export default function InspirationsScreen() {
   const vibesList = ['All', 'Royal Heritage', 'Editorial Monochrome', 'Sunset Coastal', 'Minimalist', 'Ethereal Romance', 'Pre-Wedding', 'Bridal Portraits'];
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -362,7 +362,7 @@ export default function InspirationsScreen() {
         inspirations={websiteInspirations}
         categoryCards={vibeCategoryCards}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

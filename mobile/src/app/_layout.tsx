@@ -14,7 +14,7 @@ import { useAuthStore } from '../store/authStore';
 import api, { API_BASE_URL } from '../services/api';
 import LoginView from '../components/mycircle/LoginView';
 import { ProfileView } from '../components/profile/ProfileView';
-import { tabEvents, TAB_OPEN_MOODBOARDS, TAB_OPEN_INSPIRATIONS } from '../lib/tabEvents';
+import { tabEvents, TAB_OPEN_MOODBOARDS, TAB_OPEN_INSPIRATIONS, TAB_OPEN_PROFILE_SETTINGS } from '../lib/tabEvents';
 
 import { deactivateKeepAwake } from 'expo-keep-awake';
 
@@ -184,10 +184,11 @@ function RootLayoutContent() {
   }, [token]);
 
   // Determine current active tab
-  const currentTab: 'index' | 'mycircle' | 'moodboard' | 'inspirations' =
+  const currentTab: 'index' | 'mycircle' | 'moodboard' | 'inspirations' | 'profile' =
     segments[0] === 'mycircle' ? 'mycircle' :
     segments[0] === 'inspirations' ? 'inspirations' :
-    segments[0] === 'moodboard' ? 'moodboard' : 'index';
+    segments[0] === 'moodboard' ? 'moodboard' :
+    segments[0] === 'profile' ? 'profile' : 'index';
   const topInset = insets.top;
   const headerHeight = 52 + topInset;
 
@@ -212,6 +213,15 @@ function RootLayoutContent() {
             style={styles.headerLogo}
             resizeMode="contain"
           />
+          {currentTab === 'profile' && (
+            <Pressable
+              style={styles.headerSettingsBtn}
+              onPress={() => tabEvents.emit(TAB_OPEN_PROFILE_SETTINGS)}
+              hitSlop={12}
+            >
+              <Ionicons name="menu-outline" size={26} color="#111111" />
+            </Pressable>
+          )}
         </View>
 
         <Tabs
@@ -224,6 +234,7 @@ function RootLayoutContent() {
           <Tabs.Screen name="mycircle" />
           <Tabs.Screen name="moodboard" />
           <Tabs.Screen name="inspirations" />
+          <Tabs.Screen name="profile" />
         </Tabs>
 
         {/* Custom Animated Floating Tab Bar (Instagram 3-Tab Style) */}
@@ -309,7 +320,7 @@ function CustomFloatingTabBar({ activeTab, isCollapsed, bottomInset, profile, on
     } else if (tabName === 'inspirations') {
       router.replace('/inspirations');
     } else if (tabName === 'profile') {
-      onOpenProfile();
+      router.replace('/profile');
     }
   };
 
@@ -468,11 +479,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
+    position: 'relative',
   },
   headerLogo: {
     height: 38,
     width: 135,
     tintColor: '#000000',
+  },
+  headerSettingsBtn: {
+    position: 'absolute',
+    right: 18,
+    bottom: 12,
+    padding: 4,
   },
   tabAvatarImage: {
     width: 22,

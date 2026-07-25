@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
   },
   coverHeader: {
-    paddingTop: 54,
+    paddingTop: 16,
     paddingHorizontal: 24,
     flexDirection: 'row',
     justifyContent: 'center',
