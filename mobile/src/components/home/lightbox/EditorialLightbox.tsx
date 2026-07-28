@@ -512,7 +512,9 @@ export function EditorialLightbox({
                 ref={flatListRef}
                 data={images}
                 horizontal
-                pagingEnabled
+                pagingEnabled={false}
+                disableIntervalMomentum={true}
+                snapToAlignment="center"
                 decelerationRate="fast"
                 snapToInterval={width + 18}
                 scrollEnabled={!isZoomed}
