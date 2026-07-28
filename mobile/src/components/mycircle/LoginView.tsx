@@ -195,7 +195,8 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
     try {
       setIsLoggingIn(true);
 
-      const authUrl = eventSlug
+      const hasValidEventSlug = Boolean(eventSlug && eventSlug !== 'null' && eventSlug !== 'undefined');
+      const authUrl = hasValidEventSlug
         ? `/api/gallery/public/events/${eventSlug}/auth`
         : `/api/gallery/family/auth`;
 

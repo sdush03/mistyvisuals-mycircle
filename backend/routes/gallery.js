@@ -1503,6 +1503,18 @@ module.exports = async function galleryRoutes(fastify, opts) {
               return reply.code(403).send({ error: 'Access denied: Participant is blocked' });
             }
             hasFullAccess = dbGuest.hasFullAccess;
+          } else if (decoded.role === 'family' && decoded.email) {
+            let familyGuest = await prisma.guest.findFirst({
+              where: { eventId: event.id, email: decoded.email }
+            });
+            if (familyGuest) {
+              if (familyGuest.isBlocked) {
+                return reply.code(403).send({ error: 'Access denied: Participant is blocked' });
+              }
+              hasFullAccess = familyGuest.hasFullAccess;
+            } else {
+              hasFullAccess = !event.fullCode && !event.partialCode;
+            }
           } else {
             return reply.code(403).send({ error: 'Token does not match this event' });
           }

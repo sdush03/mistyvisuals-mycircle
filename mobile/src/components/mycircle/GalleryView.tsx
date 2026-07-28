@@ -12,9 +12,11 @@ import {
   BackHandler,
   Modal,
   InteractionManager,
+  TouchableOpacity,
   Image as RNImage,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
@@ -66,9 +68,12 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
   const [selectedBounds, setSelectedBounds] = useState<LightboxBounds | null>(null);
 
+  const PAGE_SIZE = 60;
   const mainScrollRef = useRef<ScrollView>(null);
   const cardRefs = useRef<{ [key: string]: View | null }>({});
   const eventHeadersRef = useRef<Record<string, string>>({});
+  const allPhotosOffsetRef = useRef<number>(0);
+  const isFetchingMoreRef = useRef<boolean>(false);
 
   // Reanimated values for edge-swipe back gesture
   const screenSwipeX = useSharedValue(0);
@@ -110,11 +115,11 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
 
   // Left-Edge Pan Swipe Back Gesture (matching FeaturedStoryView)
   const edgeSwipeGesture = Gesture.Pan()
-    .activeOffsetX(5)
-    .failOffsetY([-20, 20])
+    .activeOffsetX(12)
+    .failOffsetY([-25, 25])
     .onBegin((e) => {
       'worklet';
-      touchStartedOnLeftEdge.value = e.x <= 65 && !isLightboxOpen.value;
+      touchStartedOnLeftEdge.value = e.x <= 40 && !isLightboxOpen.value;
     })
     .onUpdate((e) => {
       'worklet';
@@ -142,8 +147,6 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     transform: [{ translateX: screenSwipeX.value }],
   }));
 
-  const PAGE_SIZE = 30;
-
   const eventSlug = useAuthStore((state) => state.eventSlug);
   const passcode = useAuthStore((state) => state.passcode);
   const profile = useAuthStore((state) => state.profile);
@@ -166,6 +169,8 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         const eventRes = await api.get(`/api/gallery/public/events/${eventSlug}`);
         if (eventRes.data) {
           setEventDetailsData(eventRes.data);
+          const c = eventRes.data.coverUrl || eventRes.data.cover_url || eventRes.data.bannerUrl;
+          if (c) Image.prefetch(c);
         }
       } catch (e: any) {
         if (e?.response?.status === 404) {
@@ -187,6 +192,9 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         );
         if (ssoRes.data?.token) {
           eventHeadersRef.current = { Authorization: `Bearer ${ssoRes.data.token}` };
+          if (ssoRes.data?.guest && typeof ssoRes.data.guest.hasFullAccess === 'boolean') {
+            setGuestAccessLevel(ssoRes.data.guest.hasFullAccess);
+          }
         } else if (familyToken) {
           eventHeadersRef.current = { Authorization: `Bearer ${familyToken}` };
         }
@@ -216,57 +224,85 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           width: p.width,
           height: p.height,
           tabName: p.tabName || p.tab_name || null,
-          isLiked: !!(p.likes && p.likes.length > 0),
-          likeCount: p._count?.likes || 0,
+          isLiked: typeof p.isLiked === 'boolean' ? p.isLiked : !!(p.likes && p.likes.length > 0),
+          likeCount: typeof p.likeCount === 'number' ? p.likeCount : (typeof p.likesCount === 'number' ? p.likesCount : (p._count?.likes || 0)),
         };
       };
 
-      // 2. Fetch matched photos & first page of all photos IN PARALLEL using Promise.all
+      allPhotosOffsetRef.current = 0;
+
+      // 2. Fetch matched photos, favorites & first page of all photos IN PARALLEL using Promise.all
       try {
-        const [matchedRes, allRes] = await Promise.all([
+        const fetchStartTime = Date.now();
+        console.log(`[MYCIRCLE DEBUG 🚀] Starting parallel photo fetch for event '${eventSlug}'...`);
+        const [matchedRes, allRes, favRes] = await Promise.all([
           guestApi.get(`/api/gallery/public/events/${eventSlug}/matched-photos`, { headers: eventHeaders }).catch((e) => {
-            console.warn('Matched photos fetch error:', e?.response?.status);
+            console.warn('[MYCIRCLE DEBUG ⚠️] Matched photos fetch error:', e?.response?.status);
             return { data: [] };
           }),
           guestApi.get(`/api/gallery/public/events/${eventSlug}/photos?limit=${PAGE_SIZE}&offset=0`, { headers: eventHeaders }).catch((e) => {
-            console.warn('All photos fetch error:', e?.response?.status);
+            console.warn('[MYCIRCLE DEBUG ⚠️] All photos fetch error:', e?.response?.status);
+            return { data: [] };
+          }),
+          guestApi.get(`/api/gallery/public/events/${eventSlug}/favorites`, { headers: eventHeaders }).catch((e) => {
+            console.warn('[MYCIRCLE DEBUG ⚠️] Favorites fetch error:', e?.response?.status);
             return { data: [] };
           }),
         ]);
 
+        const fetchDuration = Date.now() - fetchStartTime;
         const matchedList = matchedRes.data.photos || matchedRes.data.matchedPhotos || (Array.isArray(matchedRes.data) ? matchedRes.data : []);
         setPhotos(Array.isArray(matchedList) ? matchedList.map(mapPhotoItem) : []);
+
+        const favList = favRes.data.photos || (Array.isArray(favRes.data) ? favRes.data : []);
+        if (Array.isArray(favList) && favList.length > 0) {
+          const favMapped = favList.map(mapPhotoItem);
+          setTabCache((prev) => ({ ...prev, 'MY FAVOURITES': favMapped }));
+        }
 
         const allList = allRes.data.photos || (Array.isArray(allRes.data) ? allRes.data : []);
         const mapped = Array.isArray(allList) ? allList.map(mapPhotoItem) : [];
         const total = typeof allRes.data.total === 'number' ? allRes.data.total : mapped.length;
         setTotalAllPhotosCount(total);
         setAllPhotos(mapped);
+        allPhotosOffsetRef.current = mapped.length;
+        setAllPhotosOffset(mapped.length);
         const hasMore = mapped.length < total;
         setHasMorePhotos(hasMore);
+
+        console.log(`[MYCIRCLE DEBUG ✅] Initial Fetch Done in ${fetchDuration}ms | Loaded: ${mapped.length} / ${total} photos | HasMore: ${hasMore}`);
+
+        // Silent background prefetch of initial batch into native image cache
+        mapped.forEach((p) => {
+          if (p.r2Url) Image.prefetch(p.r2Url);
+        });
 
         if (hasMore) {
           setTimeout(() => {
             loadMorePhotos();
-          }, 300);
+          }, 100);
         }
       } catch (e: any) {
-        console.warn('Parallel photo fetch error:', e);
+        console.warn('[MYCIRCLE DEBUG ⚠️] Parallel photo fetch error:', e);
       }
     } catch (err) {
-      console.warn('Failed to fetch gallery photos', err);
+      console.warn('[MYCIRCLE DEBUG ⚠️] Failed to fetch gallery photos', err);
     } finally {
       setIsLoading(false);
     }
   };
 
   const loadMorePhotos = async () => {
-    if (!hasMorePhotos || isLoadingMore || isLoading || !eventSlug) return;
+    if (isFetchingMoreRef.current || !hasMorePhotos || isLoadingMore || isLoading || !eventSlug) return;
     try {
+      isFetchingMoreRef.current = true;
       setIsLoadingMore(true);
+      const currentOffset = allPhotosOffsetRef.current;
+      const loadMoreStartTime = Date.now();
+      console.log(`[MYCIRCLE DEBUG 📥] Pre-fetching next page -> offset=${currentOffset}, limit=${PAGE_SIZE}...`);
       const eventHeaders = eventHeadersRef.current;
       const allRes = await guestApi.get(
-        `/api/gallery/public/events/${eventSlug}/photos?limit=${PAGE_SIZE}&offset=${allPhotosOffset}`,
+        `/api/gallery/public/events/${eventSlug}/photos?limit=${PAGE_SIZE}&offset=${currentOffset}`,
         { headers: eventHeaders }
       );
       const allList = allRes.data.photos || (Array.isArray(allRes.data) ? allRes.data : []);
@@ -282,29 +318,46 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           width: p.width,
           height: p.height,
           tabName: p.tabName || p.tab_name || null,
-          isLiked: !!(p.likes && p.likes.length > 0),
-          likeCount: p._count?.likes || 0,
+          isLiked: typeof p.isLiked === 'boolean' ? p.isLiked : !!(p.likes && p.likes.length > 0),
+          likeCount: typeof p.likeCount === 'number' ? p.likeCount : (typeof p.likesCount === 'number' ? p.likesCount : (p._count?.likes || 0)),
         };
       };
       const mapped = Array.isArray(allList) ? allList.map(mapPhotoItem) : [];
+      const loadMoreDuration = Date.now() - loadMoreStartTime;
+      console.log(`[MYCIRCLE DEBUG ✅] Page Fetch Done in ${loadMoreDuration}ms | Received ${mapped.length} new photos | New Offset: ${currentOffset + mapped.length}`);
+
       if (mapped.length > 0) {
+        // Silent background prefetch of next batch into native disk memory cache
+        mapped.forEach((p) => {
+          if (p.r2Url) Image.prefetch(p.r2Url);
+        });
+
+        allPhotosOffsetRef.current += mapped.length;
+        setAllPhotosOffset(allPhotosOffsetRef.current);
         setAllPhotos((prev) => {
           const next = [...prev, ...mapped];
           const dedupped = next.filter((item, index, self) =>
             index === self.findIndex((t) => (t.id && item.id ? t.id === item.id : t.r2Url === item.r2Url))
           );
-          if (totalAllPhotosCount !== null && dedupped.length >= totalAllPhotosCount) {
+          const reachedTotal = totalAllPhotosCount !== null && dedupped.length >= totalAllPhotosCount;
+          if (reachedTotal) {
             setHasMorePhotos(false);
+          }
+          // Continuous Pipeline Buffer: If buffer has less than 180 photos, chain next batch automatically
+          if (!reachedTotal && dedupped.length < 180) {
+            setTimeout(() => {
+              loadMorePhotos();
+            }, 200);
           }
           return dedupped;
         });
-        setAllPhotosOffset((prev) => prev + mapped.length);
       } else {
         setHasMorePhotos(false);
       }
     } catch (e: any) {
       console.warn('Load more error:', e?.response?.status);
     } finally {
+      isFetchingMoreRef.current = false;
       setIsLoadingMore(false);
     }
   };
@@ -313,10 +366,17 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     fetchPhotos();
   }, [eventSlug]);
 
-  const hasFullAccess = profile?.hasFullAccess ?? true;
+  const [guestAccessLevel, setGuestAccessLevel] = useState<boolean | null>(null);
+  const hasFullAccess = guestAccessLevel ?? (profile?.hasFullAccess ?? false);
   const [tabCache, setTabCache] = useState<Record<string, Photo[]>>({});
+  const [isTabLoading, setIsTabLoading] = useState(false);
 
-  const favoritesCount = React.useMemo(() => allPhotos.filter((p: any) => p.isLiked).length, [allPhotos]);
+  const favoritesCount = React.useMemo(() => {
+    if (tabCache['MY FAVOURITES']) {
+      return tabCache['MY FAVOURITES'].length;
+    }
+    return allPhotos.filter((p: any) => p.isLiked).length;
+  }, [allPhotos, tabCache]);
 
   const highlightsCount = React.useMemo(() => {
     if (eventDetails?.tabCounts?.['HIGHLIGHTS']) {
@@ -331,10 +391,14 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     if (norm === 'ALL' || norm === 'MY PHOTOS' || norm === 'MY FAVOURITES') return;
     if (tabCache[norm]) return; // Already cached
 
+    const hasAnyInAll = allPhotos.some((p: any) => p.tabName && p.tabName.trim().toUpperCase() === norm);
     try {
+      if (!hasAnyInAll) {
+        setIsTabLoading(true);
+      }
       const eventHeaders = eventHeadersRef.current;
       const res = await guestApi.get(
-        `/api/gallery/public/events/${eventSlug}/photos?limit=120&tab=${encodeURIComponent(tabName)}`,
+        `/api/gallery/public/events/${eventSlug}/photos?limit=1000&tab=${encodeURIComponent(tabName)}`,
         { headers: eventHeaders }
       );
       const rawList = res.data.photos || (Array.isArray(res.data) ? res.data : []);
@@ -350,14 +414,22 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           width: p.width,
           height: p.height,
           tabName: p.tabName || p.tab_name || null,
-          isLiked: !!(p.likes && p.likes.length > 0),
-          likeCount: p._count?.likes || 0,
+          isLiked: typeof p.isLiked === 'boolean' ? p.isLiked : !!(p.likes && p.likes.length > 0),
+          likeCount: typeof p.likeCount === 'number' ? p.likeCount : (typeof p.likesCount === 'number' ? p.likesCount : (p._count?.likes || 0)),
         };
       };
       const mapped = Array.isArray(rawList) ? rawList.map(mapPhotoItem) : [];
+
+      // Silent background prefetch of top 30 tab thumbnails into native cache
+      mapped.slice(0, 30).forEach((p) => {
+        if (p.r2Url) Image.prefetch(p.r2Url);
+      });
+
       setTabCache((prev) => ({ ...prev, [norm]: mapped }));
     } catch (err) {
       console.warn(`Failed to fetch photos for tab ${tabName}:`, err);
+    } finally {
+      setIsTabLoading(false);
     }
   }, [eventSlug, tabCache]);
 
@@ -437,7 +509,18 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
       return photos;
     }
     if (currentUpper === 'MY FAVOURITES') {
-      return allPhotos.filter((p: any) => p.isLiked);
+      if (tabCache['MY FAVOURITES']) {
+        return tabCache['MY FAVOURITES'];
+      }
+      const combined: Photo[] = [];
+      const seenIds = new Set<number>();
+      [...allPhotos, ...photos, ...Object.values(tabCache).flat()].forEach((p) => {
+        if (p.isLiked && !seenIds.has(p.id)) {
+          seenIds.add(p.id);
+          combined.push(p);
+        }
+      });
+      return combined;
     }
     if (currentUpper === 'ALL') {
       return allPhotos;
@@ -451,11 +534,15 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     });
   }, [activeTab, photos, allPhotos, tabCache]);
 
-  // 1:1 Parity with FeaturedStoryView renderLimit
+  // Progressive 3-Step Hydration: Prevents initial phone CPU hang on gallery open
   useEffect(() => {
-    setRenderLimit(40);
-    const timer = setTimeout(() => setRenderLimit(Infinity as any), 150);
-    return () => clearTimeout(timer);
+    setRenderLimit(12); // Frame 1: Render top 12 cards only (1 screen) -> 0ms instant UI modal open!
+    const t1 = setTimeout(() => setRenderLimit(30), 100);
+    const t2 = setTimeout(() => setRenderLimit(Infinity as any), 250);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [activeTab]);
 
   // Shortest Column Height Balancing — EXACTLY matching FeaturedStoryView
@@ -465,7 +552,8 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
 
     const visibleList = activeList.slice(0, renderLimit);
 
-    visibleList.forEach((photo: any, index: number) => {
+    for (let index = 0; index < visibleList.length; index++) {
+      const photo: any = visibleList[index];
       const realAspect = photo.width && photo.height && Number(photo.height) > 0
         ? Number(photo.width) / Number(photo.height)
         : (photo.aspectRatio || null);
@@ -480,21 +568,30 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         cardAspect = cycle === 0 ? 2 / 3 : cycle === 1 ? 3 / 4 : 4 / 5;
       }
 
-      const photoWithAspect = {
-        ...photo,
-        aspectRatio: cardAspect,
-        cardAspect,
-        globalIndex: index,
-      };
+      photo.cardAspect = cardAspect;
+      photo.globalIndex = index;
 
-      const heightContribution = 1 / cardAspect;
-      const shortestIdx = colHeights[0] <= colHeights[1] ? 0 : 1;
-      cols[shortestIdx].push(photoWithAspect);
-      colHeights[shortestIdx] += heightContribution;
-    });
+      const cardHeight = 1 / cardAspect;
+      const targetCol = colHeights[0] <= colHeights[1] ? 0 : 1;
+      cols[targetCol].push(photo);
+      colHeights[targetCol] += cardHeight;
+    }
 
     return { column0: cols[0], column1: cols[1] };
   }, [activeList, renderLimit]);
+
+  // Interleaved Rows for 100% Simultaneous Left & Right Column Loading
+  const interleavedRows = React.useMemo(() => {
+    const maxLen = Math.max(column0.length, column1.length);
+    const rows = [];
+    for (let i = 0; i < maxLen; i++) {
+      rows.push({
+        left: column0[i] || null,
+        right: column1[i] || null,
+      });
+    }
+    return rows;
+  }, [column0, column1]);
 
   // Bounds measurement for smooth Lightbox opening & background page auto-scrolling
   const getBoundsForIndex = useCallback((idx: number, callback: (bounds: LightboxBounds) => void) => {
@@ -543,13 +640,32 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     const currentlyLiked = !!item.isLiked;
     const nextLiked = !currentlyLiked;
 
-    // Optimistically update allPhotos and photos state in GalleryView
+    // Optimistically update allPhotos, photos, and tabCache state in GalleryView
     setAllPhotos((prev) =>
       prev.map((p) => (p.id === photoId ? { ...p, isLiked: nextLiked } : p))
     );
     setPhotos((prev) =>
       prev.map((p) => (p.id === photoId ? { ...p, isLiked: nextLiked } : p))
     );
+    setTabCache((prev) => {
+      const updatedCache: typeof prev = {};
+      for (const key of Object.keys(prev)) {
+        updatedCache[key] = prev[key].map((p) =>
+          p.id === photoId ? { ...p, isLiked: nextLiked } : p
+        );
+      }
+      // Update 'MY FAVOURITES' tab list specifically
+      const currentFavs = updatedCache['MY FAVOURITES'] || [];
+      if (nextLiked) {
+        if (!currentFavs.some((p) => p.id === photoId)) {
+          const newItem = { ...item, isLiked: true };
+          updatedCache['MY FAVOURITES'] = [newItem, ...currentFavs];
+        }
+      } else {
+        updatedCache['MY FAVOURITES'] = currentFavs.filter((p) => p.id !== photoId);
+      }
+      return updatedCache;
+    });
 
     try {
       const headers = eventHeadersRef.current;
@@ -633,13 +749,14 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             bounces={true}
-            scrollEventThrottle={16}
+            scrollEventThrottle={32}
+            removeClippedSubviews={true}
             onScroll={(e) => {
               handleScroll(e);
               // Infinite Scroll threshold listener
               const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-              const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 800;
-              if (isNearBottom && activeTab.toUpperCase() === 'ALL') {
+              const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 2200;
+              if (isNearBottom && hasMorePhotos) {
                 loadMorePhotos();
               }
             }}
@@ -692,6 +809,9 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.tabsScrollContent}
+                  nestedScrollEnabled={true}
+                  decelerationRate="fast"
+                  overScrollMode="always"
                 >
                   {availableTabs.map((tabName, tabIdx) => {
                     const isActive = activeTab.toUpperCase() === tabName.toUpperCase();
@@ -708,22 +828,24 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
                     }
 
                     return (
-                      <Pressable
+                      <TouchableOpacity
                         key={`tab-${tabName}-${tabIdx}`}
                         onPress={() => setActiveTab(tabName)}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                         style={[styles.tabButton, isActive && styles.tabButtonActive]}
                       >
                         <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
                           {tabName} {tabCount !== null ? `(${tabCount})` : ''}
                         </Text>
-                      </Pressable>
+                      </TouchableOpacity>
                     );
                   })}
                 </ScrollView>
               </View>
 
-              {/* ── 3. 2-Column Balanced Masonry Grid ── */}
-              {isLoading ? (
+              {/* ── 3. 2-Column Balanced Masonry Grid (SIMULTANEOUS PAIR LOADING + ZERO GAPS) ── */}
+              {isLoading || isTabLoading ? (
                 <View style={styles.masonryGridContainer}>
                   <View style={styles.masonryColumn}>
                     {[0.75, 0.67, 0.8].map((aspect, i) => (
@@ -749,39 +871,45 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
               ) : (
                 <View style={styles.masonryGridContainer}>
                   <View style={styles.masonryColumn}>
-                    {column0.map((img, idx) => {
-                      const cardId = img.id ? `c0-${img.id}-${idx}` : (img.r2Url ? `c0-${img.r2Url}-${idx}` : `c0-${idx}`);
-                      const refId = img.id ? String(img.id) : (img.r2Url || `photo-${idx}`);
+                    {interleavedRows.map((row, rIdx) => {
+                      if (!row.left) return null;
+                      const img = row.left;
+                      const cardId = img.id ? `c0-${img.id}-${rIdx}` : (img.r2Url ? `c0-${img.r2Url}-${rIdx}` : `c0-${rIdx}`);
+                      const refId = img.id ? String(img.id) : (img.r2Url || `photo-${rIdx}`);
                       return (
                         <MasonryCard
                           key={cardId}
                           img={img}
-                          index={idx}
+                          index={img.globalIndex ?? rIdx * 2}
                           isColumn0={true}
                           onSelect={(bounds) => openLightbox(img, bounds)}
                           onRegisterRef={(id, ref) => {
                             if (id) cardRefs.current[id] = ref;
                             if (refId) cardRefs.current[refId] = ref;
                           }}
+                          onToggleLike={handleToggleLike}
                         />
                       );
                     })}
                   </View>
                   <View style={styles.masonryColumn}>
-                    {column1.map((img, idx) => {
-                      const cardId = img.id ? `c1-${img.id}-${idx}` : (img.r2Url ? `c1-${img.r2Url}-${idx}` : `c1-${idx}`);
-                      const refId = img.id ? String(img.id) : (img.r2Url || `photo-${idx}`);
+                    {interleavedRows.map((row, rIdx) => {
+                      if (!row.right) return null;
+                      const img = row.right;
+                      const cardId = img.id ? `c1-${img.id}-${rIdx}` : (img.r2Url ? `c1-${img.r2Url}-${rIdx}` : `c1-${rIdx}`);
+                      const refId = img.id ? String(img.id) : (img.r2Url || `photo-${rIdx}`);
                       return (
                         <MasonryCard
                           key={cardId}
                           img={img}
-                          index={idx}
+                          index={img.globalIndex ?? rIdx * 2 + 1}
                           isColumn0={false}
                           onSelect={(bounds) => openLightbox(img, bounds)}
                           onRegisterRef={(id, ref) => {
                             if (id) cardRefs.current[id] = ref;
                             if (refId) cardRefs.current[refId] = ref;
                           }}
+                          onToggleLike={handleToggleLike}
                         />
                       );
                     })}

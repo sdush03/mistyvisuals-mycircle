@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { StyleSheet, View, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 // @ts-ignore
@@ -98,9 +98,12 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
     );
   };
 
-  const thumbnailUri = typeof item === 'object' ? (item.photoUrl || item.thumbnailUrl || getMediaUri(item)) : item;
+  const thumbnailUri = typeof item === 'object' ? (item.uri || item.r2Url || item.thumbnailUrl || getMediaUri(item)) : item;
   const fullUri = getMediaUri(item);
   const displayUri = fullUri || thumbnailUri;
+  const placeholderUri = thumbnailUri && thumbnailUri !== displayUri ? thumbnailUri : undefined;
+
+  const loadStartRef = useRef<number>(0);
 
   return (
     <GestureDetector gesture={composedGesture}>
@@ -113,7 +116,16 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
               contentFit="contain"
               cachePolicy="memory-disk"
               priority="high"
+              placeholder={placeholderUri ? { uri: placeholderUri } : undefined}
+              placeholderContentFit="contain"
+              transition={150}
+              onLoadStart={() => {
+                loadStartRef.current = Date.now();
+              }}
               onLoad={(e) => {
+                const duration = Date.now() - (loadStartRef.current || Date.now());
+                const sourceTag = duration < 35 ? '💾 DISK CACHE HIT (0-35ms)' : `🌐 NETWORK DOWNLOAD (${duration}ms)`;
+                console.log(`[MYCIRCLE DEBUG 🔎 LIGHTBOX PAINTED] Full 4K Photo Rendered | Source: ${sourceTag} | Dimensions: ${e.source?.width}x${e.source?.height}px`);
                 if (e.source && e.source.width && e.source.height && e.source.height > 0) {
                   setLoadedAspect(e.source.width / e.source.height);
                 }

@@ -151,7 +151,6 @@ export default function JoinCelebrationModal({
       }
       handleClose();
     } catch (err: any) {
-      console.error(err);
       const msg = err.response?.data?.error || 'Celebration not found. Please check your code or link.';
       setErrorMessage(msg);
     } finally {
@@ -168,13 +167,26 @@ export default function JoinCelebrationModal({
     let extractedPasscode: string | null = null;
 
     try {
-      if (trimmed.includes('http://') || trimmed.includes('https://') || trimmed.includes('/celebration/') || trimmed.includes('/gallery/')) {
-        const urlObj = new URL(trimmed.startsWith('http') ? trimmed : `https://mistyvisuals.com${trimmed.startsWith('/') ? '' : '/'}${trimmed}`);
+      if (trimmed.includes('http://') || trimmed.includes('https://') || trimmed.includes('/') || trimmed.includes('.')) {
+        const cleanUrl = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
+        const urlObj = new URL(cleanUrl);
         const pathParts = urlObj.pathname.split('/').filter(Boolean);
         
-        const celIndex = pathParts.findIndex(p => p === 'celebration' || p === 'gallery' || p === 'event');
-        if (celIndex !== -1 && pathParts[celIndex + 1]) {
-          extractedSlug = pathParts[celIndex + 1];
+        // Web URL formats:
+        // Format A: https://mycircle.mistyvisuals.com/EVENT_SLUG/gallery
+        // Format B: https://mycircle.mistyvisuals.com/celebration/EVENT_SLUG
+        // Format C: https://mycircle.mistyvisuals.com/EVENT_SLUG
+        if (pathParts.length > 0) {
+          const galleryIdx = pathParts.indexOf('gallery');
+          const celIndex = pathParts.findIndex(p => p === 'celebration' || p === 'event' || p === 'mycircle');
+
+          if (galleryIdx > 0) {
+            extractedSlug = pathParts[galleryIdx - 1];
+          } else if (celIndex !== -1 && pathParts[celIndex + 1]) {
+            extractedSlug = pathParts[celIndex + 1];
+          } else {
+            extractedSlug = pathParts[0];
+          }
         }
 
         extractedPasscode = urlObj.searchParams.get('code') || urlObj.searchParams.get('passcode') || urlObj.searchParams.get('pin');
@@ -198,7 +210,7 @@ export default function JoinCelebrationModal({
           return;
         }
       } catch (err) {
-        console.warn('Invite code lookup failed, treating as slug', err);
+        // Silent fallback to direct slug match
       } finally {
         setIsSubmitting(false);
       }

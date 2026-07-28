@@ -144,11 +144,12 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
         type: 'image/jpeg',
       } as any);
 
-      const uploadUrl = eventSlug
+      const hasValidEventSlug = Boolean(eventSlug && eventSlug !== 'null' && eventSlug !== 'undefined');
+      const uploadUrl = hasValidEventSlug
         ? `/api/gallery/public/events/${eventSlug}/selfie`
         : `/api/gallery/family/profile/update`;
 
-      if (!eventSlug) {
+      if (!hasValidEventSlug) {
         formData.append('phoneNumber', profile?.phoneNumber || '');
         formData.append('name', profile?.name || '');
       }

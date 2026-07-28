@@ -23,7 +23,7 @@
             "CFBundleURLSchemes": [
               "mycircle",
               "com.mistyvisuals.mycircle",
-              "com.googleusercontent.apps.1051090030242-vhi0ec15ittd3ugik983p9gaohlr7fv4"
+              "com.googleusercontent.apps.813548862884-m06a6t1mbo7v71qipthtao91bg105lqt"
             ]
           }
         ]
@@ -31,6 +31,7 @@
     },
     "android": {
       "package": "com.mistyvisuals.mycircle",
+      "versionCode": 2,
       "googleServicesFile": "./google-services.json",
       "splash": {
         "image": "./assets/images/splash-android-icon.png",
@@ -41,10 +42,10 @@
         "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
-      "navigationBar": {
-        "backgroundColor": "#ffffff",
-        "buttonColor": "dark"
-      }
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -65,7 +66,7 @@
       [
         "@react-native-google-signin/google-signin",
         {
-          "iosUrlScheme": "com.googleusercontent.apps.1051090030242-vhi0ec15ittd3ugik983p9gaohlr7fv4"
+          "iosUrlScheme": "com.googleusercontent.apps.813548862884-m06a6t1mbo7v71qipthtao91bg105lqt"
         }
       ],
       [
@@ -81,6 +82,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0e3ae02b-253b-4061-b328-0ea03b9e7308"
+      }
     }
   }
 }

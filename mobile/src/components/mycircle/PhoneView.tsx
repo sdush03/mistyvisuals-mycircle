@@ -100,11 +100,12 @@ export default function PhoneView({ onSuccess, onCancel }: PhoneViewProps) {
       setIsSubmitting(true);
       setErrorMsg('');
 
-      const updateUrl = eventSlug
+      const hasValidEventSlug = Boolean(eventSlug && eventSlug !== 'null' && eventSlug !== 'undefined');
+      const updateUrl = hasValidEventSlug
         ? `/api/gallery/public/events/${eventSlug}/phone`
         : `/api/gallery/family/profile/update`;
 
-      const payload = eventSlug
+      const payload = hasValidEventSlug
         ? { phoneNumber: fullPhoneNumber }
         : { phoneNumber: fullPhoneNumber, name: profile?.name || '' };
 
