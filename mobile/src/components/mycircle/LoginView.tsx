@@ -51,10 +51,19 @@ interface LoginViewProps {
 }
 
 export default function LoginView({ onSuccess, startAnimation = true }: LoginViewProps) {
+  const profile = useAuthStore((state) => state.profile);
+  const token = useAuthStore((state) => state.token);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [webModal, setWebModal] = useState<{ url: string; title: string } | null>(null);
+
   // Onboarding step after auth: login → phone (if missing) → selfie (if missing) → done
-  const [step, setStep] = useState<'login' | 'phone' | 'selfie'>('login');
+  const [step, setStep] = useState<'login' | 'phone' | 'selfie'>(() => {
+    if (token && profile) {
+      if (!profile.phoneNumber) return 'phone';
+      if (!profile.hasSelfie) return 'selfie';
+    }
+    return 'login';
+  });
 
   const signInWithFacebook = () => {
     Alert.alert(

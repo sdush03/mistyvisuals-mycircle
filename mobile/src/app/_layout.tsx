@@ -14,8 +14,6 @@ import { useAuthStore } from '../store/authStore';
 import api, { API_BASE_URL } from '../services/api';
 import LoginView from '../components/mycircle/LoginView';
 import { ProfileView } from '../components/profile/ProfileView';
-import PhoneView from '../components/mycircle/PhoneView';
-import CameraViewScreen from '../components/mycircle/CameraView';
 import { tabEvents, TAB_OPEN_MOODBOARDS, TAB_OPEN_INSPIRATIONS, TAB_OPEN_PROFILE_SETTINGS } from '../lib/tabEvents';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -198,12 +196,8 @@ function RootLayoutContent() {
   }
 
   // 3. Enforce mandatory onboarding — catches users with saved sessions who haven't completed profile
-  if (!profile?.phoneNumber) {
-    return <PhoneView onSuccess={() => {}} />;
-  }
-
-  if (!profile?.hasSelfie) {
-    return <CameraViewScreen onSuccess={() => {}} />;
+  if (!profile?.phoneNumber || !profile?.hasSelfie) {
+    return <LoginView onSuccess={() => {}} startAnimation={isSplashHidden} />;
   }
 
   const isHeaderHidden = currentTab === 'mycircle' && Boolean(eventSlug);
