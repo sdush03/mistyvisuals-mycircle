@@ -40,12 +40,12 @@ def ensure_models():
         print(f"Downloading ArcFace face recognition model (w600k_r50)... This might take a minute.", file=sys.stderr)
         urllib.request.urlretrieve(ARCFACE_URL, ARCFACE_PATH)
 
-def get_yunet_detector(img_width, img_height):
+def get_yunet_detector(img_width, img_height, score_threshold=0.8):
     detector = cv2.FaceDetectorYN.create(
         model=YUNET_PATH,
         config="",
         input_size=(img_width, img_height),
-        score_threshold=0.8,
+        score_threshold=score_threshold,
         nms_threshold=0.3,
         top_k=5000
     )
@@ -419,13 +419,32 @@ def validate_selfie(image_path, aligner=None, arcface_net=None):
         return {"error": "Failed to load selfie image."}
         
     h, w, _ = img.shape
-    detector = get_yunet_detector(w, h)
+    
+    # Scale down image for face detection if it's too large (Mobile cameras shoot at 4k/12MP)
+    max_side = 1000
+    longest_side = max(h, w)
+    scale = 1.0
+    if longest_side > max_side:
+        scale = max_side / longest_side
+        target_w = int(w * scale)
+        target_h = int(h * scale)
+        detect_img = cv2.resize(img, (target_w, target_h), interpolation=cv2.INTER_AREA)
+    else:
+        detect_img = img
+        target_w, target_h = w, h
+        
+    detector = get_yunet_detector(target_w, target_h, score_threshold=0.4)
     if aligner is None:
         aligner = get_sface_alignment_helper()
     if arcface_net is None:
         arcface_net = get_arcface_net()
     
-    _, faces = detector.detect(img)
+    _, faces = detector.detect(detect_img)
+    
+    # Rescale detected face bounding boxes and landmarks back to original image dimensions
+    if faces is not None and scale != 1.0:
+        faces = faces.copy()
+        faces[:, 0:14] = faces[:, 0:14] / scale
     
     if faces is None or len(faces) == 0:
         return {"error": "No face detected in your selfie. Please ensure your face is fully visible."}
@@ -443,17 +462,17 @@ def validate_selfie(image_path, aligner=None, arcface_net=None):
     face_roi = gray_temp[max(0, y):min(h, y+fh), max(0, x):min(w, x+fw)]
     if face_roi.size > 0:
         face_brightness = np.mean(face_roi)
-        if face_brightness < 45: # 45 out of 255 is very dark
+        if face_brightness < 40: # 40 out of 255 is very dark
             return {"error": "Poor lighting or image is too dark. Please move to a brighter spot and look directly at the camera."}
     
     # 1. Check size (too far / too close)
     fw_ratio = fw / w
     fh_ratio = fh / h
     
-    if fw_ratio < 0.32 or fh_ratio < 0.32:
+    if fw_ratio < 0.08 or fh_ratio < 0.08:
         return {"error": "You are too far from the camera. Please move closer and align your face inside the stencil."}
         
-    if fw_ratio > 0.85 or fh_ratio > 0.85:
+    if fw_ratio > 0.95 or fh_ratio > 0.95:
         return {"error": "You are too close to the camera. Please move back and align your face inside the stencil."}
         
     # 2. Check alignment/centering (X and Y center offsets)
@@ -466,12 +485,12 @@ def validate_selfie(image_path, aligner=None, arcface_net=None):
     offset_x = abs(face_center_x - img_center_x) / w
     offset_y = abs(face_center_y - img_center_y) / h
     
-    if offset_x > 0.25 or offset_y > 0.25:
+    if offset_x > 0.38 or offset_y > 0.38:
         return {"error": "Your face is off-center. Please align your face in the middle of the stencil."}
         
     # 3. Check detection confidence (since brightness is checked separately, low confidence means occlusion)
     confidence = face[14] if len(face) > 14 else 1.0
-    if confidence < 0.89:
+    if confidence < 0.65:
         return {"error": "Face is partially covered or obscured. Please remove any hands, phone, hats, sunglasses, or other accessories, and ensure your face is fully visible."}
 
     aligned_face = aligner.alignCrop(img, face)
@@ -519,7 +538,7 @@ def validate_selfie(image_path, aligner=None, arcface_net=None):
     min_dist = min(dist_le, dist_re)
     max_dist = max(dist_le, dist_re)
     
-    if min_dist < 1.0 or (max_dist / max(min_dist, 0.1)) > 1.7:
+    if min_dist < 1.0 or (max_dist / max(min_dist, 0.1)) > 2.2:
         return {"error": "Side angle detected. Please look straight directly at the camera."}
         
     rm_x, rm_y = face[10], face[11] # Right mouth corner
@@ -531,13 +550,13 @@ def validate_selfie(image_path, aligner=None, arcface_net=None):
     min_mouth = min(dist_lm, dist_rm)
     max_mouth = max(dist_lm, dist_rm)
     
-    if min_mouth < 1.0 or (max_mouth / max(min_mouth, 0.1)) > 1.7:
+    if min_mouth < 1.0 or (max_mouth / max(min_mouth, 0.1)) > 2.2:
         return {"error": "Side angle detected. Please look straight directly at the camera."}
 
     # 6. Check for head tilt (roll)
     dy = abs(le_y - re_y)
     dx = abs(le_x - re_x)
-    if dx > 0 and (dy / dx) > 0.25:
+    if dx > 0 and (dy / dx) > 0.35:
         return {"error": "Head tilt detected. Please keep your head straight and level."}
 
     # 7. Check for mouth open too wide (jaw drop)
