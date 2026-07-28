@@ -355,6 +355,40 @@ class QdrantService {
       throw err;
     }
   }
+
+  async getAllEventVectors(eventId) {
+    const eid = parseInt(eventId, 10);
+    if (this.isMock) {
+      return this.mockCache
+        .filter(item => item.eventId === eid)
+        .map(item => ({ photoId: item.photoId, vector: item.vector }));
+    }
+
+    try {
+      const allPoints = [];
+      let offset = undefined;
+      do {
+        const scrollRes = await this.client.scroll(COLLECTION_NAME, {
+          filter: { must: [{ key: 'event_id', match: { value: eid } }] },
+          limit: 250,
+          offset,
+          with_vector: true,
+          with_payload: true
+        });
+        const points = scrollRes?.points || [];
+        allPoints.push(...points);
+        offset = scrollRes?.next_page_offset;
+      } while (offset);
+
+      return allPoints.map(pt => ({
+        photoId: pt.payload.photo_id,
+        vector: pt.vector
+      }));
+    } catch (err) {
+      console.error('[Qdrant] getAllEventVectors failed:', err);
+      return [];
+    }
+  }
 }
 
 module.exports = new QdrantService();
