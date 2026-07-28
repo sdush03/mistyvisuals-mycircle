@@ -207,7 +207,7 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
   return (
     <Pressable style={styles.overlay} onPress={onCancel}>
       <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-        <Text style={styles.title}>TAKE A LIVE SELFIE</Text>
+        <Text style={styles.title}>CAPTURE SELFIE</Text>
         <Text style={styles.subtitle}>
           Look directly at the camera. Live selfie required for facial recognition.
         </Text>
@@ -223,8 +223,8 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
           />
         </View>
 
-        <Pressable style={styles.captureBtn} onPress={takePicture}>
-          <View style={styles.captureInnerCircle} />
+        <Pressable style={styles.button} onPress={takePicture}>
+          <Text style={styles.buttonText}>📸 SNAP SELFIE</Text>
         </Pressable>
       </Pressable>
     </Pressable>
