@@ -1986,7 +1986,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
           email: guest.email,
           phoneNumber: user.phoneNumber,
           hasFullAccess: guest.hasFullAccess,
-          hasSelfie
+          hasSelfie,
+          selfieUrl: user.selfieUrl || guest.selfieUrl || (checkUserSelfie(user.id) ? `/api/gallery/family/selfie/${user.id}` : null)
         }
       };
     } catch (err) {
@@ -2114,7 +2115,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
           email: guest.email,
           phoneNumber: userPhone,
           hasFullAccess: guest.hasFullAccess,
-          hasSelfie
+          hasSelfie,
+          selfieUrl: user?.selfieUrl || guest?.selfieUrl || (user ? (checkUserSelfie(user.id) ? `/api/gallery/family/selfie/${user.id}` : null) : null)
         }
       };
     } catch (err) {
@@ -3023,11 +3025,12 @@ module.exports = async function galleryRoutes(fastify, opts) {
         token: familyToken,
         profile: {
           id: user.id,
-          name: guest.name,
+          name: user.name || guest.name,
           email,
-          phoneNumber: guest.phoneNumber,
+          phoneNumber: user.phoneNumber || guest.phoneNumber,
           hasSelfie,
-          selfieGuestId: user.id
+          selfieGuestId: user.id,
+          selfieUrl: user.selfieUrl || guest.selfieUrl || (checkUserSelfie(user.id) ? `/api/gallery/family/selfie/${user.id}` : null)
         }
       };
     } catch (err) {
@@ -3198,13 +3201,14 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
       return {
         events: eventsList,
-        selfieUrl: checkUserSelfie(user.id) ? `/api/gallery/family/selfie/${user.id}` : null,
+        selfieUrl: user.selfieUrl || (checkUserSelfie(user.id) ? `/api/gallery/family/selfie/${user.id}` : null),
         profile: {
           name: user.name,
           email,
           phoneNumber: user.phoneNumber,
-          hasSelfie: checkUserSelfie(user.id),
-          selfieGuestId: user.id
+          hasSelfie: !!(user.selfieVector || user.selfieUrl || checkUserSelfie(user.id)),
+          selfieGuestId: user.id,
+          selfieUrl: user.selfieUrl || (checkUserSelfie(user.id) ? `/api/gallery/family/selfie/${user.id}` : null)
         }
       };
     } catch (err) {
@@ -3284,6 +3288,32 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
           fs.writeFileSync(selfiePath, selfieBuffer);
           fs.writeFileSync(vectorPath, JSON.stringify(res.vector), 'utf8');
+
+          // Upload selfie image to R2 under universal users/selfies path
+          let selfieUrl = null;
+          try {
+            selfieUrl = await uploadAsset(selfieBuffer, `user_${user.id}.jpg`, `users/selfies`, 'image/jpeg');
+          } catch (r2Err) {
+            log.warn('R2 profile selfie upload fallback:', r2Err.message);
+          }
+
+          // Persist vector & selfieUrl directly to CircleUser in PostgreSQL
+          await prisma.circleUser.update({
+            where: { id: user.id },
+            data: {
+              selfieVector: res.vector,
+              ...(selfieUrl ? { selfieUrl } : {})
+            }
+          }).catch(err => log.warn('CircleUser selfieVector save failed:', err.message));
+
+          // Sync vector & selfieUrl to all linked Guest records in PostgreSQL
+          await prisma.guest.updateMany({
+            where: { email },
+            data: {
+              selfieVector: res.vector,
+              ...(selfieUrl ? { selfieUrl } : {})
+            }
+          }).catch(err => log.warn('Guest selfieVector sync failed:', err.message));
 
           // Cache vectors in memory for matching
           const guestProfiles = await prisma.guest.findMany({
@@ -3507,6 +3537,12 @@ module.exports = async function galleryRoutes(fastify, opts) {
         const user = await prisma.circleUser.findUnique({ where: { id: guestId } });
         if (user) resolvedUserId = user.id;
       }
+    }
+
+    // 1. Check if selfieUrl is stored in PostgreSQL (e.g. Cloudflare R2) and redirect directly
+    const targetUser = await prisma.circleUser.findUnique({ where: { id: resolvedUserId }, select: { selfieUrl: true } });
+    if (targetUser && targetUser.selfieUrl && targetUser.selfieUrl.startsWith('http')) {
+      return reply.redirect(targetUser.selfieUrl);
     }
 
     let selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${resolvedUserId}.jpg`);

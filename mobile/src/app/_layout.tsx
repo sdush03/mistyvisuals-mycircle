@@ -150,10 +150,9 @@ function RootLayoutContent() {
         const profileData = res.data?.profile || {};
 
         if (rawSelfieUrl) {
-          const fullUrl = `${API_BASE_URL}${rawSelfieUrl}`;
-          const imgRes = await fetch(fullUrl, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          const fullUrl = rawSelfieUrl.startsWith('http') ? rawSelfieUrl : `${API_BASE_URL}${rawSelfieUrl}`;
+          const headers: Record<string, string> = rawSelfieUrl.startsWith('http') ? {} : { Authorization: `Bearer ${token}` };
+          const imgRes = await fetch(fullUrl, { headers });
           if (imgRes.ok) {
             const arrayBuffer = await imgRes.arrayBuffer();
             const bytes = new Uint8Array(arrayBuffer);

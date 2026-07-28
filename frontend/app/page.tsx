@@ -337,10 +337,14 @@ export default function CirclePage() {
       const data = await res.json()
       setEvents(data.events || [])
       if (data.selfieUrl) {
-        // Extract guestId from selfie URL path like /api/gallery/family/selfie/123
-        const selfieGuestIdMatch = data.selfieUrl.match(/selfie\/(\d+)/)
-        if (selfieGuestIdMatch) {
-          fetchAuthenticatedSelfie(parseInt(selfieGuestIdMatch[1]), authToken)
+        if (data.selfieUrl.startsWith('http')) {
+          setSelfieUrl(data.selfieUrl)
+        } else {
+          // Extract guestId from selfie URL path like /api/gallery/family/selfie/123
+          const selfieGuestIdMatch = data.selfieUrl.match(/selfie\/(\d+)/)
+          if (selfieGuestIdMatch) {
+            fetchAuthenticatedSelfie(parseInt(selfieGuestIdMatch[1]), authToken)
+          }
         }
       }
       if (data.profile) {

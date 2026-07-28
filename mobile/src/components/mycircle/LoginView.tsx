@@ -219,7 +219,7 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
         userEvents = eventsRes.data?.events || [];
         if (eventsRes.data?.profile || eventsRes.data?.selfieUrl) {
           const selfieUrl = eventsRes.data.selfieUrl
-            ? `https://mycircle.mistyvisuals.com${eventsRes.data.selfieUrl}`
+            ? (eventsRes.data.selfieUrl.startsWith('http') ? eventsRes.data.selfieUrl : `https://mycircle.mistyvisuals.com${eventsRes.data.selfieUrl}`)
             : null;
           profile.selfieUrl = selfieUrl;
         }
