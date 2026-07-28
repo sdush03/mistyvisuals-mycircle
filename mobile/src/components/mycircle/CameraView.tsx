@@ -20,40 +20,43 @@ export default function CameraViewScreen({ onSuccess }: CameraViewProps) {
   const updateProfile = useAuthStore((state) => state.updateProfile);
 
   if (!permission) {
-    // Camera permissions are still loading
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#ffffff" />
+      <View style={styles.overlay}>
+        <View style={styles.modalCard}>
+          <ActivityIndicator size="large" color="#ffffff" />
+        </View>
       </View>
     );
   }
 
   if (!permission.granted) {
-    // Permanently denied — must go to device Settings to re-enable
     if (!permission.canAskAgain) {
       return (
-        <View style={styles.container}>
-          <Text style={styles.title}>Camera Access Blocked</Text>
-          <Text style={styles.subtitle}>
-            Camera permission was denied. To take your selfie, please enable camera access for this app in your device Settings.
-          </Text>
-          <Pressable style={styles.button} onPress={() => Linking.openSettings()}>
-            <Text style={styles.buttonText}>Open Settings</Text>
-          </Pressable>
+        <View style={styles.overlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.title}>Camera Access Blocked</Text>
+            <Text style={styles.subtitle}>
+              Camera permission was denied. To take your selfie, please enable camera access for this app in your device Settings.
+            </Text>
+            <Pressable style={styles.button} onPress={() => Linking.openSettings()}>
+              <Text style={styles.buttonText}>Open Settings</Text>
+            </Pressable>
+          </View>
         </View>
       );
     }
 
-    // Not yet granted — can still ask
     return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Camera Access Required</Text>
-        <Text style={styles.subtitle}>
-          We need access to your camera to take a live selfie for facial recognition photo matching.
-        </Text>
-        <Pressable style={styles.button} onPress={requestPermission}>
-          <Text style={styles.buttonText}>Grant Permission</Text>
-        </Pressable>
+      <View style={styles.overlay}>
+        <View style={styles.modalCard}>
+          <Text style={styles.title}>Camera Access Required</Text>
+          <Text style={styles.subtitle}>
+            We need access to your camera to take a live selfie for facial recognition photo matching.
+          </Text>
+          <Pressable style={styles.button} onPress={requestPermission}>
+            <Text style={styles.buttonText}>Grant Permission</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -105,14 +108,13 @@ export default function CameraViewScreen({ onSuccess }: CameraViewProps) {
         },
       });
 
-      // Update local profile state
       await updateProfile({ hasSelfie: true });
       onSuccess();
     } catch (err: any) {
       console.error(err);
       const msg = err.response?.data?.error || 'Selfie verification failed. Please try taking another photo.';
       Alert.alert('Verification Failed', msg);
-      setCapturedPhoto(null); // Reset to capture again
+      setCapturedPhoto(null);
     } finally {
       setIsUploading(false);
     }
@@ -120,171 +122,187 @@ export default function CameraViewScreen({ onSuccess }: CameraViewProps) {
 
   if (capturedPhoto) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Confirm Your Selfie</Text>
-        <Text style={styles.subtitle}>
-          Ensure your face is clearly visible, well-lit, and centered in the frame.
-        </Text>
+      <View style={styles.overlay}>
+        <View style={styles.modalCard}>
+          <Text style={styles.title}>Confirm Your Selfie</Text>
+          <Text style={styles.subtitle}>
+            Ensure your face is clearly visible, well-lit, and centered in the frame.
+          </Text>
 
-        <Image source={{ uri: capturedPhoto }} style={styles.previewImage} />
+          <Image source={{ uri: capturedPhoto }} style={styles.previewImage} />
 
-        {isUploading ? (
-          <ActivityIndicator size="large" color="#000000" style={styles.loader} />
-        ) : (
-          <View style={styles.previewBtnContainer}>
-            <Pressable style={styles.retakeBtn} onPress={() => setCapturedPhoto(null)}>
-              <Text style={styles.retakeBtnText}>Retake</Text>
-            </Pressable>
+          {isUploading ? (
+            <ActivityIndicator size="large" color="#ffffff" style={styles.loader} />
+          ) : (
+            <View style={styles.previewBtnContainer}>
+              <Pressable style={styles.retakeBtn} onPress={() => setCapturedPhoto(null)}>
+                <Text style={styles.retakeBtnText}>Retake</Text>
+              </Pressable>
 
-            <Pressable style={styles.confirmBtn} onPress={uploadSelfie}>
-              <Text style={styles.confirmBtnText}>Use Photo</Text>
-            </Pressable>
-          </View>
-        )}
+              <Pressable style={styles.confirmBtn} onPress={uploadSelfie}>
+                <Text style={styles.confirmBtnText}>Use Photo</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Take a Live Selfie</Text>
-      <Text style={styles.subtitle}>
-        Look directly at the camera. Uploading from the gallery is disabled to ensure a live verification.
-      </Text>
+    <View style={styles.overlay}>
+      <View style={styles.modalCard}>
+        <Text style={styles.title}>Take a Live Selfie</Text>
+        <Text style={styles.subtitle}>
+          Look directly at the camera. Live selfie required for facial recognition.
+        </Text>
 
-      <View style={styles.cameraContainer}>
-        <CameraView
-          ref={cameraRef}
-          style={styles.camera}
-          facing="front"
-          animateShutter={false}
-        />
+        <View style={styles.cameraContainer}>
+          <CameraView
+            ref={cameraRef}
+            style={styles.camera}
+            facing="front"
+            animateShutter={false}
+          />
+        </View>
+
+        <Pressable style={styles.captureBtn} onPress={takePicture}>
+          <View style={styles.captureInnerCircle} />
+        </Pressable>
       </View>
-
-      <Pressable style={styles.captureBtn} onPress={takePicture}>
-        <View style={styles.captureInnerCircle} />
-      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 30,
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#18181b',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
   },
   title: {
     fontSize: 20,
-    color: '#000000',
-    fontWeight: 'bold',
-    marginBottom: 10,
+    color: '#ffffff',
+    fontWeight: '700',
+    marginBottom: 8,
     textAlign: 'center',
+    letterSpacing: 0.3,
   },
   subtitle: {
     fontSize: 13,
-    color: '#4b5563',
+    color: 'rgba(255, 255, 255, 0.65)',
     textAlign: 'center',
     lineHeight: 18,
-    marginBottom: 25,
-    paddingHorizontal: 10,
+    marginBottom: 20,
+    paddingHorizontal: 5,
   },
   button: {
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    backgroundColor: '#000000',
-    borderRadius: 5,
-    marginTop: 15,
+    width: '100%',
+    height: 48,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
   },
   buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
+    color: '#000000',
+    fontSize: 15,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   cameraContainer: {
-    width: 280,
-    height: 280,
-    borderRadius: 140,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
     overflow: 'hidden',
     borderWidth: 3,
-    borderColor: '#000000',
-    marginBottom: 40,
+    borderColor: '#ffffff',
+    marginBottom: 24,
     backgroundColor: '#000000',
   },
   camera: {
     flex: 1,
   },
   captureBtn: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    borderWidth: 4,
-    borderColor: '#000000',
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    borderWidth: 3,
+    borderColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
   captureInnerCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#000000',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#ffffff',
   },
   previewImage: {
-    width: 280,
-    height: 280,
-    borderRadius: 140,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
     borderWidth: 3,
-    borderColor: '#000000',
-    marginBottom: 40,
+    borderColor: '#ffffff',
+    marginBottom: 24,
   },
   previewBtnContainer: {
     flexDirection: 'row',
-    gap: 20,
+    gap: 12,
     width: '100%',
-    justifyContent: 'center',
   },
   retakeBtn: {
     flex: 1,
-    maxWidth: 130,
-    padding: 15,
+    height: 46,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#cccccc',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
   retakeBtnText: {
-    color: '#000000',
-    fontSize: 15,
+    color: '#ffffff',
+    fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   confirmBtn: {
     flex: 1,
-    maxWidth: 130,
-    padding: 15,
-    backgroundColor: '#000000',
+    height: 46,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
     alignItems: 'center',
   },
   confirmBtnText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
+    color: '#000000',
+    fontSize: 14,
+    fontWeight: '700',
     textTransform: 'uppercase',
-  },
-  skipBtn: {
-    marginTop: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-  },
-  skipBtnText: {
-    fontFamily: FONT_JOST_SEMIBOLD,
-    fontSize: 13,
-    color: '#8c867e',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
   loader: {
-    marginTop: 20,
+    marginVertical: 20,
   },
 });

@@ -48,92 +48,113 @@ export default function PhoneView({ onSuccess }: PhoneViewProps) {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Enter Your Phone Number</Text>
-      <Text style={styles.subtitle}>
-        We will use this to notify you if additional photos of you are uploaded to the gallery.
-      </Text>
+    <View style={styles.overlay}>
+      <View style={styles.modalCard}>
+        <Text style={styles.title}>Enter Your Phone Number</Text>
+        <Text style={styles.subtitle}>
+          We will use this to notify you if additional photos of you are uploaded to the gallery.
+        </Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="10-digit mobile number"
-        placeholderTextColor="rgba(0, 0, 0, 0.4)"
-        keyboardType="phone-pad"
-        maxLength={10}
-        value={phoneNumber}
-        onChangeText={setPhoneNumber}
-        editable={!isSubmitting}
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="10-digit mobile number"
+          placeholderTextColor="rgba(255, 255, 255, 0.4)"
+          keyboardType="phone-pad"
+          maxLength={10}
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
+          editable={!isSubmitting}
+        />
 
-      <Pressable
-        style={({ pressed }) => [
-          styles.button,
-          pressed && styles.buttonPressed,
-          isSubmitting && styles.buttonDisabled,
-        ]}
-        onPress={handleSubmit}
-        disabled={isSubmitting}
-      >
-        {isSubmitting ? (
-          <ActivityIndicator color="#ffffff" />
-        ) : (
-          <Text style={styles.buttonText}>Continue</Text>
-        )}
-      </Pressable>
+        <Pressable
+          style={({ pressed }) => [
+            styles.button,
+            pressed && styles.buttonPressed,
+            isSubmitting && styles.buttonDisabled,
+          ]}
+          onPress={handleSubmit}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color="#000000" />
+          ) : (
+            <Text style={styles.buttonText}>Continue</Text>
+          )}
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
-    padding: 30,
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#18181b',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
   },
   title: {
     fontSize: 20,
-    color: '#000000',
-    fontWeight: 'bold',
+    color: '#ffffff',
+    fontWeight: '700',
     marginBottom: 10,
     textAlign: 'center',
+    letterSpacing: 0.3,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#4b5563',
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.65)',
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 35,
+    lineHeight: 19,
+    marginBottom: 28,
   },
   input: {
     width: '100%',
-    padding: 15,
-    backgroundColor: '#f3f4f6',
+    height: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.07)',
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    color: '#000000',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    color: '#ffffff',
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 20,
-    letterSpacing: 1,
+    letterSpacing: 1.5,
   },
   button: {
     width: '100%',
-    padding: 15,
-    backgroundColor: '#000000',
+    height: 48,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
   buttonPressed: {
-    opacity: 0.8,
+    opacity: 0.85,
   },
   buttonDisabled: {
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
   buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
+    color: '#000000',
+    fontSize: 15,
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
