@@ -1,6 +1,7 @@
 const { prisma } = require('../prisma');
 const { verifyGuestAuth } = require('../utils/galleryAuth');
 const qdrant = require('../utils/qdrant');
+const faceRecManager = require('../utils/faceRecManager');
 const path = require('path');
 const fs = require('fs');
 
@@ -93,24 +94,54 @@ module.exports = async function analyticsRoutes(fastify, opts) {
       // Recalculate live matchCount from Qdrant for guests with saved selfie vectors
       const updatedGuests = await Promise.all(guests.map(async (g) => {
         let liveMatchCount = g.matchCount;
+        let vector = null;
         const userId = g.circleUser?.id;
-        if (userId) {
-          const vectorPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.json`);
-          if (fs.existsSync(vectorPath)) {
+
+        // 1. Check user_${userId}.json
+        let vecPath = userId ? path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.json`) : null;
+        if (vecPath && fs.existsSync(vecPath)) {
+          try { vector = JSON.parse(fs.readFileSync(vecPath, 'utf8')); } catch (e) {}
+        }
+
+        // 2. Check guest_${g.id}.json
+        if (!vector) {
+          const guestVecPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${g.id}.json`);
+          if (fs.existsSync(guestVecPath)) {
+            try { vector = JSON.parse(fs.readFileSync(guestVecPath, 'utf8')); } catch (e) {}
+          }
+        }
+
+        // 3. Fallback: extract vector from jpg if json was missing
+        if (!vector) {
+          let imgPath = userId ? path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.jpg`) : null;
+          if (!imgPath || !fs.existsSync(imgPath)) {
+            imgPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${g.id}.jpg`);
+          }
+          if (fs.existsSync(imgPath)) {
             try {
-              const vector = JSON.parse(fs.readFileSync(vectorPath, 'utf8'));
-              const matches = await qdrant.searchVectors(eventId, vector, 100000, 0.35);
-              liveMatchCount = new Set(matches.map(m => m.photo_id)).size;
-              // Persist updated matchCount to database asynchronously
-              if (liveMatchCount !== g.matchCount) {
-                prisma.guest.update({
-                  where: { id: g.id },
-                  data: { matchCount: liveMatchCount }
-                }).catch(() => {});
+              const res = await faceRecManager.validateSelfie(imgPath);
+              if (res && res.success && res.vector) {
+                vector = res.vector;
+                const savePath = vecPath || path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${g.id}.json`);
+                fs.writeFileSync(savePath, JSON.stringify(vector), 'utf8');
               }
-            } catch (e) {
-              req.log.warn(`Failed live vector count for guest ${g.id}: ${e.message}`);
+            } catch (e) {}
+          }
+        }
+
+        if (vector) {
+          try {
+            const matches = await qdrant.searchVectors(eventId, vector, 100000, 0.35);
+            liveMatchCount = new Set(matches.map(m => m.photo_id)).size;
+            // Persist updated matchCount to database asynchronously
+            if (liveMatchCount !== g.matchCount) {
+              prisma.guest.update({
+                where: { id: g.id },
+                data: { matchCount: liveMatchCount }
+              }).catch(() => {});
             }
+          } catch (e) {
+            req.log.warn(`Failed live vector count for guest ${g.id}: ${e.message}`);
           }
         }
 
