@@ -357,10 +357,15 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
       />
 
       {/* ── Netflix-style multi-stop cinematic gradient ── */}
-      <Animated.View style={[styles.topGradient, { opacity: gradientOpacity }]}>
+      <Animated.View style={[
+        step !== 'login' ? styles.fullGradientTop : styles.topGradient, 
+        { opacity: gradientOpacity }
+      ]}>
         <LinearGradient
-          colors={['rgba(0,0,0,0.55)', 'transparent']}
-          locations={[0, 1]}
+          colors={step !== 'login' 
+            ? ['#000000', 'rgba(0,0,0,0.92)', 'rgba(0,0,0,0.60)', 'transparent'] 
+            : ['rgba(0,0,0,0.55)', 'transparent']}
+          locations={step !== 'login' ? [0, 0.3, 0.65, 1] : [0, 1]}
           style={StyleSheet.absoluteFill}
         />
       </Animated.View>
@@ -567,6 +572,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: SCREEN.height * 0.35,
+  },
+  fullGradientTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: SCREEN.height * 0.65,
   },
   bottomGradient: {
     position: 'absolute',
