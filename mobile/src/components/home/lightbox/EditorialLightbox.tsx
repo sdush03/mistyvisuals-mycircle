@@ -52,6 +52,8 @@ export interface EditorialLightboxProps {
   onGetBoundsForIndex?: (index: number, callback: (bounds: LightboxBounds) => void) => void;
   onClose: () => void;
   onUnsave?: (item: any) => void;
+  onToggleLike?: (item: any) => Promise<boolean | void>;
+  likeTargetName?: string;
   title?: string;
   subtitle?: string;
 }
@@ -64,6 +66,8 @@ export function EditorialLightbox({
   onGetBoundsForIndex,
   onClose,
   onUnsave,
+  onToggleLike,
+  likeTargetName,
   title = 'MISTY VISUALS',
   subtitle,
 }: EditorialLightboxProps) {
@@ -264,10 +268,30 @@ export function EditorialLightbox({
         ''
     : '';
 
-  const isSaved = savedUrls.has(currentUrl);
+  const isSaved = onToggleLike ? !!currentItem?.isLiked : savedUrls.has(currentUrl);
 
   const handleToggleSave = async () => {
     if (!currentUrl) return;
+
+    if (onToggleLike && currentItem) {
+      const wasLiked = !!currentItem.isLiked;
+      const targetLabel = likeTargetName || 'My Favourites';
+      if (wasLiked) {
+        try {
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        } catch {}
+        showToast(`Removed from ${targetLabel}`);
+      } else {
+        try {
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        } catch {}
+        triggerHeartPop();
+        showToast(`Saved to ${targetLabel} ✨`);
+      }
+      await onToggleLike(currentItem);
+      return;
+    }
+
     if (isSaved) {
       try {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -484,7 +508,14 @@ export function EditorialLightbox({
                   }
                   resetAutoHideTimer();
                 }}
-                keyExtractor={(item, index) => item.id || `lightbox-${index}`}
+                extraData={activeIdx}
+                keyExtractor={(item, index) =>
+                  typeof item === 'object' && item?.id
+                    ? `lb-${item.id}`
+                    : typeof item === 'object' && (item?.r2Url || item?.url || item?.photoUrl)
+                    ? `lb-${item.r2Url || item.url || item.photoUrl}`
+                    : `lb-${index}`
+                }
                 ItemSeparatorComponent={() => <View style={{ width: 18, backgroundColor: '#000000' }} />}
                 renderItem={renderItem}
               />

@@ -49,6 +49,7 @@ export default function JoinCelebrationModal({
   onSuccess,
 }: JoinCelebrationModalProps) {
   const [eventInput, setEventInput] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
@@ -63,6 +64,7 @@ export default function JoinCelebrationModal({
 
   useEffect(() => {
     if (visible) {
+      setErrorMessage(null);
       setModalVisible(true);
       backdropOpacity.value = withTiming(1, { duration: 250 });
       sheetTranslateY.value = withTiming(0, {
@@ -136,6 +138,7 @@ export default function JoinCelebrationModal({
 
   const handleJoin = async (slug: string, passcode: string | null) => {
     try {
+      setErrorMessage(null);
       setIsSubmitting(true);
       const res = await api.get(`/api/gallery/public/events/${slug}`);
       const eventData = res.data;
@@ -149,8 +152,8 @@ export default function JoinCelebrationModal({
       handleClose();
     } catch (err: any) {
       console.error(err);
-      const msg = err.response?.data?.error || 'Celebration not found. Please check the code or link.';
-      Alert.alert('Celebration Not Found', msg);
+      const msg = err.response?.data?.error || 'Celebration not found. Please check your code or link.';
+      setErrorMessage(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -300,15 +303,24 @@ export default function JoinCelebrationModal({
               </Text>
 
               <TextInput
-                style={styles.textInput}
+                style={[styles.textInput, errorMessage ? styles.textInputError : null]}
                 placeholder="Enter event code or paste link"
                 placeholderTextColor="#9ca3af"
                 autoCapitalize="none"
                 autoCorrect={false}
                 value={eventInput}
-                onChangeText={setEventInput}
+                onChangeText={(val) => {
+                  setEventInput(val);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 editable={!isSubmitting}
               />
+
+              {errorMessage ? (
+                <View style={styles.errorContainer}>
+                  <Text style={styles.errorText}>⚠️ {errorMessage}</Text>
+                </View>
+              ) : null}
 
               <View style={styles.buttonRow}>
                 <Pressable
@@ -338,30 +350,6 @@ export default function JoinCelebrationModal({
                   )}
                 </Pressable>
               </View>
-
-              {/* Recent Events */}
-              {recentEvents.length > 0 && (
-                <View style={styles.recentContainer}>
-                  <Text style={styles.recentHeader}>RECENT CELEBRATIONS</Text>
-                  {recentEvents.map((item) => (
-                    <Pressable
-                      key={item.slug}
-                      style={({ pressed }) => [
-                        styles.recentItem,
-                        pressed && styles.recentItemPressed,
-                      ]}
-                      onPress={() => handleJoin(item.slug, null)}
-                      disabled={isSubmitting}
-                    >
-                      <View>
-                        <Text style={styles.recentItemTitle}>{item.title}</Text>
-                        <Text style={styles.recentItemSlug}>{item.slug}</Text>
-                      </View>
-                      <Text style={styles.recentItemArrow}>→</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
             </ScrollView>
           )}
           </Animated.View>
@@ -584,5 +572,24 @@ const styles = StyleSheet.create({
     fontFamily: FONT_JOST_MEDIUM,
     fontSize: 14,
     color: '#a07850',
+  },
+  textInputError: {
+    borderColor: '#e53e3e',
+    backgroundColor: '#fff5f5',
+  },
+  errorContainer: {
+    backgroundColor: '#fff5f5',
+    borderWidth: 1,
+    borderColor: '#fed7d7',
+    borderRadius: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 14,
+  },
+  errorText: {
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 12,
+    color: '#c53030',
+    lineHeight: 16,
   },
 });

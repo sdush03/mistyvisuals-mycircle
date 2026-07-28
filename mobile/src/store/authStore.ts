@@ -95,6 +95,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       await SecureStore.deleteItemAsync(TOKEN_KEY);
       await SecureStore.deleteItemAsync(PROFILE_KEY);
+      // Sign out of Google so the account picker is shown on next sign-in
+      try {
+        const { GoogleSignin } = require('@react-native-google-signin/google-signin');
+        await GoogleSignin.signOut();
+      } catch (_) {
+        // Native module may not be available in all environments (e.g. Expo Go)
+      }
       set({ token: null, profile: null, isLoading: false, eventSlug: null, passcode: null });
     } catch (e) {
       console.error('Error deleting auth state', e);

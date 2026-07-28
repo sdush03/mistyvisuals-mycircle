@@ -171,65 +171,86 @@ export default function JoinEventView({ onSuccess }: JoinEventViewProps) {
           onScroll={handleScroll}
           scrollEventThrottle={16}
         >
-          <View style={styles.gridRow}>
-            {/* Render joined gallery cards */}
-            {events.map((ev) => {
-              const coverUrl = ev.coverPhotoMobileUrl || ev.coverPhotoUrl || ev.coverPhotoSquareUrl || null;
-              const statusMsg = getMyCircleStatusCopy(ev);
-              const locationText = (ev.location || 'MISTY VISUALS').toUpperCase();
-
-              return (
-                <Pressable
-                  key={ev.id || ev.slug}
-                  style={({ pressed }) => [
-                    styles.galleryCard,
-                    pressed && styles.cardPressed,
-                  ]}
-                  onPress={() => handleSelectEvent(ev)}
-                >
-                  {coverUrl ? (
-                    <Image source={{ uri: coverUrl }} style={styles.cardCoverImage} contentFit="cover" />
-                  ) : (
-                    <View style={styles.cardFallbackImage}>
-                      <Text style={{ fontSize: 28, color: '#a07850' }}>✨</Text>
-                    </View>
-                  )}
-
-                  {/* Dark linear gradient overlay matching Featured Stories */}
-                  <LinearGradient
-                    colors={['transparent', 'rgba(18, 16, 14, 0.25)', 'rgba(18, 16, 14, 0.9)']}
-                    locations={[0, 0.45, 1]}
-                    style={styles.cardOverlay}
-                  />
-
-                  {/* Content overlay at bottom */}
-                  <View style={styles.cardContent}>
-                    <Text style={styles.cardTag} numberOfLines={1}>{locationText}</Text>
-                    <Text style={styles.cardTitle} numberOfLines={1}>{ev.title}</Text>
-                    <View style={styles.cardBottomRow}>
-                      <Text style={styles.cardStatus} numberOfLines={1}>{statusMsg}</Text>
-                      <Text style={styles.cardCta}>View →</Text>
-                    </View>
-                  </View>
-                </Pressable>
-              );
-            })}
-
-            {/* ── Join Celebration / Join Circle Card at the end of 2-column grid ── */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.joinCard,
-                pressed && styles.cardPressed,
-              ]}
-              onPress={() => setIsJoinModalOpen(true)}
-            >
-              <View style={styles.joinIconCircle}>
-                <Text style={styles.joinIconPlus}>+</Text>
+          {events.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconCircle}>
+                <Text style={styles.emptyIcon}>✨</Text>
               </View>
-              <Text style={styles.joinCardTitle}>Join Circle</Text>
-              <Text style={styles.joinCardSubtext}>Scan QR or enter code</Text>
-            </Pressable>
-          </View>
+              <Text style={styles.emptyTitle}>You are not part of any celebration yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Scan your event QR code, enter an invite code, or open an invitation link to explore private memories.
+              </Text>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.emptyPrimaryBtn,
+                  pressed && styles.cardPressed,
+                ]}
+                onPress={() => setIsJoinModalOpen(true)}
+              >
+                <Text style={styles.emptyPrimaryBtnText}>+ Join Celebration</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.gridRow}>
+              {/* Render joined gallery cards */}
+              {events.map((ev) => {
+                const coverUrl = ev.coverPhotoMobileUrl || ev.coverPhotoUrl || ev.coverPhotoSquareUrl || null;
+                const statusMsg = getMyCircleStatusCopy(ev);
+                const locationText = (ev.location || 'MISTY VISUALS').toUpperCase();
+
+                return (
+                  <Pressable
+                    key={ev.id || ev.slug}
+                    style={({ pressed }) => [
+                      styles.galleryCard,
+                      pressed && styles.cardPressed,
+                    ]}
+                    onPress={() => handleSelectEvent(ev)}
+                  >
+                    {coverUrl ? (
+                      <Image source={{ uri: coverUrl }} style={styles.cardCoverImage} contentFit="cover" />
+                    ) : (
+                      <View style={styles.cardFallbackImage}>
+                        <Text style={{ fontSize: 28, color: '#a07850' }}>✨</Text>
+                      </View>
+                    )}
+
+                    {/* Dark linear gradient overlay matching Featured Stories */}
+                    <LinearGradient
+                      colors={['transparent', 'rgba(18, 16, 14, 0.25)', 'rgba(18, 16, 14, 0.9)']}
+                      locations={[0, 0.45, 1]}
+                      style={styles.cardOverlay}
+                    />
+
+                    {/* Content overlay at bottom */}
+                    <View style={styles.cardContent}>
+                      <Text style={styles.cardTag} numberOfLines={1}>{locationText}</Text>
+                      <Text style={styles.cardTitle} numberOfLines={1}>{ev.title}</Text>
+                      <View style={styles.cardBottomRow}>
+                        <Text style={styles.cardStatus} numberOfLines={1}>{statusMsg}</Text>
+                        <Text style={styles.cardCta}>View →</Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
+
+              {/* ── Join Celebration / Join Circle Card at the end of 2-column grid ── */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.joinCard,
+                  pressed && styles.cardPressed,
+                ]}
+                onPress={() => setIsJoinModalOpen(true)}
+              >
+                <View style={styles.joinIconCircle}>
+                  <Text style={styles.joinIconPlus}>+</Text>
+                </View>
+                <Text style={styles.joinCardTitle}>Join Circle</Text>
+                <Text style={styles.joinCardSubtext}>Scan QR or enter code</Text>
+              </Pressable>
+            </View>
+          )}
         </ScrollView>
       )}
 
@@ -418,5 +439,55 @@ const styles = StyleSheet.create({
     color: '#8c867e',
     textAlign: 'center',
     lineHeight: 14,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 48,
+    marginTop: 20,
+  },
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#fbfaf8',
+    borderWidth: 1,
+    borderColor: '#e5e0d8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  emptyIcon: {
+    fontSize: 26,
+  },
+  emptyTitle: {
+    fontFamily: FONT_MONTSERRAT_REGULAR,
+    fontSize: 20,
+    color: '#1c1a18',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  emptySubtitle: {
+    fontFamily: FONT_JOST_REGULAR,
+    fontSize: 13,
+    color: '#60646c',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 28,
+    maxWidth: 320,
+  },
+  emptyPrimaryBtn: {
+    backgroundColor: '#1c1a18',
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 24,
+    alignItems: 'center',
+  },
+  emptyPrimaryBtnText: {
+    fontFamily: FONT_JOST_SEMIBOLD,
+    fontSize: 12,
+    letterSpacing: 1,
+    color: '#ffffff',
   },
 });

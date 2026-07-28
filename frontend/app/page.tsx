@@ -365,6 +365,9 @@ export default function CirclePage() {
   }
 
   const handleLogout = () => {
+    if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
+      (window as any).google.accounts.id.disableAutoSelect()
+    }
     localStorage.removeItem('mv_circle_token')
     localStorage.removeItem('mv_circle_profile')
     // Clear all per-slug gallery sessions

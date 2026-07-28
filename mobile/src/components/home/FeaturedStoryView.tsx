@@ -584,7 +584,10 @@ export default function FeaturedStoryView({ isOpen, onClose, story }: FeaturedSt
         initialIndex={activeImageIndex}
         initialBounds={lightboxBounds}
         onGetBoundsForIndex={getBoundsForIndex}
-        onClose={() => setActiveImageIndex(null)}
+        onClose={() => {
+          setActiveImageIndex(null);
+          setLightboxBounds(null);
+        }}
         title={story?.title || 'MISTY VISUALS'}
       />
     )}

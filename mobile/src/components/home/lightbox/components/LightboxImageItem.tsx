@@ -113,7 +113,6 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
               contentFit="contain"
               cachePolicy="memory-disk"
               priority="high"
-              transition={150}
               onLoad={(e) => {
                 if (e.source && e.source.width && e.source.height && e.source.height > 0) {
                   setLoadedAspect(e.source.width / e.source.height);

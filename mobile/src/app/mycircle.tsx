@@ -77,10 +77,6 @@ export default function MyCircleScreen() {
         const errorMsg = err?.response?.data?.error || '';
 
         if (status === 404) {
-          Alert.alert(
-            'Celebration Not Found',
-            'This celebration is no longer available or the link is invalid.'
-          );
           setEventDetails(null, null);
           setEventRequiresPasscode(null);
           return;
@@ -103,10 +99,6 @@ export default function MyCircleScreen() {
         console.error('Failed to validate event requirements', err);
         const status = err?.response?.status;
         if (status === 404) {
-          Alert.alert(
-            'Celebration Not Found',
-            'This celebration is no longer available or the link is invalid.'
-          );
           setEventDetails(null, null);
           setEventRequiresPasscode(null);
         } else {
@@ -133,21 +125,26 @@ export default function MyCircleScreen() {
 
       if (slug) {
         // Strip trailing subpaths if any
-        const parts = slug.split('/');
-        slug = parts[0];
+        const parts = slug.split('/').filter(Boolean);
+        slug = parts[0] || null;
       } else if (parsed.hostname && parsed.hostname !== 'mycircle.mistyvisuals.com') {
-        // Fallback for custom scheme where slug is hostname (ignore IP addresses & dev hosts)
-        const isIpOrDev = /^(?:\d{1,3}\.){3}\d{1,3}$/.test(parsed.hostname) || parsed.hostname === 'localhost' || parsed.hostname === 'exp';
-        if (!isIpOrDev) {
-          slug = parsed.hostname;
-        } else {
-          slug = null;
-        }
+        slug = parsed.hostname;
       }
 
+      // Filter out internal Expo dev client / localhost / system routes
       if (slug) {
-        setEventDetails(slug, code);
-        Alert.alert('Joined Event', `Switched to private event: ${slug}`);
+        const lower = slug.toLowerCase();
+        const isDevOrSystem =
+          lower.includes('expo') ||
+          lower.includes('development-client') ||
+          lower.includes('localhost') ||
+          lower === 'build' ||
+          lower === 'exp' ||
+          /^(?:\d{1,3}\.){3}\d{1,3}$/.test(lower);
+
+        if (!isDevOrSystem) {
+          setEventDetails(slug, code);
+        }
       }
     } catch (err) {
       console.error('Error parsing deep link', err);

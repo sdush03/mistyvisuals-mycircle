@@ -14,17 +14,11 @@ import { useAuthStore } from '../store/authStore';
 import api, { API_BASE_URL } from '../services/api';
 import LoginView from '../components/mycircle/LoginView';
 import { ProfileView } from '../components/profile/ProfileView';
+import PhoneView from '../components/mycircle/PhoneView';
+import CameraViewScreen from '../components/mycircle/CameraView';
 import { tabEvents, TAB_OPEN_MOODBOARDS, TAB_OPEN_INSPIRATIONS, TAB_OPEN_PROFILE_SETTINGS } from '../lib/tabEvents';
 
-import { deactivateKeepAwake } from 'expo-keep-awake';
-
 SplashScreen.preventAutoHideAsync().catch(() => {});
-
-try {
-  deactivateKeepAwake().catch(() => {});
-} catch (e) {
-  // Ignore native keep awake initialization failures on emulator
-}
 
 LogBox.ignoreLogs([
   'SafeAreaView has been deprecated',
@@ -203,6 +197,15 @@ function RootLayoutContent() {
     return <LoginView onSuccess={() => {}} startAnimation={isSplashHidden} />;
   }
 
+  // 3. Enforce mandatory onboarding — catches users with saved sessions who haven't completed profile
+  if (!profile?.phoneNumber) {
+    return <PhoneView onSuccess={() => {}} />;
+  }
+
+  if (!profile?.hasSelfie) {
+    return <CameraViewScreen onSuccess={() => {}} />;
+  }
+
   const isHeaderHidden = currentTab === 'mycircle' && Boolean(eventSlug);
 
   return (
@@ -297,9 +300,9 @@ function IconProfile({ active, profile }: { active: boolean; profile: any }) {
 
 // ── Floating tab bar ────────────────────────────────────────────────────────
 function CustomFloatingTabBar({ activeTab, isCollapsed, bottomInset, profile, onOpenProfile }: CustomTabBarProps) {
-  const targetWidth  = isCollapsed ? 200 : 360;
+  const targetWidth  = isCollapsed ? 180 : 310;
   const targetHeight = isCollapsed ? 48  : 64;
-  const widthVal  = useSharedValue(360);
+  const widthVal  = useSharedValue(310);
   const heightVal = useSharedValue(64);
 
   useEffect(() => {
@@ -391,11 +394,6 @@ function CustomFloatingTabBar({ activeTab, isCollapsed, bottomInset, profile, on
       key: 'moodboard',
       label: 'Moodboard',
       icon: (a) => <MoodboardMasonryIcon active={a} size={ICON_SIZE} color={a ? '#1c1a18' : 'rgba(0,0,0,0.35)'} />,
-    },
-    {
-      key: 'inspirations',
-      label: 'Inspirations',
-      icon: (a) => <Ionicons name={a ? 'bulb' : 'bulb-outline'} size={ICON_SIZE} color={a ? '#1c1a18' : 'rgba(0,0,0,0.35)'} />,
     },
     {
       key: 'profile',

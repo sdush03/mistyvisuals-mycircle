@@ -169,7 +169,6 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         }
       } catch (e: any) {
         if (e?.response?.status === 404) {
-          Alert.alert('Celebration Not Found', 'This celebration is no longer available or the link is invalid.');
           onChangeEvent();
           return;
         }
@@ -193,7 +192,6 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         }
       } catch (e: any) {
         if (e?.response?.status === 404) {
-          Alert.alert('Celebration Not Found', 'This celebration is no longer available or the link is invalid.');
           onChangeEvent();
           return;
         }
@@ -539,6 +537,47 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     setActiveImageIndex(idx !== -1 ? idx : (photoItem.globalIndex ?? 0));
   };
 
+  const handleToggleLike = async (item: any) => {
+    if (!item || !eventSlug) return;
+    const photoId = item.id;
+    const currentlyLiked = !!item.isLiked;
+    const nextLiked = !currentlyLiked;
+
+    // Optimistically update allPhotos and photos state in GalleryView
+    setAllPhotos((prev) =>
+      prev.map((p) => (p.id === photoId ? { ...p, isLiked: nextLiked } : p))
+    );
+    setPhotos((prev) =>
+      prev.map((p) => (p.id === photoId ? { ...p, isLiked: nextLiked } : p))
+    );
+
+    try {
+      const headers = eventHeadersRef.current;
+      const res = await api.post(
+        `/api/gallery/public/events/${eventSlug}/photos/${photoId}/like`,
+        {},
+        { headers }
+      );
+      if (res.data && typeof res.data.liked === 'boolean') {
+        const serverLiked = res.data.liked;
+        setAllPhotos((prev) =>
+          prev.map((p) => (p.id === photoId ? { ...p, isLiked: serverLiked } : p))
+        );
+        setPhotos((prev) =>
+          prev.map((p) => (p.id === photoId ? { ...p, isLiked: serverLiked } : p))
+        );
+      }
+    } catch (err) {
+      console.warn('Failed to toggle photo like:', err);
+      setAllPhotos((prev) =>
+        prev.map((p) => (p.id === photoId ? { ...p, isLiked: currentlyLiked } : p))
+      );
+      setPhotos((prev) =>
+        prev.map((p) => (p.id === photoId ? { ...p, isLiked: currentlyLiked } : p))
+      );
+    }
+  };
+
   // Header Cover Metadata
   const coverUrl =
     eventCoverUrl ||
@@ -769,7 +808,12 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           initialIndex={activeImageIndex}
           initialBounds={selectedBounds}
           onGetBoundsForIndex={getBoundsForIndex}
-          onClose={() => setActiveImageIndex(null)}
+          onToggleLike={handleToggleLike}
+          likeTargetName="My Favourites"
+          onClose={() => {
+            setActiveImageIndex(null);
+            setSelectedBounds(null);
+          }}
           title={cleanTitle}
           subtitle={activeTab.toUpperCase()}
         />

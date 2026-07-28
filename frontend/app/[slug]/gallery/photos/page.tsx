@@ -1040,6 +1040,9 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const [errorSearch, setErrorSearch] = useState('')
 
   const handleLogout = () => {
+    if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
+      (window as any).google.accounts.id.disableAutoSelect()
+    }
     // Clear ALL gallery and circle tokens — not just current slug
     const keysToRemove: string[] = []
     for (let i = 0; i < localStorage.length; i++) {

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { StyleSheet, View, Text, Pressable, ActivityIndicator, Alert, Image } from 'react-native';
+import { StyleSheet, View, Text, Pressable, ActivityIndicator, Alert, Image, Linking } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
@@ -29,7 +29,22 @@ export default function CameraViewScreen({ onSuccess }: CameraViewProps) {
   }
 
   if (!permission.granted) {
-    // Camera permissions are not granted yet
+    // Permanently denied — must go to device Settings to re-enable
+    if (!permission.canAskAgain) {
+      return (
+        <View style={styles.container}>
+          <Text style={styles.title}>Camera Access Blocked</Text>
+          <Text style={styles.subtitle}>
+            Camera permission was denied. To take your selfie, please enable camera access for this app in your device Settings.
+          </Text>
+          <Pressable style={styles.button} onPress={() => Linking.openSettings()}>
+            <Text style={styles.buttonText}>Open Settings</Text>
+          </Pressable>
+        </View>
+      );
+    }
+
+    // Not yet granted — can still ask
     return (
       <View style={styles.container}>
         <Text style={styles.title}>Camera Access Required</Text>

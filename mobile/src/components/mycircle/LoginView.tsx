@@ -26,10 +26,12 @@ import { WebView } from 'react-native-webview';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
 import { FONT_FUTURA, FONT_FUTURA_BOLD } from '../../constants/fonts';
+import PhoneView from './PhoneView';
+import CameraViewScreen from './CameraView';
 
 // Web & iOS Client IDs from Google Cloud Console
 const GOOGLE_WEB_CLIENT_ID = '1051090030242-du725l33veu6vl637lo1jpgpka1ilujj.apps.googleusercontent.com';
-const GOOGLE_IOS_CLIENT_ID = '1051090030242-vhi0ec15ittd3ugik983p9gaohlr7fv4.apps.googleusercontent.com';
+const GOOGLE_IOS_CLIENT_ID = '813548862884-m06a6t1mbo7v71qipthtao91bg105lqt.apps.googleusercontent.com';
 
 // Safe dynamic imports for Google Sign-In to prevent crashes in Expo Go
 let NativeGoogleSignin: any = null;
@@ -51,6 +53,8 @@ interface LoginViewProps {
 export default function LoginView({ onSuccess, startAnimation = true }: LoginViewProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [webModal, setWebModal] = useState<{ url: string; title: string } | null>(null);
+  // Onboarding step after auth: login → phone (if missing) → selfie (if missing) → done
+  const [step, setStep] = useState<'login' | 'phone' | 'selfie'>('login');
 
   const signInWithFacebook = () => {
     Alert.alert(
@@ -214,7 +218,15 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
       }
 
       await setAuth(token, profile, userEvents);
-      onSuccess();
+
+      // Enforce mandatory onboarding steps before entering the app
+      if (!profile.phoneNumber) {
+        setStep('phone');
+      } else if (!profile.hasSelfie) {
+        setStep('selfie');
+      } else {
+        onSuccess();
+      }
     } catch (err: any) {
       console.error(err);
       const msg = err.response?.data?.error || 'Authentication with server failed. Please try again.';
@@ -222,6 +234,21 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
     } finally {
       setIsLoggingIn(false);
     }
+  };
+
+  // Called by PhoneView after phone number is saved
+  const handlePhoneComplete = () => {
+    const profile = useAuthStore.getState().profile;
+    if (!profile?.hasSelfie) {
+      setStep('selfie');
+    } else {
+      onSuccess();
+    }
+  };
+
+  // Called by CameraViewScreen after selfie is verified
+  const handleSelfieComplete = () => {
+    onSuccess();
   };
 
   // 1. Google Sign-In
@@ -309,6 +336,15 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
       setIsLoggingIn(false);
     }
   };
+
+  // Render mandatory onboarding steps over a plain background
+  if (step === 'phone') {
+    return <PhoneView onSuccess={handlePhoneComplete} />;
+  }
+
+  if (step === 'selfie') {
+    return <CameraViewScreen onSuccess={handleSelfieComplete} />;
+  }
 
   return (
     <View style={styles.container}>
