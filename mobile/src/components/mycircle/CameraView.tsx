@@ -13,6 +13,8 @@ interface CameraViewProps {
 export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProps) {
   const [permission, requestPermission] = useCameraPermissions();
   const [showIntro, setShowIntro] = useState(true);
+  const [validationStatus, setValidationStatus] = useState<'idle' | 'verifying' | 'accepted' | 'rejected'>('idle');
+  const [selfieError, setSelfieError] = useState('');
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const cameraRef = useRef<any>(null);
@@ -120,6 +122,7 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
         });
         if (photo && photo.uri) {
           setCapturedPhoto(photo.uri);
+          validatePhoto(photo.uri);
         }
       } catch (err) {
         console.error('Failed to take picture', err);
@@ -128,12 +131,40 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
     }
   };
 
+  const validatePhoto = async (photoUri: string) => {
+    setValidationStatus('verifying');
+    setSelfieError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', {
+        uri: photoUri,
+        name: 'selfie.jpg',
+        type: 'image/jpeg',
+      } as any);
+
+      await api.post('/api/gallery/public/validate-face', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      setValidationStatus('accepted');
+      setSelfieError('');
+    } catch (err: any) {
+      console.error(err);
+      const msg = err.response?.data?.error || 'Verification failed. Please retake the photo.';
+      setValidationStatus('rejected');
+      setSelfieError(msg);
+    }
+  };
+
   const uploadSelfie = async () => {
     try {
       setIsUploading(true);
 
-      if (!capturedPhoto) {
-        Alert.alert('No Photo Captured', 'Please take a live selfie before continuing.');
+      if (!capturedPhoto || validationStatus !== 'accepted') {
+        Alert.alert('Selfie Not Verified', 'Please take a valid selfie before continuing.');
         return;
       }
       
@@ -165,10 +196,17 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
       console.error(err);
       const msg = err.response?.data?.error || 'Selfie verification failed. Please try taking another photo.';
       Alert.alert('Verification Failed', msg);
-      setCapturedPhoto(null);
+      setValidationStatus('rejected');
+      setSelfieError(msg);
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleRetake = () => {
+    setCapturedPhoto(null);
+    setValidationStatus('idle');
+    setSelfieError('');
   };
 
   // 2. Photo Confirmation Step
@@ -185,17 +223,52 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
 
           <Image source={{ uri: capturedPhoto }} style={styles.previewImage} />
 
+          {/* Status Feedback Banners (Matching Web) */}
+          {validationStatus === 'verifying' && (
+            <View style={styles.verifyingBanner}>
+              <Text style={styles.verifyingText}>⏳ Verifying selfie quality...</Text>
+            </View>
+          )}
+
+          {validationStatus === 'accepted' && (
+            <View style={styles.acceptedBanner}>
+              <Text style={styles.acceptedText}>✅ Selfie Accepted! You look optimal.</Text>
+            </View>
+          )}
+
+          {validationStatus === 'rejected' && (
+            <View style={styles.rejectedBanner}>
+              <Text style={styles.rejectedText}>❌ {selfieError || 'Verification failed. Please retake photo.'}</Text>
+            </View>
+          )}
+
           {isUploading ? (
             <ActivityIndicator size="large" color="#ffffff" style={styles.loader} />
           ) : (
             <View style={styles.previewBtnContainer}>
-              <Pressable style={styles.retakeBtn} onPress={() => setCapturedPhoto(null)}>
-                <Text style={styles.retakeBtnText}>Retake</Text>
-              </Pressable>
+              {validationStatus === 'verifying' && (
+                <Pressable style={styles.disabledBtn} disabled>
+                  <Text style={styles.disabledBtnText}>VERIFYING FACE...</Text>
+                </Pressable>
+              )}
 
-              <Pressable style={styles.confirmBtn} onPress={uploadSelfie}>
-                <Text style={styles.confirmBtnText}>Continue →</Text>
-              </Pressable>
+              {validationStatus === 'accepted' && (
+                <>
+                  <Pressable style={styles.retakeBtn} onPress={handleRetake}>
+                    <Text style={styles.retakeBtnText}>Retake</Text>
+                  </Pressable>
+
+                  <Pressable style={styles.confirmBtn} onPress={uploadSelfie}>
+                    <Text style={styles.confirmBtnText}>Continue →</Text>
+                  </Pressable>
+                </>
+              )}
+
+              {validationStatus === 'rejected' && (
+                <Pressable style={styles.confirmBtn} onPress={handleRetake}>
+                  <Text style={styles.confirmBtnText}>Retake Selfie</Text>
+                </Pressable>
+              )}
             </View>
           )}
         </Pressable>
@@ -403,6 +476,65 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     color: 'rgba(255, 255, 255, 0.4)',
     fontWeight: '500',
+  },
+  verifyingBanner: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  verifyingText: {
+    color: '#ffffff',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  acceptedBanner: {
+    width: '100%',
+    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(74, 222, 128, 0.2)',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  acceptedText: {
+    color: '#4ade80',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  rejectedBanner: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 77, 77, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 77, 77, 0.2)',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  rejectedText: {
+    color: '#ff4d4d',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  disabledBtn: {
+    width: '100%',
+    height: 46,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  disabledBtnText: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1,
   },
   loader: {
     marginVertical: 20,
