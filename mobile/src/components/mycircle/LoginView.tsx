@@ -337,15 +337,6 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
     }
   };
 
-  // Render mandatory onboarding steps over a plain background
-  if (step === 'phone') {
-    return <PhoneView onSuccess={handlePhoneComplete} />;
-  }
-
-  if (step === 'selfie') {
-    return <CameraViewScreen onSuccess={handleSelfieComplete} />;
-  }
-
   return (
     <View style={styles.container}>
 
@@ -356,8 +347,7 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
         contentFit="cover"
       />
 
-      {/* ── Netflix-style multi-stop cinematic gradient (Fades in deep darkness as logo docks at top) ── */}
-      {/* Top fade: keeps logo readable */}
+      {/* ── Netflix-style multi-stop cinematic gradient ── */}
       <Animated.View style={[styles.topGradient, { opacity: gradientOpacity }]}>
         <LinearGradient
           colors={['rgba(0,0,0,0.55)', 'transparent']}
@@ -365,7 +355,6 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
           style={StyleSheet.absoluteFill}
         />
       </Animated.View>
-      {/* Bottom fade: strong dark for buttons */}
       <Animated.View style={[styles.bottomGradient, { opacity: gradientOpacity }]}>
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.60)', 'rgba(0,0,0,0.92)', '#000000']}
@@ -374,7 +363,7 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
         />
       </Animated.View>
 
-      {/* ── Top Bar: Logo (Starts in center, slides up to top header) ── */}
+      {/* ── Top Bar: Logo ── */}
       <Animated.View
         style={[
           styles.topBar,
@@ -394,17 +383,31 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
         />
       </Animated.View>
 
-      {/* ── Center: Headline ── */}
-      <Animated.View
-        style={[
-          styles.centerSection,
-          { opacity: fadeAnim },
-        ]}
-      >
-        <Text style={styles.headline}>MY CIRCLE</Text>
-        <Text style={styles.subBrand}>BY MISTY VISUALS</Text>
-        <Text style={styles.tagline}>Relive the celebrations{'\n'}that matter most.</Text>
-      </Animated.View>
+      {/* ── Step 1: Phone Onboarding Modal Overlay ── */}
+      {step === 'phone' && (
+        <PhoneView onSuccess={handlePhoneComplete} />
+      )}
+
+      {/* ── Step 2: Selfie Onboarding Modal Overlay ── */}
+      {step === 'selfie' && (
+        <CameraViewScreen onSuccess={handleSelfieComplete} />
+      )}
+
+      {/* ── Default: Sign-In Buttons ── */}
+      {step === 'login' && (
+        <>
+          {/* ── Center: Headline ── */}
+          <Animated.View
+            style={[
+              styles.centerSection,
+              { opacity: fadeAnim },
+            ]}
+          >
+            <Text style={styles.headline}>MY CIRCLE</Text>
+            <Text style={styles.subBrand}>BY MISTY VISUALS</Text>
+            <Text style={styles.tagline}>Relive the celebrations{'\n'}that matter most.</Text>
+          </Animated.View>
+
 
       {/* ── Bottom: Sign-In Buttons ── */}
       <View style={styles.bottomSection}>
@@ -500,6 +503,8 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
           </>
         )}
       </View>
+        </>
+      )}
 
       {/* ── In-App Web View Modal (100% In-App for iOS & Android) ── */}
       <Modal
