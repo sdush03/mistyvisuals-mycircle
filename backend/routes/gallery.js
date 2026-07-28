@@ -2243,6 +2243,20 @@ module.exports = async function galleryRoutes(fastify, opts) {
             extraVectors: []
           };
 
+          // Persist vector directly into DB for CircleUser and Guest
+          if (userId) {
+            await prisma.circleUser.update({
+              where: { id: userId },
+              data: { selfieVector: res.vector }
+            }).catch(err => req.log.warn('CircleUser selfieVector save failed:', err.message));
+          }
+          if (req.guest?.guestId) {
+            await prisma.guest.update({
+              where: { id: req.guest.guestId },
+              data: { selfieVector: res.vector }
+            }).catch(err => req.log.warn('Guest selfieVector save failed:', err.message));
+          }
+
           return { status: 'success' };
         } else {
           // Validation failed (User error: e.g. no face detected), clean up the saved image file
@@ -2274,39 +2288,52 @@ module.exports = async function galleryRoutes(fastify, opts) {
       const selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.jpg`);
       const vectorPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.json`);
 
-      if (!fs.existsSync(selfiePath)) {
-        return { photos: [] }; // No selfie captured yet
+      let anchorVector = guestAnchors[guestKey]?.anchorVector;
+
+      if (!anchorVector) {
+        // 1. Primary Source of Truth: Read selfieVector directly from PostgreSQL
+        const guestRec = await prisma.guest.findUnique({
+          where: { id: guestId },
+          select: { selfieVector: true, circleUser: { select: { selfieVector: true } } }
+        });
+        
+        if (guestRec && (guestRec.selfieVector || guestRec.circleUser?.selfieVector)) {
+          anchorVector = guestRec.selfieVector || guestRec.circleUser.selfieVector;
+          guestAnchors[guestKey] = { anchorVector, extraVectors: [] };
+        }
       }
 
-      // Check if we need to load anchor vector into memory
-      if (!guestAnchors[guestKey] || !guestAnchors[guestKey].anchorVector) {
+      if (!anchorVector) {
+        // 2. Secondary Fallback: Read from local disk file if DB column is null
         if (fs.existsSync(vectorPath)) {
-          const vector = JSON.parse(fs.readFileSync(vectorPath, 'utf8'));
-          guestAnchors[guestKey] = {
-            anchorVector: vector,
-            extraVectors: []
-          };
-        } else {
-          // Fallback: extract it if vector JSON is missing but image exists
+          try {
+            anchorVector = JSON.parse(fs.readFileSync(vectorPath, 'utf8'));
+            guestAnchors[guestKey] = { anchorVector, extraVectors: [] };
+            if (guestId) {
+              prisma.guest.update({ where: { id: guestId }, data: { selfieVector: anchorVector } }).catch(() => {});
+            }
+          } catch (e) {}
+        } else if (fs.existsSync(selfiePath)) {
           try {
             const res = await faceRecManager.validateSelfie(selfiePath);
             if (res.success && res.vector) {
-              fs.writeFileSync(vectorPath, JSON.stringify(res.vector), 'utf8');
-              guestAnchors[guestKey] = {
-                anchorVector: res.vector,
-                extraVectors: []
-              };
-            } else {
-              return reply.code(400).send({ error: 'Face could not be parsed from saved selfie' });
+              anchorVector = res.vector;
+              guestAnchors[guestKey] = { anchorVector, extraVectors: [] };
+              fs.writeFileSync(vectorPath, JSON.stringify(anchorVector), 'utf8');
+              if (guestId) {
+                prisma.guest.update({ where: { id: guestId }, data: { selfieVector: anchorVector } }).catch(() => {});
+              }
             }
           } catch (extractErr) {
             req.log.error('Fallback face extraction failed:', extractErr.message);
-            return reply.code(500).send({ error: 'Failed to process saved selfie' });
           }
         }
       }
 
-      const anchorVector = guestAnchors[guestKey].anchorVector;
+      if (!anchorVector) {
+        return { photos: [] }; // No selfie captured or vector found yet
+      }
+
       const extraVectors = guestAnchors[guestKey].extraVectors || [];
 
       // Find all event photo IDs

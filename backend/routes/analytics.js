@@ -84,8 +84,9 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           impressions: true,
           matchCount: true,
           downloadCount: true,
+          selfieVector: true,
           circleUser: {
-            select: { id: true }
+            select: { id: true, selfieVector: true }
           }
         },
         orderBy: { impressions: 'desc' }
@@ -94,16 +95,18 @@ module.exports = async function analyticsRoutes(fastify, opts) {
       // Recalculate live matchCount from Qdrant for guests with saved selfie vectors
       const updatedGuests = await Promise.all(guests.map(async (g) => {
         let liveMatchCount = g.matchCount;
-        let vector = null;
+        let vector = g.selfieVector || g.circleUser?.selfieVector;
         const userId = g.circleUser?.id;
 
-        // 1. Check user_${userId}.json
-        let vecPath = userId ? path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.json`) : null;
-        if (vecPath && fs.existsSync(vecPath)) {
-          try { vector = JSON.parse(fs.readFileSync(vecPath, 'utf8')); } catch (e) {}
+        // 1. Check user_${userId}.json fallback if DB is null
+        if (!vector) {
+          let vecPath = userId ? path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.json`) : null;
+          if (vecPath && fs.existsSync(vecPath)) {
+            try { vector = JSON.parse(fs.readFileSync(vecPath, 'utf8')); } catch (e) {}
+          }
         }
 
-        // 2. Check guest_${g.id}.json
+        // 2. Check guest_${g.id}.json fallback if DB is null
         if (!vector) {
           const guestVecPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${g.id}.json`);
           if (fs.existsSync(guestVecPath)) {
@@ -111,7 +114,7 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           }
         }
 
-        // 3. Fallback: extract vector from jpg if json was missing
+        // 3. Image extraction fallback
         if (!vector) {
           let imgPath = userId ? path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.jpg`) : null;
           if (!imgPath || !fs.existsSync(imgPath)) {
@@ -122,8 +125,6 @@ module.exports = async function analyticsRoutes(fastify, opts) {
               const res = await faceRecManager.validateSelfie(imgPath);
               if (res && res.success && res.vector) {
                 vector = res.vector;
-                const savePath = vecPath || path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${g.id}.json`);
-                fs.writeFileSync(savePath, JSON.stringify(vector), 'utf8');
               }
             } catch (e) {}
           }
@@ -131,6 +132,10 @@ module.exports = async function analyticsRoutes(fastify, opts) {
 
         if (vector) {
           try {
+            // Persist vector to DB if it wasn't already stored
+            if (!g.selfieVector) {
+              prisma.guest.update({ where: { id: g.id }, data: { selfieVector: vector } }).catch(() => {});
+            }
             const matches = await qdrant.searchVectors(eventId, vector, 100000, 0.35);
             liveMatchCount = new Set(matches.map(m => m.photo_id)).size;
             // Persist updated matchCount to database asynchronously
