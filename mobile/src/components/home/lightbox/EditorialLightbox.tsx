@@ -239,6 +239,7 @@ export function EditorialLightbox({
   const handleClose = useCallback(() => {
     pauseAutoHideTimer();
     updateBoundsForIndex(activeIdx);
+    flatListRef.current?.scrollToOffset({ offset: (width + 18) * activeIdx, animated: false });
 
     expandProgress.value = withTiming(
       0,
@@ -555,7 +556,7 @@ export function EditorialLightbox({
                     ? `lb-${item.r2Url || item.url || item.photoUrl}`
                     : `lb-${index}`
                 }
-                ItemSeparatorComponent={() => <View style={{ width: 18, backgroundColor: '#000000' }} />}
+                ItemSeparatorComponent={() => <View style={{ width: 18, backgroundColor: 'transparent' }} />}
                 renderItem={renderItem}
               />
             </View>
