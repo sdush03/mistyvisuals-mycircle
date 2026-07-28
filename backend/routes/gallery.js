@@ -846,7 +846,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
       if (filename.startsWith('face-') || isFaceCrop) {
         subfolder = `events/${slug}/faces`;
       } else if (filename.startsWith('temp_selfie_') || filename.startsWith('guest_') || filename.startsWith('temp_profile_verify_')) {
-        subfolder = `events/${slug}/selfies`;
+        subfolder = `users/selfies`;
       }
 
       const r2Url = await uploadAsset(buffer, filename, subfolder, 'image/jpeg');
@@ -2237,11 +2237,10 @@ module.exports = async function galleryRoutes(fastify, opts) {
         if (res.success && res.vector) {
           fs.writeFileSync(vectorPath, JSON.stringify(res.vector), 'utf8');
 
-          // Upload selfie image to R2 if configured
+          // Upload selfie image to R2 if configured under universal user path
           let selfieUrl = null;
           try {
-            const eventSlug = event?.slug || 'general';
-            selfieUrl = await uploadAsset(buffer, `user_${userId}.jpg`, `events/${eventSlug}/selfies`, 'image/jpeg');
+            selfieUrl = await uploadAsset(buffer, `user_${userId}.jpg`, `users/selfies`, 'image/jpeg');
           } catch (r2Err) {
             req.log.warn('R2 selfie upload failed, using local fallback:', r2Err.message);
           }
