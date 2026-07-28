@@ -325,24 +325,22 @@ class QdrantService {
             offset = scrollRes?.next_page_offset;
           } while (offset);
 
-          if (allPoints.length > 0) {
-            const scored = [];
-            for (const pt of allPoints) {
-              if (pt.vector && Array.isArray(pt.vector)) {
-                let dotProduct = 0;
-                const len = Math.min(pt.vector.length, queryVector.length);
-                for (let i = 0; i < len; i++) {
-                  dotProduct += pt.vector[i] * queryVector[i];
-                }
-                if (dotProduct >= threshold) {
-                  scored.push({ photo_id: pt.payload.photo_id, score: dotProduct });
+            if (allPoints.length > 0) {
+              const scored = [];
+              for (const pt of allPoints) {
+                if (pt.vector && Array.isArray(pt.vector)) {
+                  let dotProduct = 0;
+                  const len = Math.min(pt.vector.length, queryVector.length);
+                  for (let i = 0; i < len; i++) {
+                    dotProduct += pt.vector[i] * queryVector[i];
+                  }
+                  if (dotProduct >= threshold) {
+                    scored.push({ photo_id: pt.payload.photo_id, score: dotProduct });
+                  }
                 }
               }
-            }
-            if (scored.length > searchResult.length) {
               return scored.sort((a, b) => b.score - a.score).slice(0, limit);
             }
-          }
         } catch (scrollErr) {
           console.warn('[Qdrant] Uncapped scroll fallback warning:', scrollErr.message);
         }
