@@ -2172,6 +2172,17 @@ module.exports = async function galleryRoutes(fastify, opts) {
     if (!phoneNumber) return reply.code(400).send({ error: 'Phone number is required' });
 
     try {
+      // Check if phone number is already registered by another account
+      const existingUser = await prisma.circleUser.findFirst({
+        where: {
+          phoneNumber,
+          NOT: { email: req.guest.email }
+        }
+      });
+      if (existingUser) {
+        return reply.code(400).send({ error: 'This phone number is already registered with another account.' });
+      }
+
       await prisma.circleUser.update({
         where: { email: req.guest.email },
         data: { phoneNumber }
@@ -3151,6 +3162,18 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
   // Helper function to update guest details (name, phone) and optionally verify & replicate a new selfie globally
   async function updateGuestProfileGlobal(email, name, phoneNumber, selfieBuffer, log) {
+    if (phoneNumber) {
+      const existingUser = await prisma.circleUser.findFirst({
+        where: {
+          phoneNumber,
+          NOT: { email }
+        }
+      });
+      if (existingUser) {
+        throw new Error('This phone number is already registered with another account.');
+      }
+    }
+
     // Find or create global user profile
     let user = await prisma.circleUser.findUnique({
       where: { email }
