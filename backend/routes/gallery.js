@@ -2237,27 +2237,42 @@ module.exports = async function galleryRoutes(fastify, opts) {
         if (res.success && res.vector) {
           fs.writeFileSync(vectorPath, JSON.stringify(res.vector), 'utf8');
 
+          // Upload selfie image to R2 if configured
+          let selfieUrl = null;
+          try {
+            const eventSlug = event?.slug || 'general';
+            selfieUrl = await uploadAsset(buffer, `user_${userId}.jpg`, `events/${eventSlug}/selfies`, 'image/jpeg');
+          } catch (r2Err) {
+            req.log.warn('R2 selfie upload failed, using local fallback:', r2Err.message);
+          }
+
           // Cache in memory
           guestAnchors[guestKey] = {
             anchorVector: res.vector,
             extraVectors: []
           };
 
-          // Persist vector directly into DB for CircleUser and Guest
+          // Persist vector & R2 URL directly into DB for CircleUser and Guest
           if (userId) {
             await prisma.circleUser.update({
               where: { id: userId },
-              data: { selfieVector: res.vector }
+              data: {
+                selfieVector: res.vector,
+                ...(selfieUrl ? { selfieUrl } : {})
+              }
             }).catch(err => req.log.warn('CircleUser selfieVector save failed:', err.message));
           }
           if (req.guest?.guestId) {
             await prisma.guest.update({
               where: { id: req.guest.guestId },
-              data: { selfieVector: res.vector }
+              data: {
+                selfieVector: res.vector,
+                ...(selfieUrl ? { selfieUrl } : {})
+              }
             }).catch(err => req.log.warn('Guest selfieVector save failed:', err.message));
           }
 
-          return { status: 'success' };
+          return { status: 'success', selfieUrl };
         } else {
           // Validation failed (User error: e.g. no face detected), clean up the saved image file
           if (fs.existsSync(selfiePath)) fs.unlinkSync(selfiePath);
