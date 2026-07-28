@@ -1,5 +1,8 @@
 const { prisma } = require('../prisma');
 const { verifyGuestAuth } = require('../utils/galleryAuth');
+const qdrant = require('../utils/qdrant');
+const path = require('path');
+const fs = require('fs');
 
 module.exports = async function analyticsRoutes(fastify, opts) {
   const { requireAdmin } = opts;
@@ -79,10 +82,48 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           phoneNumber: true,
           impressions: true,
           matchCount: true,
-          downloadCount: true
+          downloadCount: true,
+          circleUser: {
+            select: { id: true }
+          }
         },
         orderBy: { impressions: 'desc' }
       });
+
+      // Recalculate live matchCount from Qdrant for guests with saved selfie vectors
+      const updatedGuests = await Promise.all(guests.map(async (g) => {
+        let liveMatchCount = g.matchCount;
+        const userId = g.circleUser?.id;
+        if (userId) {
+          const vectorPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.json`);
+          if (fs.existsSync(vectorPath)) {
+            try {
+              const vector = JSON.parse(fs.readFileSync(vectorPath, 'utf8'));
+              const matches = await qdrant.searchVectors(eventId, vector, 100000, 0.35);
+              liveMatchCount = new Set(matches.map(m => m.photo_id)).size;
+              // Persist updated matchCount to database asynchronously
+              if (liveMatchCount !== g.matchCount) {
+                prisma.guest.update({
+                  where: { id: g.id },
+                  data: { matchCount: liveMatchCount }
+                }).catch(() => {});
+              }
+            } catch (e) {
+              req.log.warn(`Failed live vector count for guest ${g.id}: ${e.message}`);
+            }
+          }
+        }
+
+        return {
+          id: g.id,
+          name: g.name,
+          email: g.email,
+          phoneNumber: g.phoneNumber,
+          impressions: g.impressions,
+          matchCount: liveMatchCount,
+          downloadCount: g.downloadCount
+        };
+      }));
 
       return {
         summary: {
@@ -91,7 +132,7 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           photosDownloaded: totalDownloads,
           registeredUsers
         },
-        guests
+        guests: updatedGuests
       };
     } catch (err) {
       req.log.error(err);
