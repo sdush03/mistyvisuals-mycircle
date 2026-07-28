@@ -152,8 +152,7 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
       setValidationStatus('accepted');
       setSelfieError('');
     } catch (err: any) {
-      console.error(err);
-      const msg = err.response?.data?.error || 'Verification failed. Please retake the photo.';
+      const msg = err.response?.data?.error || err.message || 'Verification failed. Please retake the photo.';
       setValidationStatus('rejected');
       setSelfieError(msg);
     }
