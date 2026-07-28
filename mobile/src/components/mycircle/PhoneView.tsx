@@ -9,12 +9,12 @@ interface PhoneViewProps {
 }
 
 const COUNTRY_CODES = [
-  { code: '+91', flag: '🇮🇳', country: 'India' },
-  { code: '+1', flag: '🇺🇸', country: 'USA / Canada' },
-  { code: '+44', flag: '🇬🇧', country: 'UK' },
-  { code: '+971', flag: '🇦🇪', country: 'UAE' },
-  { code: '+61', flag: '🇦🇺', country: 'Australia' },
-  { code: '+65', flag: '🇸🇬', country: 'Singapore' },
+  { code: '+91', country: 'India' },
+  { code: '+1', country: 'USA / Canada' },
+  { code: '+44', country: 'UK' },
+  { code: '+971', country: 'UAE' },
+  { code: '+61', country: 'Australia' },
+  { code: '+65', country: 'Singapore' },
 ];
 
 export default function PhoneView({ onSuccess, onCancel }: PhoneViewProps) {
@@ -91,7 +91,6 @@ export default function PhoneView({ onSuccess, onCancel }: PhoneViewProps) {
             style={styles.countryBtn}
             onPress={() => setShowCountryPicker(!showCountryPicker)}
           >
-            <Text style={styles.flagText}>{selectedCountry.flag}</Text>
             <Text style={styles.codeText}>{selectedCountry.code}</Text>
             <Text style={styles.chevronText}>▾</Text>
           </Pressable>
@@ -127,7 +126,6 @@ export default function PhoneView({ onSuccess, onCancel }: PhoneViewProps) {
                   setShowCountryPicker(false);
                 }}
               >
-                <Text style={styles.optionFlag}>{item.flag}</Text>
                 <Text style={styles.optionCountry}>{item.country}</Text>
                 <Text style={styles.optionCode}>{item.code}</Text>
               </Pressable>
