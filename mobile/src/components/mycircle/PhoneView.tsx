@@ -8,8 +8,19 @@ interface PhoneViewProps {
   onCancel?: () => void;
 }
 
+const COUNTRY_CODES = [
+  { code: '+91', flag: '🇮🇳', country: 'India' },
+  { code: '+1', flag: '🇺🇸', country: 'USA / Canada' },
+  { code: '+44', flag: '🇬🇧', country: 'UK' },
+  { code: '+971', flag: '🇦🇪', country: 'UAE' },
+  { code: '+61', flag: '🇦🇺', country: 'Australia' },
+  { code: '+65', flag: '🇸🇬', country: 'Singapore' },
+];
+
 export default function PhoneView({ onSuccess, onCancel }: PhoneViewProps) {
-  const [phoneNumber, setPhoneNumber] = useState('+91 ');
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   
@@ -17,53 +28,27 @@ export default function PhoneView({ onSuccess, onCancel }: PhoneViewProps) {
   const eventSlug = useAuthStore((state) => state.eventSlug);
   const updateProfile = useAuthStore((state) => state.updateProfile);
 
-  const handlePhoneChange = (text: string) => {
-    setErrorMsg('');
-    // Ensure user doesn't accidentally delete the initial '+'
-    if (!text.startsWith('+')) {
-      setPhoneNumber('+91 ' + text.replace(/\D/g, ''));
-    } else {
-      setPhoneNumber(text);
-    }
-  };
-
   const handleSubmit = async () => {
-    const cleanNum = phoneNumber.replace(/[\s\-\(\)]/g, ''); // Keeps '+' if present
-    const digitsOnly = cleanNum.replace(/\D/g, '');
+    const cleanDigits = phoneNumber.replace(/\D/g, '');
 
-    if (!digitsOnly) {
-      setErrorMsg('Please enter your mobile number');
+    if (!cleanDigits) {
+      setErrorMsg('Please enter your 10-digit mobile number');
       return;
     }
 
-    // Validation logic matching web
-    const looksLikeIndian = digitsOnly.length === 10 || 
-      (digitsOnly.length === 11 && digitsOnly.startsWith('0')) || 
-      (digitsOnly.length === 12 && digitsOnly.startsWith('91'));
-
-    let isValid = false;
-    let finalFormatted = cleanNum;
-
-    if (looksLikeIndian) {
-      isValid = /^(?:91|0)?[6-9]\d{9}$/.test(digitsOnly);
-      if (isValid && digitsOnly.length === 10) {
-        finalFormatted = `+91${digitsOnly}`;
-      } else if (isValid && digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
-        finalFormatted = `+${digitsOnly}`;
+    if (selectedCountry.code === '+91') {
+      if (cleanDigits.length !== 10 || !/^[6-9]/.test(cleanDigits)) {
+        setErrorMsg('Invalid Indian number (must be 10 digits starting with 6-9)');
+        return;
       }
     } else {
-      // International number with country code
-      isValid = /^\+[1-9]\d{9,14}$/.test(cleanNum);
+      if (cleanDigits.length < 7 || cleanDigits.length > 14) {
+        setErrorMsg('Please enter a valid mobile number');
+        return;
+      }
     }
 
-    if (!isValid) {
-      if (digitsOnly.length === 10 && !/^[6-9]/.test(digitsOnly)) {
-        setErrorMsg('Indian numbers must start with 6, 7, 8, or 9.');
-      } else {
-        setErrorMsg('Please enter a valid mobile number (e.g. +91 9876543210)');
-      }
-      return;
-    }
+    const fullPhoneNumber = `${selectedCountry.code}${cleanDigits}`;
 
     try {
       setIsSubmitting(true);
@@ -74,13 +59,13 @@ export default function PhoneView({ onSuccess, onCancel }: PhoneViewProps) {
         : `/api/gallery/family/profile/update`;
 
       const payload = eventSlug
-        ? { phoneNumber: finalFormatted }
-        : { phoneNumber: finalFormatted, name: profile?.name || '' };
+        ? { phoneNumber: fullPhoneNumber }
+        : { phoneNumber: fullPhoneNumber, name: profile?.name || '' };
 
       await api.post(updateUrl, payload);
       
       // Update local profile state
-      await updateProfile({ phoneNumber: finalFormatted });
+      await updateProfile({ phoneNumber: fullPhoneNumber });
       onSuccess();
     } catch (err: any) {
       console.error(err);
@@ -101,16 +86,54 @@ export default function PhoneView({ onSuccess, onCancel }: PhoneViewProps) {
 
         <View style={styles.divider} />
 
-        <TextInput
-          style={[styles.input, !!errorMsg && styles.inputError]}
-          placeholder="+91 9876543210"
-          placeholderTextColor="rgba(255, 255, 255, 0.35)"
-          keyboardType="phone-pad"
-          maxLength={17}
-          value={phoneNumber}
-          onChangeText={handlePhoneChange}
-          editable={!isSubmitting}
-        />
+        <View style={[styles.phoneInputRow, !!errorMsg && styles.inputErrorRow]}>
+          <Pressable
+            style={styles.countryBtn}
+            onPress={() => setShowCountryPicker(!showCountryPicker)}
+          >
+            <Text style={styles.flagText}>{selectedCountry.flag}</Text>
+            <Text style={styles.codeText}>{selectedCountry.code}</Text>
+            <Text style={styles.chevronText}>▾</Text>
+          </Pressable>
+
+          <View style={styles.verticalDivider} />
+
+          <TextInput
+            style={styles.inputField}
+            placeholder="10-digit number"
+            placeholderTextColor="rgba(255, 255, 255, 0.35)"
+            keyboardType="number-pad"
+            maxLength={10}
+            value={phoneNumber}
+            onChangeText={(text) => {
+              setErrorMsg('');
+              setPhoneNumber(text.replace(/\D/g, ''));
+            }}
+            editable={!isSubmitting}
+          />
+        </View>
+
+        {showCountryPicker && (
+          <View style={styles.pickerDropdown}>
+            {COUNTRY_CODES.map((item) => (
+              <Pressable
+                key={item.code}
+                style={[
+                  styles.pickerOption,
+                  selectedCountry.code === item.code && styles.pickerOptionSelected,
+                ]}
+                onPress={() => {
+                  setSelectedCountry(item);
+                  setShowCountryPicker(false);
+                }}
+              >
+                <Text style={styles.optionFlag}>{item.flag}</Text>
+                <Text style={styles.optionCountry}>{item.country}</Text>
+                <Text style={styles.optionCode}>{item.code}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
 
         {!!errorMsg && (
           <Text style={styles.errorText}>{errorMsg}</Text>
@@ -181,22 +204,85 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     marginBottom: 24,
   },
-  input: {
+  phoneInputRow: {
     width: '100%',
-    height: 48,
+    height: 50,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 0,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
-    color: '#ffffff',
-    fontSize: 15,
-    textAlign: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 20,
-    letterSpacing: 2,
   },
-  inputError: {
+  inputErrorRow: {
     borderColor: '#ef4444',
     backgroundColor: 'rgba(239, 68, 68, 0.08)',
+  },
+  countryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    gap: 6,
+    height: '100%',
+  },
+  flagText: {
+    fontSize: 16,
+  },
+  codeText: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  chevronText: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
+  verticalDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  inputField: {
+    flex: 1,
+    height: '100%',
+    color: '#ffffff',
+    fontSize: 15,
+    paddingHorizontal: 14,
+    letterSpacing: 1.5,
+  },
+  pickerDropdown: {
+    width: '100%',
+    backgroundColor: '#1c1c1e',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    marginBottom: 20,
+    marginTop: -10,
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  pickerOptionSelected: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  optionFlag: {
+    fontSize: 16,
+    marginRight: 10,
+  },
+  optionCountry: {
+    flex: 1,
+    fontSize: 13,
+    color: '#ffffff',
+  },
+  optionCode: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontWeight: '600',
   },
   errorText: {
     color: '#f87171',
