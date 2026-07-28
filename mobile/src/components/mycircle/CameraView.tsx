@@ -7,9 +7,10 @@ import { FONT_JOST_SEMIBOLD } from '../../constants/fonts';
 
 interface CameraViewProps {
   onSuccess: () => void;
+  onCancel?: () => void;
 }
 
-export default function CameraViewScreen({ onSuccess }: CameraViewProps) {
+export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProps) {
   const [permission, requestPermission] = useCameraPermissions();
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -122,8 +123,8 @@ export default function CameraViewScreen({ onSuccess }: CameraViewProps) {
 
   if (capturedPhoto) {
     return (
-      <View style={styles.overlay}>
-        <View style={styles.modalCard}>
+      <Pressable style={styles.overlay} onPress={onCancel}>
+        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title}>Confirm Your Selfie</Text>
           <Text style={styles.subtitle}>
             Ensure your face is clearly visible, well-lit, and centered in the frame.
@@ -144,14 +145,14 @@ export default function CameraViewScreen({ onSuccess }: CameraViewProps) {
               </Pressable>
             </View>
           )}
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     );
   }
 
   return (
-    <View style={styles.overlay}>
-      <View style={styles.modalCard}>
+    <Pressable style={styles.overlay} onPress={onCancel}>
+      <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
         <Text style={styles.title}>Take a Live Selfie</Text>
         <Text style={styles.subtitle}>
           Look directly at the camera. Live selfie required for facial recognition.
@@ -169,8 +170,9 @@ export default function CameraViewScreen({ onSuccess }: CameraViewProps) {
         <Pressable style={styles.captureBtn} onPress={takePicture}>
           <View style={styles.captureInnerCircle} />
         </Pressable>
-      </View>
-    </View>
+        </Pressable>
+      </Pressable>
+    </Pressable>
   );
 }
 

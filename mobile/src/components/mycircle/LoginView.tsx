@@ -394,12 +394,12 @@ export default function LoginView({ onSuccess, startAnimation = true }: LoginVie
 
       {/* ── Step 1: Phone Onboarding Modal Overlay ── */}
       {step === 'phone' && (
-        <PhoneView onSuccess={handlePhoneComplete} />
+        <PhoneView onSuccess={handlePhoneComplete} onCancel={() => setStep('login')} />
       )}
 
       {/* ── Step 2: Selfie Onboarding Modal Overlay ── */}
       {step === 'selfie' && (
-        <CameraViewScreen onSuccess={handleSelfieComplete} />
+        <CameraViewScreen onSuccess={handleSelfieComplete} onCancel={() => setStep('login')} />
       )}
 
       {/* ── Default: Sign-In Buttons ── */}

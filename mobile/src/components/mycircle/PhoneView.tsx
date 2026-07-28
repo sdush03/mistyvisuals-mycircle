@@ -5,9 +5,10 @@ import api from '../../services/api';
 
 interface PhoneViewProps {
   onSuccess: () => void;
+  onCancel?: () => void;
 }
 
-export default function PhoneView({ onSuccess }: PhoneViewProps) {
+export default function PhoneView({ onSuccess, onCancel }: PhoneViewProps) {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -48,8 +49,8 @@ export default function PhoneView({ onSuccess }: PhoneViewProps) {
   };
 
   return (
-    <View style={styles.overlay}>
-      <View style={styles.modalCard}>
+    <Pressable style={styles.overlay} onPress={onCancel}>
+      <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
         <Text style={styles.title}>Enter Your Phone Number</Text>
         <Text style={styles.subtitle}>
           We will use this to notify you if additional photos of you are uploaded to the gallery.
@@ -81,8 +82,8 @@ export default function PhoneView({ onSuccess }: PhoneViewProps) {
             <Text style={styles.buttonText}>Continue</Text>
           )}
         </Pressable>
-      </View>
-    </View>
+      </Pressable>
+    </Pressable>
   );
 }
 
