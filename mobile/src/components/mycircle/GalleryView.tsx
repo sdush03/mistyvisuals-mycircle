@@ -974,6 +974,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           onGetBoundsForIndex={getBoundsForIndex}
           onToggleLike={handleToggleLike}
           likeTargetName="My Favourites"
+          enableDownload={true}
           onClose={() => {
             setActiveImageIndex(null);
             setSelectedBounds(null);

@@ -24,6 +24,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import * as MediaLibrary from 'expo-media-library';
+import { File, Paths } from 'expo-file-system';
+
 import { LightboxImageItem } from './components/LightboxImageItem';
 import { Image as ExpoImage } from 'expo-image';
 import { savesService } from '../../../services/savesService';
@@ -56,6 +59,7 @@ export interface EditorialLightboxProps {
   likeTargetName?: string;
   title?: string;
   subtitle?: string;
+  enableDownload?: boolean;
 }
 
 export function EditorialLightbox({
@@ -70,6 +74,7 @@ export function EditorialLightbox({
   likeTargetName,
   title = 'MISTY VISUALS',
   subtitle,
+  enableDownload = false,
 }: EditorialLightboxProps) {
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList>(null);
@@ -79,6 +84,7 @@ export function EditorialLightbox({
   const [isZoomed, setIsZoomed] = useState<boolean>(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [savedUrls, setSavedUrls] = useState<Set<string>>(new Set());
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
   // Universal Bounds & Animation Shared Values
   const expandProgress = useSharedValue(0);
@@ -340,6 +346,56 @@ export function EditorialLightbox({
     }
   };
 
+  const handleDownload = async () => {
+    if (!currentItem || isDownloading) return;
+    try {
+      setIsDownloading(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      const targetUri =
+        currentItem.fullUri ||
+        currentItem.r2Url ||
+        currentItem.r2_url ||
+        currentItem.file_url ||
+        currentItem.url ||
+        currentItem.photoUrl ||
+        currentItem.uri ||
+        currentUrl;
+
+      if (!targetUri) {
+        showToast('Download failed');
+        return;
+      }
+
+      showToast('Downloading photo...');
+
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        showToast('Permission required to save photo');
+        return;
+      }
+
+      const fileExt = targetUri.split('.').pop()?.split('?')[0] || 'jpg';
+      const cleanExt = fileExt.length > 4 ? 'jpg' : fileExt;
+      const targetFile = new File(Paths.cache, `mycircle_${Date.now()}.${cleanExt}`);
+
+      await File.downloadFileAsync(targetUri, targetFile);
+
+      if (targetFile.exists || targetFile.uri) {
+        await MediaLibrary.saveToLibraryAsync(targetFile.uri);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        showToast('Saved to Photos 📸');
+      } else {
+        showToast('Save failed');
+      }
+    } catch (err) {
+      console.warn('Download error:', err);
+      showToast('Save failed');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   // Universal hero expansion style calculated directly from thumbnail bounds
   const heroAnimatedStyle = useAnimatedStyle(() => {
     'worklet';
@@ -589,6 +645,20 @@ export function EditorialLightbox({
                         color={isSaved ? '#ef4444' : '#ffffff'}
                       />
                     </Pressable>
+
+                    {enableDownload && (
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.lightboxIconOnlyBtn,
+                          pressed && { opacity: 0.6 },
+                        ]}
+                        onPress={handleDownload}
+                        disabled={isDownloading}
+                        hitSlop={14}
+                      >
+                        <Feather name="download" size={19} color="#ffffff" />
+                      </Pressable>
+                    )}
 
                     <Pressable
                       style={({ pressed }) => [
