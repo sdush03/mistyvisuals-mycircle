@@ -93,17 +93,11 @@ module.exports = async function analyticsRoutes(fastify, opts) {
         orderBy: { impressions: 'desc' }
       });
 
-      // Pre-fetch all Qdrant vectors for this event ONCE for sub-second speed
-      const allEventFaces = await qdrant.getAllEventVectors(eventId).catch(() => []);
-
+      // Recalculate live matchCount from Qdrant for guests with saved selfie vectors
       const updatedGuests = await Promise.all(guests.map(async (g) => {
         let liveMatchCount = g.matchCount;
         let vector = g.selfieVector || g.circleUser?.selfieVector;
         const userId = g.circleUser?.id;
-
-        if (typeof vector === 'string') {
-          try { vector = JSON.parse(vector); } catch (e) {}
-        }
 
         // 1. Check user_${userId}.json fallback if DB is null
         if (!vector) {
@@ -163,29 +157,15 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           }
         }
 
-        if (typeof vector === 'string') {
-          try { vector = JSON.parse(vector); } catch (e) {}
-        }
-
-        if (vector && Array.isArray(vector) && allEventFaces.length > 0) {
+        if (vector) {
           try {
+            // Persist vector to DB if it wasn't already stored
             if (!g.selfieVector) {
               prisma.guest.update({ where: { id: g.id }, data: { selfieVector: vector } }).catch(() => {});
             }
-            const matchedPhotoIds = new Set();
-            for (const item of allEventFaces) {
-              if (item.vector && Array.isArray(item.vector)) {
-                let dotProduct = 0;
-                const len = Math.min(item.vector.length, vector.length);
-                for (let i = 0; i < len; i++) {
-                  dotProduct += item.vector[i] * vector[i];
-                }
-                if (dotProduct >= 0.35) {
-                  matchedPhotoIds.add(item.photoId);
-                }
-              }
-            }
-            liveMatchCount = matchedPhotoIds.size;
+            const matches = await qdrant.searchVectors(eventId, vector, 100000, 0.35);
+            liveMatchCount = new Set(matches.map(m => m.photo_id)).size;
+            // Persist updated matchCount to database asynchronously
             if (liveMatchCount !== g.matchCount) {
               prisma.guest.update({
                 where: { id: g.id },
