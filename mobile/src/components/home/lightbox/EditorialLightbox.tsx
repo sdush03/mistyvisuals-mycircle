@@ -360,60 +360,18 @@ export function EditorialLightbox({
         currentUrl;
 
       if (!targetUri) {
-        showToast('Download failed');
+        showToast('Download unavailable');
         return;
       }
 
-      showToast('Preparing download...');
-
-      let mediaLibraryModule: any = null;
-      try {
-        mediaLibraryModule = require('expo-media-library');
-      } catch (e) {
-        // Native module not linked in Expo Go / current dev build
-      }
-
-      if (mediaLibraryModule && mediaLibraryModule.requestPermissionsAsync) {
-        const { status } = await mediaLibraryModule.requestPermissionsAsync();
-        if (status === 'granted') {
-          let fileSystemModule: any = null;
-          try {
-            fileSystemModule = require('expo-file-system');
-          } catch (e) {}
-
-          let localUri = targetUri;
-          if (fileSystemModule && fileSystemModule.File && fileSystemModule.Paths) {
-            try {
-              const fileExt = targetUri.split('.').pop()?.split('?')[0] || 'jpg';
-              const cleanExt = fileExt.length > 4 ? 'jpg' : fileExt;
-              const targetFile = new fileSystemModule.File(
-                fileSystemModule.Paths.cache,
-                `mycircle_${Date.now()}.${cleanExt}`
-              );
-              await fileSystemModule.File.downloadFileAsync(targetUri, targetFile);
-              if (targetFile.uri) {
-                localUri = targetFile.uri;
-              }
-            } catch (dlErr) {
-              console.warn('File download cache failed, trying direct save:', dlErr);
-            }
-          }
-
-          await mediaLibraryModule.saveToLibraryAsync(localUri);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          showToast('Saved to Photos 📸');
-          return;
-        }
-      }
-
-      // Fallback if native MediaLibrary module is not compiled into current binary: use Share Sheet
       await Share.share({
         url: targetUri,
         title: title || 'Misty Visuals',
+        message: `Download photo: ${targetUri}`,
       });
     } catch (err) {
-      console.warn('Download error:', err);
-      showToast('Save failed');
+      console.warn('Download share error:', err);
+      showToast('Save unavailable');
     } finally {
       setIsDownloading(false);
     }
