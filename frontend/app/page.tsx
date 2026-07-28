@@ -560,50 +560,16 @@ export default function CirclePage() {
       <div style={{
         width: '100%',
         textAlign: 'center',
-        padding: '3.5rem 1.5rem 2.5rem 1.5rem',
+        padding: '4rem 1.5rem 2.5rem 1.5rem',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center'
       }}>
-        {/* Floating Pill Badge */}
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          padding: '0.4rem 1.1rem',
-          borderRadius: '100px',
-          border: '1px solid rgba(212, 175, 55, 0.35)',
-          background: 'linear-gradient(135deg, rgba(253, 251, 249, 0.9) 0%, rgba(247, 244, 238, 0.9) 100%)',
-          boxShadow: '0 4px 15px rgba(212, 175, 55, 0.08)',
-          marginBottom: '1.5rem'
-        }}>
-          <span style={{ fontSize: '0.75rem' }}>✨</span>
-          <span style={{
-            fontSize: '0.625rem',
-            fontWeight: 600,
-            letterSpacing: '0.22em',
-            textTransform: 'uppercase',
-            color: '#7a6a4d'
-          }}>
-            PRIVATE WEDDING MEMORIES • POWERED BY AI
-          </span>
-        </div>
-
-        <p style={{
-          fontSize: '0.6875rem',
-          fontWeight: 400,
-          letterSpacing: '0.28em',
-          textTransform: 'uppercase',
-          color: '#8c867e',
-          marginBottom: '0.75rem'
-        }}>
-          Memories by Misty Visuals
-        </p>
         <h1 style={{
           fontSize: 'clamp(2.2rem, 4.5vw, 3.8rem)',
           fontWeight: 300,
-          letterSpacing: '0.1em',
-          marginBottom: '1.25rem',
+          letterSpacing: '0.12em',
+          marginBottom: '1rem',
           lineHeight: 1.1,
           color: '#1c1a18'
         }}>
@@ -698,42 +664,39 @@ export default function CirclePage() {
             </button>
             {renderJoinCodeSection()}
 
-            {/* Mobile App Teaser Banner */}
+            {/* Mobile App Teaser Banner (Clean, Professional, No Emojis) */}
             <div style={{
               marginTop: '2.5rem',
-              padding: '1.25rem 2rem',
-              background: 'linear-gradient(135deg, rgba(253, 251, 249, 0.95) 0%, rgba(245, 242, 235, 0.95) 100%)',
-              border: '1px solid rgba(212, 175, 55, 0.3)',
-              borderRadius: '8px',
+              padding: '1.5rem 2rem',
+              background: '#fcfbfa',
+              border: '1px solid #e8e4de',
+              borderRadius: '6px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              gap: '1.25rem',
-              maxWidth: '540px',
+              justifyContent: 'space-between',
+              gap: '1.5rem',
+              maxWidth: '560px',
               width: '100%',
-              boxShadow: '0 8px 30px rgba(0, 0, 0, 0.03)',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)',
               flexWrap: 'wrap'
             }}>
-              <span style={{ fontSize: '1.75rem' }}>📱</span>
               <div style={{ textAlign: 'left', flex: 1, minWidth: '220px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                  <h4 style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 600, letterSpacing: '0.08em', color: '#1c1a18', textTransform: 'uppercase' }}>
-                    Native Mobile Apps Launching Soon!
-                  </h4>
-                </div>
-                <p style={{ margin: 0, fontSize: '0.75rem', color: '#7a746d', lineHeight: 1.45 }}>
-                  Experience instant 0ms AI face matching & offline galleries on iOS App Store & Android Google Play.
+                <h4 style={{ margin: 0, fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.12em', color: '#1c1a18', textTransform: 'uppercase', marginBottom: '0.35rem' }}>
+                  Native Mobile Apps Launching Soon
+                </h4>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: '#7a746d', lineHeight: 1.5 }}>
+                  Experience instant face matching & offline galleries on iOS App Store & Android Google Play.
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '0.4rem', opacity: 0.85 }}>
-                <span style={{ fontSize: '0.625rem', fontWeight: 600, letterSpacing: '0.1em', padding: '0.3rem 0.6rem', border: '1px solid #1c1a18', borderRadius: '3px', color: '#1c1a18' }}> iOS</span>
-                <span style={{ fontSize: '0.625rem', fontWeight: 600, letterSpacing: '0.1em', padding: '0.3rem 0.6rem', border: '1px solid #1c1a18', borderRadius: '3px', color: '#1c1a18' }}>🤖 Android</span>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.625rem', fontWeight: 600, letterSpacing: '0.12em', padding: '0.35rem 0.75rem', border: '1px solid #1c1a18', borderRadius: '3px', color: '#1c1a18', textTransform: 'uppercase' }}>iOS</span>
+                <span style={{ fontSize: '0.625rem', fontWeight: 600, letterSpacing: '0.12em', padding: '0.35rem 0.75rem', border: '1px solid #1c1a18', borderRadius: '3px', color: '#1c1a18', textTransform: 'uppercase' }}>Android</span>
               </div>
             </div>
 
-            {/* 3 Luxury Feature Highlights */}
+            {/* 3 Clean Feature Highlights (No Emojis) */}
             <div style={{
-              marginTop: '3.5rem',
+              marginTop: '3rem',
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
               gap: '1.5rem',
@@ -741,50 +704,47 @@ export default function CirclePage() {
               maxWidth: '900px'
             }}>
               <div style={{
-                padding: '1.5rem',
+                padding: '1.75rem 1.5rem',
                 border: '1px solid #f0ede8',
                 borderRadius: '6px',
                 background: '#ffffff',
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>📸</div>
-                <h4 style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#1c1a18', marginBottom: '0.5rem' }}>
-                  AI Face Match
+                <h4 style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#1c1a18', marginBottom: '0.65rem' }}>
+                  Face Matching
                 </h4>
-                <p style={{ fontSize: '0.8125rem', color: '#7a746d', lineHeight: 1.5, margin: 0 }}>
+                <p style={{ fontSize: '0.8125rem', color: '#7a746d', lineHeight: 1.55, margin: 0 }}>
                   Instant facial recognition pinpoints every wedding moment featuring you.
                 </p>
               </div>
 
               <div style={{
-                padding: '1.5rem',
+                padding: '1.75rem 1.5rem',
                 border: '1px solid #f0ede8',
                 borderRadius: '6px',
                 background: '#ffffff',
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>🔐</div>
-                <h4 style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#1c1a18', marginBottom: '0.5rem' }}>
+                <h4 style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#1c1a18', marginBottom: '0.65rem' }}>
                   Private & Encrypted
                 </h4>
-                <p style={{ fontSize: '0.8125rem', color: '#7a746d', lineHeight: 1.5, margin: 0 }}>
+                <p style={{ fontSize: '0.8125rem', color: '#7a746d', lineHeight: 1.55, margin: 0 }}>
                   Passcode-gated wedding celebrations curated exclusively for invited guests.
                 </p>
               </div>
 
               <div style={{
-                padding: '1.5rem',
+                padding: '1.75rem 1.5rem',
                 border: '1px solid #f0ede8',
                 borderRadius: '6px',
                 background: '#ffffff',
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>⚡</div>
-                <h4 style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#1c1a18', marginBottom: '0.5rem' }}>
-                  4K Quality
+                <h4 style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#1c1a18', marginBottom: '0.65rem' }}>
+                  Blazing Fast
                 </h4>
-                <p style={{ fontSize: '0.8125rem', color: '#7a746d', lineHeight: 1.5, margin: 0 }}>
-                  View & download full-resolution original high-quality wedding photography.
+                <p style={{ fontSize: '0.8125rem', color: '#7a746d', lineHeight: 1.55, margin: 0 }}>
+                  Ultra-low latency gallery viewing with instant-load pagination and pre-cached media.
                 </p>
               </div>
             </div>
