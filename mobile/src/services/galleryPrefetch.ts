@@ -7,6 +7,7 @@ export const prefetchEventGalleryData = async (eventSlug: string, passcode?: str
   try {
     const familyToken = useAuthStore.getState().token;
     let eventHeaders: Record<string, string> = {};
+    let hasFullAccess: boolean = true;
     try {
       const ssoRes = await api.post(
         `/api/gallery/public/events/${eventSlug}/auth-from-family`,
@@ -15,6 +16,9 @@ export const prefetchEventGalleryData = async (eventSlug: string, passcode?: str
       );
       if (ssoRes.data?.token) {
         eventHeaders = { Authorization: `Bearer ${ssoRes.data.token}` };
+        if (ssoRes.data?.guest && typeof ssoRes.data.guest.hasFullAccess === 'boolean') {
+          hasFullAccess = ssoRes.data.guest.hasFullAccess;
+        }
       } else if (familyToken) {
         eventHeaders = { Authorization: `Bearer ${familyToken}` };
       }
@@ -29,31 +33,6 @@ export const prefetchEventGalleryData = async (eventSlug: string, passcode?: str
       api.get(`/api/gallery/public/events/${eventSlug}`).catch(() => ({ data: null })),
       guestApi.get(`/api/gallery/public/events/${eventSlug}/photos?limit=60&offset=0`, { headers: eventHeaders }).catch(() => ({ data: [] })),
     ]);
-
-    const details = eventRes.data;
-    if (details) {
-      const cover = details.coverUrl || details.cover_url || details.bannerUrl;
-      if (cover) Image.prefetch(cover);
-
-      if (Array.isArray(details.tabs)) {
-        details.tabs.forEach(async (t: string) => {
-          if (!t || typeof t !== 'string') return;
-          try {
-            const tabRes = await guestApi.get(
-              `/api/gallery/public/events/${eventSlug}/photos?limit=60&tab=${encodeURIComponent(t)}`,
-              { headers: eventHeaders }
-            );
-            const tList = tabRes.data?.photos || (Array.isArray(tabRes.data) ? tabRes.data : []);
-            if (Array.isArray(tList)) {
-              tList.slice(0, 20).forEach((p: any) => {
-                const thumb = p.thumbnailUrl || p.thumbnail_url || p.r2Url || p.r2_url || p.file_url;
-                if (thumb) Image.prefetch(thumb);
-              });
-            }
-          } catch (e) {}
-        });
-      }
-    }
 
     const mapPhotoItem = (p: any) => {
       const thumbUri = p.thumbnailUrl || p.thumbnail_url || p.r2Url || p.r2_url || p.file_url_mobile || p.file_url || p.url || '';
@@ -72,6 +51,36 @@ export const prefetchEventGalleryData = async (eventSlug: string, passcode?: str
       };
     };
 
+    const details = eventRes.data;
+    const prefetchedTabCache: Record<string, any[]> = {};
+    if (details) {
+      const cover = details.coverUrl || details.cover_url || details.bannerUrl;
+      if (cover) Image.prefetch(cover);
+
+      if (Array.isArray(details.tabs)) {
+        await Promise.all(
+          details.tabs.map(async (t: string) => {
+            if (!t || typeof t !== 'string') return;
+            const norm = t.trim().toUpperCase();
+            try {
+              const tabRes = await guestApi.get(
+                `/api/gallery/public/events/${eventSlug}/photos?limit=60&tab=${encodeURIComponent(t)}`,
+                { headers: eventHeaders }
+              );
+              const tList = tabRes.data?.photos || (Array.isArray(tabRes.data) ? tabRes.data : []);
+              if (Array.isArray(tList) && tList.length > 0) {
+                const mappedTab = tList.map(mapPhotoItem);
+                prefetchedTabCache[norm] = mappedTab;
+                mappedTab.slice(0, 20).forEach((p: any) => {
+                  if (p.r2Url) Image.prefetch(p.r2Url);
+                });
+              }
+            } catch (e) {}
+          })
+        );
+      }
+    }
+
     const photosList = photosRes.data?.photos || (Array.isArray(photosRes.data) ? photosRes.data : []);
     const mappedPhotos = Array.isArray(photosList) ? photosList.map(mapPhotoItem) : [];
     const totalCount = typeof photosRes.data?.total === 'number' ? photosRes.data.total : mappedPhotos.length;
@@ -87,6 +96,8 @@ export const prefetchEventGalleryData = async (eventSlug: string, passcode?: str
       photos: mappedPhotos,
       headers: eventHeaders,
       total: totalCount,
+      hasFullAccess: hasFullAccess,
+      tabCache: prefetchedTabCache,
     });
   } catch (err) {
     console.warn('[MYCIRCLE PREFETCH ⚠️] Background prefetch error:', err);

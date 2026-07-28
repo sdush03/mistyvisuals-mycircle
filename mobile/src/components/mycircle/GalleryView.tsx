@@ -168,6 +168,8 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         if (cached.total !== undefined) setTotalAllPhotosCount(cached.total);
         if (cached.matched) setPhotos(cached.matched);
         if (cached.headers) eventHeadersRef.current = cached.headers;
+        if (typeof cached.hasFullAccess === 'boolean') setGuestAccessLevel(cached.hasFullAccess);
+        if (cached.tabCache) setTabCache(cached.tabCache);
         setIsLoading(false); // 0ms INSTANT OPEN ON FRAME 1!
       } else {
         setIsLoading(true);
@@ -293,6 +295,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           photos: mapped,
           headers: eventHeaders,
           total: total,
+          hasFullAccess: guestAccessLevel ?? true,
           matched: Array.isArray(matchedList) ? matchedList.map(mapPhotoItem) : [],
         });
 
@@ -392,7 +395,14 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
     fetchPhotos();
   }, [eventSlug]);
 
-  const [guestAccessLevel, setGuestAccessLevel] = useState<boolean | null>(null);
+  const [guestAccessLevel, setGuestAccessLevel] = useState<boolean | null>(() => {
+    if (!eventSlug) return null;
+    const cached = useAuthStore.getState().getGalleryCache(eventSlug);
+    if (cached && typeof cached.hasFullAccess === 'boolean') {
+      return cached.hasFullAccess;
+    }
+    return null;
+  });
   const hasFullAccess = guestAccessLevel ?? (profile?.hasFullAccess ?? false);
   const [tabCache, setTabCache] = useState<Record<string, Photo[]>>({});
   const [isTabLoading, setIsTabLoading] = useState(false);
@@ -424,7 +434,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
       }
       const eventHeaders = eventHeadersRef.current;
       const res = await guestApi.get(
-        `/api/gallery/public/events/${eventSlug}/photos?limit=1000&tab=${encodeURIComponent(tabName)}`,
+        `/api/gallery/public/events/${eventSlug}/photos?limit=60&tab=${encodeURIComponent(tabName)}`,
         { headers: eventHeaders }
       );
       const rawList = res.data.photos || (Array.isArray(res.data) ? res.data : []);
@@ -569,7 +579,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, [activeTab]);
+  }, []);
 
   // Shortest Column Height Balancing — EXACTLY matching FeaturedStoryView
   const { column0, column1 } = React.useMemo(() => {

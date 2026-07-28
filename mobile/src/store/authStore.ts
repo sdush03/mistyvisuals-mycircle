@@ -22,8 +22,10 @@ export interface GalleryCacheEntry {
   photos?: any[];
   headers?: any;
   total?: number;
+  hasFullAccess?: boolean;
   matched?: any[];
   favorites?: any[];
+  tabCache?: Record<string, any[]>;
   timestamp: number;
 }
 
