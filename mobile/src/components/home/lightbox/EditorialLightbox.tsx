@@ -24,9 +24,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import * as MediaLibrary from 'expo-media-library';
-import { File, Paths } from 'expo-file-system';
-
 import { LightboxImageItem } from './components/LightboxImageItem';
 import { Image as ExpoImage } from 'expo-image';
 import { savesService } from '../../../services/savesService';
@@ -367,27 +364,53 @@ export function EditorialLightbox({
         return;
       }
 
-      showToast('Downloading photo...');
+      showToast('Preparing download...');
 
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        showToast('Permission required to save photo');
-        return;
+      let mediaLibraryModule: any = null;
+      try {
+        mediaLibraryModule = require('expo-media-library');
+      } catch (e) {
+        // Native module not linked in Expo Go / current dev build
       }
 
-      const fileExt = targetUri.split('.').pop()?.split('?')[0] || 'jpg';
-      const cleanExt = fileExt.length > 4 ? 'jpg' : fileExt;
-      const targetFile = new File(Paths.cache, `mycircle_${Date.now()}.${cleanExt}`);
+      if (mediaLibraryModule && mediaLibraryModule.requestPermissionsAsync) {
+        const { status } = await mediaLibraryModule.requestPermissionsAsync();
+        if (status === 'granted') {
+          let fileSystemModule: any = null;
+          try {
+            fileSystemModule = require('expo-file-system');
+          } catch (e) {}
 
-      await File.downloadFileAsync(targetUri, targetFile);
+          let localUri = targetUri;
+          if (fileSystemModule && fileSystemModule.File && fileSystemModule.Paths) {
+            try {
+              const fileExt = targetUri.split('.').pop()?.split('?')[0] || 'jpg';
+              const cleanExt = fileExt.length > 4 ? 'jpg' : fileExt;
+              const targetFile = new fileSystemModule.File(
+                fileSystemModule.Paths.cache,
+                `mycircle_${Date.now()}.${cleanExt}`
+              );
+              await fileSystemModule.File.downloadFileAsync(targetUri, targetFile);
+              if (targetFile.uri) {
+                localUri = targetFile.uri;
+              }
+            } catch (dlErr) {
+              console.warn('File download cache failed, trying direct save:', dlErr);
+            }
+          }
 
-      if (targetFile.exists || targetFile.uri) {
-        await MediaLibrary.saveToLibraryAsync(targetFile.uri);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        showToast('Saved to Photos 📸');
-      } else {
-        showToast('Save failed');
+          await mediaLibraryModule.saveToLibraryAsync(localUri);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          showToast('Saved to Photos 📸');
+          return;
+        }
       }
+
+      // Fallback if native MediaLibrary module is not compiled into current binary: use Share Sheet
+      await Share.share({
+        url: targetUri,
+        title: title || 'Misty Visuals',
+      });
     } catch (err) {
       console.warn('Download error:', err);
       showToast('Save failed');
