@@ -44,14 +44,52 @@ export default function PhoneView({ onSuccess, onCancel }: PhoneViewProps) {
       return;
     }
 
+    // 1. India (+91): Exactly 10 digits, starts with 6, 7, 8, or 9
     if (cleanCode === '+91') {
       if (cleanDigits.length !== 10 || !/^[6-9]/.test(cleanDigits)) {
         setErrorMsg('Invalid Indian number (must be 10 digits starting with 6-9)');
         return;
       }
-    } else {
-      if (cleanDigits.length < 7 || cleanDigits.length > 14) {
-        setErrorMsg('Please enter a valid mobile number');
+    } 
+    // 2. USA / Canada (+1): Exactly 10 digits, area code starts with 2-9
+    else if (cleanCode === '+1') {
+      if (cleanDigits.length !== 10 || !/^[2-9]/.test(cleanDigits)) {
+        setErrorMsg('Invalid US/Canada number (must be 10 digits)');
+        return;
+      }
+    } 
+    // 3. UK (+44): 10 digits, mobile numbers start with 7
+    else if (cleanCode === '+44') {
+      if (cleanDigits.length !== 10 || !/^7/.test(cleanDigits)) {
+        setErrorMsg('Invalid UK mobile number (must be 10 digits starting with 7)');
+        return;
+      }
+    } 
+    // 4. UAE (+971): 9 digits, mobile numbers start with 5
+    else if (cleanCode === '+971') {
+      if (cleanDigits.length !== 9 || !/^5/.test(cleanDigits)) {
+        setErrorMsg('Invalid UAE mobile number (must be 9 digits starting with 5)');
+        return;
+      }
+    } 
+    // 5. Australia (+61): 9 digits, mobile numbers start with 4
+    else if (cleanCode === '+61') {
+      if (cleanDigits.length !== 9 || !/^4/.test(cleanDigits)) {
+        setErrorMsg('Invalid Australian mobile number (must be 9 digits starting with 4)');
+        return;
+      }
+    } 
+    // 6. Singapore (+65): 8 digits, mobile numbers start with 8 or 9
+    else if (cleanCode === '+65') {
+      if (cleanDigits.length !== 8 || !/^[89]/.test(cleanDigits)) {
+        setErrorMsg('Invalid Singapore mobile number (must be 8 digits starting with 8 or 9)');
+        return;
+      }
+    } 
+    // 7. All other international country codes (ITU E.164 standard: 6 to 14 digits)
+    else {
+      if (cleanDigits.length < 6 || cleanDigits.length > 14) {
+        setErrorMsg('Please enter a valid mobile number for this country code');
         return;
       }
     }
