@@ -84,12 +84,6 @@ export default function PhoneView({ onSuccess, onCancel }: PhoneViewProps) {
             <Text style={styles.buttonText}>Continue</Text>
           )}
         </Pressable>
-
-        {onCancel && (
-          <Pressable style={styles.backBtn} onPress={onCancel}>
-            <Text style={styles.backBtnText}>GO BACK</Text>
-          </Pressable>
-        )}
       </Pressable>
     </Pressable>
   );

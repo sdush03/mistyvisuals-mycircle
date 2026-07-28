@@ -44,11 +44,6 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
             <Pressable style={styles.button} onPress={() => Linking.openSettings()}>
               <Text style={styles.buttonText}>Open Settings</Text>
             </Pressable>
-            {onCancel && (
-              <Pressable style={styles.backBtn} onPress={onCancel}>
-                <Text style={styles.backBtnText}>GO BACK</Text>
-              </Pressable>
-            )}
           </Pressable>
         </Pressable>
       );
@@ -65,11 +60,6 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
           <Pressable style={styles.button} onPress={requestPermission}>
             <Text style={styles.buttonText}>Grant Permission</Text>
           </Pressable>
-          {onCancel && (
-            <Pressable style={styles.backBtn} onPress={onCancel}>
-              <Text style={styles.backBtnText}>GO BACK</Text>
-            </Pressable>
-          )}
         </Pressable>
       </Pressable>
     );
@@ -117,12 +107,6 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
           <Pressable style={styles.button} onPress={() => setShowIntro(false)}>
             <Text style={styles.buttonText}>Open Camera</Text>
           </Pressable>
-
-          {onCancel && (
-            <Pressable style={styles.backBtn} onPress={onCancel}>
-              <Text style={styles.backBtnText}>GO BACK</Text>
-            </Pressable>
-          )}
         </Pressable>
       </Pressable>
     );
