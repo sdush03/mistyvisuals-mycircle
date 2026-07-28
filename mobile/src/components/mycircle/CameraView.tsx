@@ -12,6 +12,7 @@ interface CameraViewProps {
 
 export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProps) {
   const [permission, requestPermission] = useCameraPermissions();
+  const [showIntro, setShowIntro] = useState(true);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const cameraRef = useRef<any>(null);
@@ -33,32 +34,97 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
   if (!permission.granted) {
     if (!permission.canAskAgain) {
       return (
-        <View style={styles.overlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.title}>Camera Access Blocked</Text>
+        <Pressable style={styles.overlay} onPress={onCancel}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.title}>CAMERA ACCESS BLOCKED</Text>
             <Text style={styles.subtitle}>
-              Camera permission was denied. To take your selfie, please enable camera access for this app in your device Settings.
+              Camera permission was denied. Please enable camera access for this app in your device Settings.
             </Text>
+            <View style={styles.divider} />
             <Pressable style={styles.button} onPress={() => Linking.openSettings()}>
               <Text style={styles.buttonText}>Open Settings</Text>
             </Pressable>
-          </View>
-        </View>
+            {onCancel && (
+              <Pressable style={styles.backBtn} onPress={onCancel}>
+                <Text style={styles.backBtnText}>GO BACK</Text>
+              </Pressable>
+            )}
+          </Pressable>
+        </Pressable>
       );
     }
 
     return (
-      <View style={styles.overlay}>
-        <View style={styles.modalCard}>
-          <Text style={styles.title}>Camera Access Required</Text>
+      <Pressable style={styles.overlay} onPress={onCancel}>
+        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+          <Text style={styles.title}>REGISTER YOUR FACE</Text>
           <Text style={styles.subtitle}>
-            We need access to your camera to take a live selfie for facial recognition photo matching.
+            We need camera access to take a live selfie for AI face matching.
           </Text>
+          <View style={styles.divider} />
           <Pressable style={styles.button} onPress={requestPermission}>
             <Text style={styles.buttonText}>Grant Permission</Text>
           </Pressable>
-        </View>
-      </View>
+          {onCancel && (
+            <Pressable style={styles.backBtn} onPress={onCancel}>
+              <Text style={styles.backBtnText}>GO BACK</Text>
+            </Pressable>
+          )}
+        </Pressable>
+      </Pressable>
+    );
+  }
+
+  // 1. Intro Step — Match Web Instructions Layout
+  if (showIntro) {
+    return (
+      <Pressable style={styles.overlay} onPress={onCancel}>
+        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+          <Text style={styles.title}>REGISTER YOUR FACE</Text>
+          <Text style={styles.subtitle}>
+            Misty Visuals uses AI face matching to instantly find your photos in the wedding gallery.
+          </Text>
+
+          <View style={styles.divider} />
+
+          {/* Guide Items */}
+          <View style={styles.guideContainer}>
+            <View style={styles.guideRow}>
+              <Text style={styles.guideIcon}>🕶️</Text>
+              <View style={styles.guideTextCol}>
+                <Text style={styles.guideTitle}>Remove Accessories</Text>
+                <Text style={styles.guideDesc}>Take off sunglasses, hats, or masks.</Text>
+              </View>
+            </View>
+
+            <View style={styles.guideRow}>
+              <Text style={styles.guideIcon}>💡</Text>
+              <View style={styles.guideTextCol}>
+                <Text style={styles.guideTitle}>Clear Lighting</Text>
+                <Text style={styles.guideDesc}>Ensure light faces you directly (avoid backlighting).</Text>
+              </View>
+            </View>
+
+            <View style={styles.guideRow}>
+              <Text style={styles.guideIcon}>😐</Text>
+              <View style={styles.guideTextCol}>
+                <Text style={styles.guideTitle}>Expression & Angle</Text>
+                <Text style={styles.guideDesc}>Look straight into the lens with a neutral face or light smile.</Text>
+              </View>
+            </View>
+          </View>
+
+          <Pressable style={styles.button} onPress={() => setShowIntro(false)}>
+            <Text style={styles.buttonText}>Open Camera</Text>
+          </Pressable>
+
+          {onCancel && (
+            <Pressable style={styles.backBtn} onPress={onCancel}>
+              <Text style={styles.backBtnText}>GO BACK</Text>
+            </Pressable>
+          )}
+        </Pressable>
+      </Pressable>
     );
   }
 
@@ -121,14 +187,17 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
     }
   };
 
+  // 2. Photo Confirmation Step
   if (capturedPhoto) {
     return (
       <Pressable style={styles.overlay} onPress={onCancel}>
         <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.title}>Confirm Your Selfie</Text>
+          <Text style={styles.title}>CONFIRM YOUR SELFIE</Text>
           <Text style={styles.subtitle}>
             Ensure your face is clearly visible, well-lit, and centered in the frame.
           </Text>
+
+          <View style={styles.divider} />
 
           <Image source={{ uri: capturedPhoto }} style={styles.previewImage} />
 
@@ -141,7 +210,7 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
               </Pressable>
 
               <Pressable style={styles.confirmBtn} onPress={uploadSelfie}>
-                <Text style={styles.confirmBtnText}>Use Photo</Text>
+                <Text style={styles.confirmBtnText}>Continue →</Text>
               </Pressable>
             </View>
           )}
@@ -150,13 +219,16 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
     );
   }
 
+  // 3. Live Camera Step
   return (
     <Pressable style={styles.overlay} onPress={onCancel}>
       <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-        <Text style={styles.title}>Take a Live Selfie</Text>
+        <Text style={styles.title}>TAKE A LIVE SELFIE</Text>
         <Text style={styles.subtitle}>
           Look directly at the camera. Live selfie required for facial recognition.
         </Text>
+
+        <View style={styles.divider} />
 
         <View style={styles.cameraContainer}>
           <CameraView
@@ -181,62 +253,95 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
   },
   modalCard: {
     width: '100%',
-    maxWidth: 380,
-    backgroundColor: '#18181b',
-    borderRadius: 16,
-    padding: 24,
+    maxWidth: 400,
+    backgroundColor: 'rgba(15, 15, 15, 0.85)',
+    borderRadius: 0,
+    paddingVertical: 36,
+    paddingHorizontal: 28,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.45,
+    shadowRadius: 40,
+    elevation: 20,
   },
   title: {
-    fontSize: 20,
+    fontSize: 18,
     color: '#ffffff',
-    fontWeight: '700',
-    marginBottom: 8,
+    fontWeight: '500',
+    marginBottom: 12,
     textAlign: 'center',
-    letterSpacing: 0.3,
+    letterSpacing: 2.5,
   },
   subtitle: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.65)',
+    fontSize: 12,
+    color: '#a3a3a3',
     textAlign: 'center',
     lineHeight: 18,
     marginBottom: 20,
-    paddingHorizontal: 5,
+  },
+  divider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    marginBottom: 20,
+  },
+  guideContainer: {
+    width: '100%',
+    gap: 18,
+    marginBottom: 28,
+  },
+  guideRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  guideIcon: {
+    fontSize: 18,
+    marginTop: -2,
+  },
+  guideTextCol: {
+    flex: 1,
+  },
+  guideTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 2,
+  },
+  guideDesc: {
+    fontSize: 11,
+    color: '#a3a3a3',
+    lineHeight: 15,
   },
   button: {
     width: '100%',
-    height: 48,
+    height: 46,
     backgroundColor: '#ffffff',
-    borderRadius: 8,
+    borderRadius: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,
   },
   buttonText: {
     color: '#000000',
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 2,
   },
   cameraContainer: {
     width: 220,
     height: 220,
     borderRadius: 110,
     overflow: 'hidden',
-    borderWidth: 3,
-    borderColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
     marginBottom: 24,
     backgroundColor: '#000000',
   },
@@ -244,27 +349,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   captureBtn: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    borderWidth: 3,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    borderWidth: 2,
     borderColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
   captureInnerCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: '#ffffff',
   },
   previewImage: {
     width: 220,
     height: 220,
     borderRadius: 110,
-    borderWidth: 3,
-    borderColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
     marginBottom: 24,
   },
   previewBtnContainer: {
@@ -275,33 +380,45 @@ const styles = StyleSheet.create({
   retakeBtn: {
     flex: 1,
     height: 46,
-    borderRadius: 8,
+    borderRadius: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   retakeBtnText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
   confirmBtn: {
-    flex: 1,
+    flex: 2,
     height: 46,
-    borderRadius: 8,
+    borderRadius: 0,
     backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
   },
   confirmBtnText: {
     color: '#000000',
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
+  },
+  backBtn: {
+    marginTop: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  backBtnText: {
+    fontSize: 11,
+    letterSpacing: 2,
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontWeight: '500',
   },
   loader: {
     marginVertical: 20,
