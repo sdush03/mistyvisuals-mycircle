@@ -110,10 +110,10 @@ export default function PhoneView({ onSuccess, onCancel }: PhoneViewProps) {
 
           <TextInput
             style={styles.inputField}
-            placeholder="10-digit number"
+            placeholder="Mobile number"
             placeholderTextColor="rgba(255, 255, 255, 0.35)"
             keyboardType="number-pad"
-            maxLength={10}
+            maxLength={15}
             value={phoneNumber}
             onChangeText={(text) => {
               setErrorMsg('');
