@@ -303,9 +303,50 @@ class QdrantService {
             }
           ]
         },
-        limit: limit,
+        limit: Math.min(limit, 10000),
         score_threshold: threshold
       });
+
+      // If Qdrant hit its 100-result search cap, scroll all vectors for this event to return uncapped matches
+      if (searchResult.length >= 100 && limit > 100) {
+        try {
+          const allPoints = [];
+          let offset = undefined;
+          do {
+            const scrollRes = await this.client.scroll(COLLECTION_NAME, {
+              filter: { must: [{ key: 'event_id', match: { value: eid } }] },
+              limit: 250,
+              offset,
+              with_vector: true,
+              with_payload: true
+            });
+            const points = scrollRes?.points || [];
+            allPoints.push(...points);
+            offset = scrollRes?.next_page_offset;
+          } while (offset);
+
+          if (allPoints.length > 0) {
+            const scored = [];
+            for (const pt of allPoints) {
+              if (pt.vector && Array.isArray(pt.vector)) {
+                let dotProduct = 0;
+                const len = Math.min(pt.vector.length, queryVector.length);
+                for (let i = 0; i < len; i++) {
+                  dotProduct += pt.vector[i] * queryVector[i];
+                }
+                if (dotProduct >= threshold) {
+                  scored.push({ photo_id: pt.payload.photo_id, score: dotProduct });
+                }
+              }
+            }
+            if (scored.length > searchResult.length) {
+              return scored.sort((a, b) => b.score - a.score).slice(0, limit);
+            }
+          }
+        } catch (scrollErr) {
+          console.warn('[Qdrant] Uncapped scroll fallback warning:', scrollErr.message);
+        }
+      }
 
       return searchResult.map(hit => ({
         photo_id: hit.payload.photo_id,
