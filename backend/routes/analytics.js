@@ -85,8 +85,9 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           matchCount: true,
           downloadCount: true,
           selfieVector: true,
+          selfieUrl: true,
           circleUser: {
-            select: { id: true, selfieVector: true }
+            select: { id: true, selfieVector: true, selfieUrl: true }
           }
         },
         orderBy: { impressions: 'desc' }
@@ -114,7 +115,33 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           }
         }
 
-        // 3. Image extraction fallback
+        // 3. Image extraction fallback (R2 Cloud URL or Local File)
+        if (!vector) {
+          const selfieUrl = g.selfieUrl || g.circleUser?.selfieUrl;
+          if (selfieUrl && selfieUrl.startsWith('http')) {
+            try {
+              const fetchRes = await fetch(selfieUrl);
+              if (fetchRes.ok) {
+                const arrayBuffer = await fetchRes.arrayBuffer();
+                const buffer = Buffer.from(arrayBuffer);
+                const tempDir = path.join(__dirname, '..', 'uploads', 'photos', 'selfies');
+                if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+                const tempPath = path.join(tempDir, `temp_analytics_${g.id}_${Date.now()}.jpg`);
+                fs.writeFileSync(tempPath, buffer);
+                const res = await faceRecManager.validateSelfie(tempPath);
+                if (res && res.success && res.vector) {
+                  vector = res.vector;
+                  if (userId) {
+                    prisma.circleUser.update({ where: { id: userId }, data: { selfieVector: vector } }).catch(() => {});
+                  }
+                  prisma.guest.update({ where: { id: g.id }, data: { selfieVector: vector } }).catch(() => {});
+                }
+                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+              }
+            } catch (e) {}
+          }
+        }
+
         if (!vector) {
           let imgPath = userId ? path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.jpg`) : null;
           if (!imgPath || !fs.existsSync(imgPath)) {
