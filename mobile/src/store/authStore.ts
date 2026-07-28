@@ -60,13 +60,39 @@ const prefetchEventGalleryData = async (eventSlug: string, passcode?: string | n
       }
     }
 
+    const mapPhotoItem = (p: any) => {
+      const thumbUri = p.thumbnailUrl || p.thumbnail_url || p.r2Url || p.r2_url || p.file_url_mobile || p.file_url || p.url || '';
+      const fullUri = p.r2Url || p.r2_url || p.file_url || p.url || thumbUri;
+      return {
+        id: p.id,
+        r2Url: thumbUri,
+        uri: thumbUri,
+        fullUri: fullUri,
+        photoUrl: fullUri,
+        width: p.width,
+        height: p.height,
+        tabName: p.tabName || p.tab_name || null,
+        isLiked: typeof p.isLiked === 'boolean' ? p.isLiked : !!(p.likes && p.likes.length > 0),
+        likeCount: typeof p.likeCount === 'number' ? p.likeCount : (typeof p.likesCount === 'number' ? p.likesCount : (p._count?.likes || 0)),
+      };
+    };
+
     const photosList = photosRes.data?.photos || (Array.isArray(photosRes.data) ? photosRes.data : []);
-    if (Array.isArray(photosList) && photosList.length > 0) {
-      photosList.slice(0, 30).forEach((p: any) => {
-        const thumb = p.thumbnailUrl || p.thumbnail_url || p.r2Url || p.r2_url || p.file_url;
-        if (thumb) Image.prefetch(thumb);
+    const mappedPhotos = Array.isArray(photosList) ? photosList.map(mapPhotoItem) : [];
+    const totalCount = typeof photosRes.data?.total === 'number' ? photosRes.data.total : mappedPhotos.length;
+
+    if (mappedPhotos.length > 0) {
+      mappedPhotos.slice(0, 30).forEach((p: any) => {
+        if (p.r2Url) Image.prefetch(p.r2Url);
       });
     }
+
+    useAuthStore.getState().setGalleryCache(eventSlug, {
+      details: details || undefined,
+      photos: mappedPhotos,
+      headers: eventHeaders,
+      total: totalCount,
+    });
   } catch (err) {
     console.warn('[MYCIRCLE PREFETCH ⚠️] Background prefetch error:', err);
   }
@@ -84,6 +110,16 @@ export interface GuestProfile {
   hasFullAccess?: boolean;
 }
 
+export interface GalleryCacheEntry {
+  details?: any;
+  photos?: any[];
+  headers?: any;
+  total?: number;
+  matched?: any[];
+  favorites?: any[];
+  timestamp: number;
+}
+
 interface AuthState {
   token: string | null;
   profile: GuestProfile | null;
@@ -94,8 +130,11 @@ interface AuthState {
   eventCoverUrl: string | null;
   eventTitle: string | null;
   isTabBarCollapsed: boolean;
+  galleryCache: Record<string, GalleryCacheEntry>;
   setTabBarCollapsed: (collapsed: boolean) => void;
   setUserEvents: (events: any[]) => void;
+  setGalleryCache: (eventSlug: string, data: Partial<GalleryCacheEntry>) => void;
+  getGalleryCache: (eventSlug: string) => GalleryCacheEntry | null;
   
   setAuth: (token: string, profile: GuestProfile, userEvents?: any[]) => Promise<void>;
   updateProfile: (profile: Partial<GuestProfile>) => Promise<void>;
@@ -114,9 +153,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   eventCoverUrl: null,
   eventTitle: null,
   isTabBarCollapsed: false,
+  galleryCache: {},
   
   setTabBarCollapsed: (collapsed) => set({ isTabBarCollapsed: collapsed }),
   setUserEvents: (events) => set({ userEvents: events }),
+  setGalleryCache: (eventSlug, data) => {
+    if (!eventSlug) return;
+    const current = get().galleryCache[eventSlug] || { timestamp: Date.now() };
+    set((state) => ({
+      galleryCache: {
+        ...state.galleryCache,
+        [eventSlug]: {
+          ...current,
+          ...data,
+          timestamp: Date.now(),
+        },
+      },
+    }));
+  },
+  getGalleryCache: (eventSlug) => {
+    if (!eventSlug) return null;
+    return get().galleryCache[eventSlug] || null;
+  },
 
   setAuth: async (token, profile, userEvents = []) => {
     try {

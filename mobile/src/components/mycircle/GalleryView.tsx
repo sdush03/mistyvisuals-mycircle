@@ -156,13 +156,26 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
 
   const fetchPhotos = async () => {
     try {
-      setIsLoading(true);
-      setAllPhotos([]);
-      setAllPhotosOffset(0);
-      setHasMorePhotos(true);
-      setTotalAllPhotosCount(null);
-
       if (!eventSlug) return;
+
+      // 0. Check Stale-While-Revalidate (SWR) cache for 0ms instant gallery launch
+      const cached = useAuthStore.getState().getGalleryCache(eventSlug);
+      if (cached && cached.photos && cached.photos.length > 0) {
+        setAllPhotos(cached.photos);
+        allPhotosOffsetRef.current = cached.photos.length;
+        setAllPhotosOffset(cached.photos.length);
+        if (cached.details) setEventDetailsData(cached.details);
+        if (cached.total !== undefined) setTotalAllPhotosCount(cached.total);
+        if (cached.matched) setPhotos(cached.matched);
+        if (cached.headers) eventHeadersRef.current = cached.headers;
+        setIsLoading(false); // 0ms INSTANT OPEN ON FRAME 1!
+      } else {
+        setIsLoading(true);
+        setAllPhotos([]);
+        setAllPhotosOffset(0);
+        setHasMorePhotos(true);
+        setTotalAllPhotosCount(null);
+      }
 
       // Fetch event metadata for cover screen
       try {
@@ -269,6 +282,14 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         setAllPhotosOffset(mapped.length);
         const hasMore = mapped.length < total;
         setHasMorePhotos(hasMore);
+
+        useAuthStore.getState().setGalleryCache(eventSlug, {
+          details: eventDetails || undefined,
+          photos: mapped,
+          headers: eventHeaders,
+          total: total,
+          matched: Array.isArray(matchedList) ? matchedList.map(mapPhotoItem) : [],
+        });
 
         console.log(`[MYCIRCLE DEBUG ✅] Initial Fetch Done in ${fetchDuration}ms | Loaded: ${mapped.length} / ${total} photos | HasMore: ${hasMore}`);
 
