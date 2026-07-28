@@ -67,27 +67,29 @@ export default function CirclePage() {
       <div style={{
         marginTop: '2rem',
         width: '100%',
-        maxWidth: '340px',
+        maxWidth: '380px',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: '0.75rem',
-        padding: '1.5rem',
-        border: '1px solid #f0ede8',
-        background: '#fcfbfa'
+        gap: '0.85rem',
+        padding: '1.75rem',
+        borderRadius: '6px',
+        border: '1px solid #e8e4de',
+        background: 'linear-gradient(180deg, #fdfbf9 0%, #f7f4ee 100%)',
+        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.03)'
       }}>
         <p style={{
           fontFamily: 'Montserrat, system-ui, sans-serif',
           fontSize: '0.6875rem',
           fontWeight: 600,
-          color: '#8c867e',
-          letterSpacing: '0.15em',
+          color: '#7a746d',
+          letterSpacing: '0.18em',
           textTransform: 'uppercase',
           margin: 0
         }}>
           Have an invite code?
         </p>
-        <div style={{ display: 'flex', width: '100%', border: '1px solid #1c1a18', height: '42px', background: '#ffffff' }}>
+        <div style={{ display: 'flex', width: '100%', border: '1px solid #1c1a18', borderRadius: '3px', overflow: 'hidden', height: '44px', background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
           <input 
             type="text"
             placeholder="ENTER 6-CHAR CODE"
@@ -97,6 +99,7 @@ export default function CirclePage() {
               flex: 1,
               fontFamily: 'Montserrat, system-ui, sans-serif',
               fontSize: '0.8125rem',
+              fontWeight: 500,
               padding: '0 0.75rem',
               border: 'none',
               outline: 'none',
@@ -113,15 +116,15 @@ export default function CirclePage() {
             style={{
               fontFamily: 'Montserrat, system-ui, sans-serif',
               fontSize: '0.6875rem',
-              fontWeight: 500,
+              fontWeight: 600,
               color: '#ffffff',
               backgroundColor: '#1c1a18',
-              letterSpacing: '0.1em',
+              letterSpacing: '0.12em',
               textTransform: 'uppercase',
-              padding: '0 1.25rem',
+              padding: '0 1.35rem',
               border: 'none',
               cursor: inviteCodeInput.length !== 6 ? 'default' : 'pointer',
-              transition: 'opacity 0.2s',
+              transition: 'all 0.2s',
               opacity: inviteCodeInput.length !== 6 ? 0.4 : 1,
               height: '100%',
               display: 'flex',
@@ -133,12 +136,12 @@ export default function CirclePage() {
           </button>
         </div>
         {joinCodeError && (
-          <p style={{ color: '#c53030', fontSize: '0.75rem', margin: '0.25rem 0 0 0', textAlign: 'center', fontFamily: 'Montserrat, sans-serif' }}>
+          <p style={{ color: '#c53030', fontSize: '0.75rem', margin: 0, textAlign: 'center' }}>
             {joinCodeError}
           </p>
         )}
       </div>
-    )
+    );
   }
 
   // Helper to fetch selfie image with auth and return a blob URL
@@ -557,24 +560,50 @@ export default function CirclePage() {
       <div style={{
         width: '100%',
         textAlign: 'center',
-        padding: '5rem 1.5rem 3rem 1.5rem',
-        borderBottom: token ? '1px solid #f5f5f5' : 'none'
+        padding: '3.5rem 1.5rem 2.5rem 1.5rem',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center'
       }}>
+        {/* Floating Pill Badge */}
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          padding: '0.4rem 1.1rem',
+          borderRadius: '100px',
+          border: '1px solid rgba(212, 175, 55, 0.35)',
+          background: 'linear-gradient(135deg, rgba(253, 251, 249, 0.9) 0%, rgba(247, 244, 238, 0.9) 100%)',
+          boxShadow: '0 4px 15px rgba(212, 175, 55, 0.08)',
+          marginBottom: '1.5rem'
+        }}>
+          <span style={{ fontSize: '0.75rem' }}>✨</span>
+          <span style={{
+            fontSize: '0.625rem',
+            fontWeight: 600,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+            color: '#7a6a4d'
+          }}>
+            PRIVATE WEDDING MEMORIES • POWERED BY AI
+          </span>
+        </div>
+
         <p style={{
           fontSize: '0.6875rem',
           fontWeight: 400,
-          letterSpacing: '0.25em',
+          letterSpacing: '0.28em',
           textTransform: 'uppercase',
           color: '#8c867e',
-          marginBottom: '1rem'
+          marginBottom: '0.75rem'
         }}>
           Memories by Misty Visuals
         </p>
         <h1 style={{
-          fontSize: 'clamp(2rem, 4vw, 3.5rem)',
+          fontSize: 'clamp(2.2rem, 4.5vw, 3.8rem)',
           fontWeight: 300,
-          letterSpacing: '0.12em',
-          marginBottom: '1rem',
+          letterSpacing: '0.1em',
+          marginBottom: '1.25rem',
           lineHeight: 1.1,
           color: '#1c1a18'
         }}>
@@ -582,11 +611,11 @@ export default function CirclePage() {
         </h1>
         <p style={{
           fontFamily: 'Cormorant Garamond, serif',
-          fontSize: 'clamp(1rem, 1.3vw, 1.2rem)',
+          fontSize: 'clamp(1.05rem, 1.4vw, 1.3rem)',
           fontWeight: 300,
           fontStyle: 'italic',
           color: '#4a4540',
-          maxWidth: '600px',
+          maxWidth: '620px',
           margin: '0 auto',
           lineHeight: 1.6
         }}>
@@ -601,7 +630,7 @@ export default function CirclePage() {
       <main style={{
         width: '100%',
         maxWidth: '1200px',
-        padding: '2rem',
+        padding: '0 2rem 2rem 2rem',
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
@@ -636,35 +665,129 @@ export default function CirclePage() {
           </div>
         ) : !token ? (
           /* Elegant, minimalist Unlock CTA matching the wedding gallery */
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '2rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '1rem', width: '100%' }}>
             <button 
               onClick={() => setShowLoginModal(true)}
               style={{
                 fontFamily: 'Montserrat, system-ui, sans-serif',
                 fontSize: '0.75rem',
-                fontWeight: 500,
-                color: '#1c1a18',
-                letterSpacing: '0.2em',
+                fontWeight: 600,
+                color: '#ffffff',
+                letterSpacing: '0.22em',
                 textTransform: 'uppercase',
                 border: '1px solid #1c1a18',
-                borderRadius: '0px',
-                padding: '1rem 2.5rem',
-                backgroundColor: 'transparent',
+                borderRadius: '4px',
+                padding: '1.1rem 3.2rem',
+                backgroundColor: '#1c1a18',
                 cursor: 'pointer',
-                transition: 'all 0.3s'
+                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                boxShadow: '0 8px 25px rgba(28, 26, 24, 0.18)'
               }}
               onMouseOver={(e) => {
-                e.currentTarget.style.backgroundColor = '#1c1a18'
-                e.currentTarget.style.color = '#ffffff'
+                e.currentTarget.style.backgroundColor = '#33302c'
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 12px 30px rgba(28, 26, 24, 0.28)'
               }}
               onMouseOut={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent'
-                e.currentTarget.style.color = '#1c1a18'
+                e.currentTarget.style.backgroundColor = '#1c1a18'
+                e.currentTarget.style.transform = 'translateY(0px)'
+                e.currentTarget.style.boxShadow = '0 8px 25px rgba(28, 26, 24, 0.18)'
               }}
             >
               Unlock My Circle
             </button>
             {renderJoinCodeSection()}
+
+            {/* Mobile App Teaser Banner */}
+            <div style={{
+              marginTop: '2.5rem',
+              padding: '1.25rem 2rem',
+              background: 'linear-gradient(135deg, rgba(253, 251, 249, 0.95) 0%, rgba(245, 242, 235, 0.95) 100%)',
+              border: '1px solid rgba(212, 175, 55, 0.3)',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '1.25rem',
+              maxWidth: '540px',
+              width: '100%',
+              boxShadow: '0 8px 30px rgba(0, 0, 0, 0.03)',
+              flexWrap: 'wrap'
+            }}>
+              <span style={{ fontSize: '1.75rem' }}>📱</span>
+              <div style={{ textAlign: 'left', flex: 1, minWidth: '220px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 600, letterSpacing: '0.08em', color: '#1c1a18', textTransform: 'uppercase' }}>
+                    Native Mobile Apps Launching Soon!
+                  </h4>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: '#7a746d', lineHeight: 1.45 }}>
+                  Experience instant 0ms AI face matching & offline galleries on iOS App Store & Android Google Play.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem', opacity: 0.85 }}>
+                <span style={{ fontSize: '0.625rem', fontWeight: 600, letterSpacing: '0.1em', padding: '0.3rem 0.6rem', border: '1px solid #1c1a18', borderRadius: '3px', color: '#1c1a18' }}> iOS</span>
+                <span style={{ fontSize: '0.625rem', fontWeight: 600, letterSpacing: '0.1em', padding: '0.3rem 0.6rem', border: '1px solid #1c1a18', borderRadius: '3px', color: '#1c1a18' }}>🤖 Android</span>
+              </div>
+            </div>
+
+            {/* 3 Luxury Feature Highlights */}
+            <div style={{
+              marginTop: '3.5rem',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: '1.5rem',
+              width: '100%',
+              maxWidth: '900px'
+            }}>
+              <div style={{
+                padding: '1.5rem',
+                border: '1px solid #f0ede8',
+                borderRadius: '6px',
+                background: '#ffffff',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>📸</div>
+                <h4 style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#1c1a18', marginBottom: '0.5rem' }}>
+                  AI Face Match
+                </h4>
+                <p style={{ fontSize: '0.8125rem', color: '#7a746d', lineHeight: 1.5, margin: 0 }}>
+                  Instant facial recognition pinpoints every wedding moment featuring you.
+                </p>
+              </div>
+
+              <div style={{
+                padding: '1.5rem',
+                border: '1px solid #f0ede8',
+                borderRadius: '6px',
+                background: '#ffffff',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>🔐</div>
+                <h4 style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#1c1a18', marginBottom: '0.5rem' }}>
+                  Private & Encrypted
+                </h4>
+                <p style={{ fontSize: '0.8125rem', color: '#7a746d', lineHeight: 1.5, margin: 0 }}>
+                  Passcode-gated wedding celebrations curated exclusively for invited guests.
+                </p>
+              </div>
+
+              <div style={{
+                padding: '1.5rem',
+                border: '1px solid #f0ede8',
+                borderRadius: '6px',
+                background: '#ffffff',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>⚡</div>
+                <h4 style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#1c1a18', marginBottom: '0.5rem' }}>
+                  4K Quality
+                </h4>
+                <p style={{ fontSize: '0.8125rem', color: '#7a746d', lineHeight: 1.5, margin: 0 }}>
+                  View & download full-resolution original high-quality wedding photography.
+                </p>
+              </div>
+            </div>
           </div>
         ) : (
           /* Logged In Dashboard styling */
