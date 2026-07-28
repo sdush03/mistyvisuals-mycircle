@@ -247,7 +247,7 @@ class QdrantService {
     }
   }
 
-  async searchVectors(eventId, queryVector, limit = 50, threshold = 0.40) {
+  async searchVectors(eventId, queryVector, limit = 100000, threshold = 0.40) {
     const eid = parseInt(eventId, 10);
 
     if (this.isMock) {

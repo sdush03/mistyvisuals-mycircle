@@ -2339,11 +2339,11 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       } else {
         // Query matching vectors directly from Qdrant!
-        const mainMatches = await qdrant.searchVectors(eventId, anchorVector, 100, 0.35);
+        const mainMatches = await qdrant.searchVectors(eventId, anchorVector, 100000, 0.35);
         const photoIdsSet = new Set(mainMatches.map(m => m.photo_id));
         
         for (const extraVec of extraVectors) {
-          const extraMatches = await qdrant.searchVectors(eventId, extraVec, 100, 0.35);
+          const extraMatches = await qdrant.searchVectors(eventId, extraVec, 100000, 0.35);
           extraMatches.forEach(m => photoIdsSet.add(m.photo_id));
         }
         photoIds = Array.from(photoIdsSet);
@@ -2499,11 +2499,11 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       } else {
         // Query matching vectors directly from Qdrant!
-        const mainMatches = await qdrant.searchVectors(eventId, anchorVector, 100, 0.35);
+        const mainMatches = await qdrant.searchVectors(eventId, anchorVector, 100000, 0.35);
         const photoIdsSet = new Set(mainMatches.map(m => m.photo_id));
         
         for (const extraVec of extraVectors) {
-          const extraMatches = await qdrant.searchVectors(eventId, extraVec, 100, 0.35);
+          const extraMatches = await qdrant.searchVectors(eventId, extraVec, 100000, 0.35);
           extraMatches.forEach(m => photoIdsSet.add(m.photo_id));
         }
         photoIds = Array.from(photoIdsSet);
@@ -2673,11 +2673,11 @@ module.exports = async function galleryRoutes(fastify, opts) {
             }
 
             const extraVectors = guestAnchors[guestKey].extraVectors || [];
-            const mainMatches = await qdrant.searchVectors(eventId, res.vector, 100, 0.35);
+            const mainMatches = await qdrant.searchVectors(eventId, res.vector, 100000, 0.35);
             const photoIdsSet = new Set(mainMatches.map(m => m.photo_id));
             
             for (const extraVec of extraVectors) {
-              const extraMatches = await qdrant.searchVectors(eventId, extraVec, 100, 0.35);
+              const extraMatches = await qdrant.searchVectors(eventId, extraVec, 100000, 0.35);
               extraMatches.forEach(m => photoIdsSet.add(m.photo_id));
             }
             photoIds = Array.from(photoIdsSet);
@@ -3055,7 +3055,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
               }
             } else {
               // Real Qdrant: use searchVectors — same params as the actual gallery matched-photos endpoint
-              const mainMatches = await qdrant.searchVectors(event.id, anchorVector, 100, 0.35);
+              const mainMatches = await qdrant.searchVectors(event.id, anchorVector, 100000, 0.35);
               const matchedPhotoIds = new Set(mainMatches.map(m => m.photo_id));
               matchedCount = matchedPhotoIds.size;
             }
