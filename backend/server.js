@@ -423,6 +423,10 @@ fastify.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
     .then(() => console.log('[FaceRec] Daemon pre-warmed and ready.'))
     .catch(err => console.warn('[FaceRec] Daemon pre-warm failed (will retry on first request):', err?.message || err))
 
+  // Auto-sync past selfies to Cloudflare R2 on boot if R2 is enabled
+  const { syncPastSelfiesToR2 } = require('./scripts/sync_past_selfies_to_r2');
+  syncPastSelfiesToR2().catch(err => console.warn('[R2 Sync] Startup selfie sync skipped/failed:', err?.message || err));
+
   // Admin-only background jobs (metrics, smart notifications, Facebook leads polling)
   // are disabled on the MyCircle guest portal backend. They are handled by the main OS server.
   /*
