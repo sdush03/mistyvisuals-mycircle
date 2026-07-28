@@ -170,7 +170,6 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
         <Pressable style={styles.captureBtn} onPress={takePicture}>
           <View style={styles.captureInnerCircle} />
         </Pressable>
-        </Pressable>
       </Pressable>
     </Pressable>
   );
