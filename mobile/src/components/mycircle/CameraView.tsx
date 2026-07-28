@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { StyleSheet, View, Text, Pressable, ActivityIndicator, Alert, Image, Linking } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useAuthStore } from '../../store/authStore';
-import api from '../../services/api';
+import api, { API_BASE_URL } from '../../services/api';
 import { FONT_JOST_SEMIBOLD } from '../../constants/fonts';
 
 interface CameraViewProps {
@@ -119,11 +119,10 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
       try {
         const photo = await cameraRef.current.takePictureAsync({
           quality: 0.8,
-          mirror: false,
         });
         if (photo && photo.uri) {
           setCapturedPhoto(photo.uri);
-          validatePhoto(photo.uri);
+          verifySelfie(photo.uri);
         }
       } catch (err) {
         console.error('Failed to take picture', err);
@@ -132,45 +131,15 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
     }
   };
 
-  const validatePhoto = async (photoUri: string) => {
-    setValidationStatus('verifying');
-    setSelfieError('');
-
-    try {
-      const formData = new FormData();
-      formData.append('file', {
-        uri: photoUri,
-        name: 'selfie.jpg',
-        type: 'image/jpeg',
-      } as any);
-
-      await api.post('/api/gallery/public/validate-face', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      setValidationStatus('accepted');
-      setSelfieError('');
-    } catch (err: any) {
-      const msg = err.response?.data?.error || err.message || 'Verification failed. Please retake the photo.';
-      setValidationStatus('rejected');
-      setSelfieError(msg);
-    }
-  };
-
-  const uploadSelfie = async () => {
+  const verifySelfie = async (photoUri: string) => {
     try {
       setIsUploading(true);
+      setValidationStatus('verifying');
+      setSelfieError('');
 
-      if (!capturedPhoto || validationStatus !== 'accepted') {
-        Alert.alert('Selfie Not Verified', 'Please take a valid selfie before continuing.');
-        return;
-      }
-      
       const formData = new FormData();
       formData.append('selfie', {
-        uri: capturedPhoto,
+        uri: photoUri,
         name: 'selfie.jpg',
         type: 'image/jpeg',
       } as any);
@@ -184,18 +153,30 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
         formData.append('name', profile?.name || '');
       }
 
-      await api.post(uploadUrl, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+      const token = useAuthStore.getState().token;
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const uploadRes = await fetch(`${API_BASE_URL}${uploadUrl}`, {
+        method: 'POST',
+        headers,
+        body: formData,
       });
 
+      const data = await uploadRes.json();
+      if (!uploadRes.ok) {
+        throw new Error(data.error || 'Selfie verification failed. Please try taking another photo.');
+      }
+
       await updateProfile({ hasSelfie: true });
-      onSuccess();
+      setValidationStatus('accepted');
+      setSelfieError('');
     } catch (err: any) {
-      console.error(err);
-      const msg = err.response?.data?.error || 'Selfie verification failed. Please try taking another photo.';
-      Alert.alert('Verification Failed', msg);
+      const msg = err.message || 'Selfie verification failed. Please ensure your face is clearly visible.';
       setValidationStatus('rejected');
       setSelfieError(msg);
     } finally {
@@ -226,13 +207,7 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
           {/* Status Feedback Banners (Matching Web) */}
           {validationStatus === 'verifying' && (
             <View style={styles.verifyingBanner}>
-              <Text style={styles.verifyingText}>⏳ Verifying selfie quality...</Text>
-            </View>
-          )}
-
-          {validationStatus === 'accepted' && (
-            <View style={styles.acceptedBanner}>
-              <Text style={styles.acceptedText}>✅ Selfie Accepted! You look optimal.</Text>
+              <Text style={styles.verifyingText}>⏳ Verifying selfie with AI...</Text>
             </View>
           )}
 
@@ -258,7 +233,7 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
                     <Text style={styles.retakeBtnText}>Retake</Text>
                   </Pressable>
 
-                  <Pressable style={styles.confirmBtn} onPress={uploadSelfie}>
+                  <Pressable style={styles.confirmBtn} onPress={onSuccess}>
                     <Text style={styles.confirmBtnText}>Continue →</Text>
                   </Pressable>
                 </>
@@ -428,6 +403,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     marginBottom: 24,
+    transform: [{ scaleX: -1 }],
   },
   previewBtnContainer: {
     flexDirection: 'row',

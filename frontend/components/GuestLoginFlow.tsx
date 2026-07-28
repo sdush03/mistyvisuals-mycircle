@@ -65,6 +65,9 @@ export function GuestLoginFlow({
 
   const [verifyingCircle, setVerifyingCircle] = useState(false)
 
+  const [googleLoaded, setGoogleLoaded] = useState(false)
+  const googleButtonContainerRef = useRef<HTMLDivElement>(null)
+
 
   useEffect(() => {
     if (inviteCode) {
@@ -129,62 +132,59 @@ export function GuestLoginFlow({
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3004'
 
 
-  // Custom Google Sign-In using OAuth popup with prompt=select_account
-  // This bypasses Google SDK's FedCM / auto-select and always shows the account chooser
-  const handleGoogleSignIn = () => {
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '1051090030242-du725l33veu6vl637lo1jpgpka1ilujj.apps.googleusercontent.com'
-    const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/auth/google/callback` : ''
-    const nonce = Math.random().toString(36).substring(2)
+  const latestCallbackRef = useRef<((res: any) => void) | null>(null)
+  useEffect(() => {
+    latestCallbackRef.current = handleGoogleCredentialResponse
+  })
 
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      response_type: 'id_token',
-      scope: 'openid email profile',
-      prompt: 'select_account',
-      nonce,
-    })
-
-    const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
-
-    const popup = window.open(
-      oauthUrl,
-      'google-signin',
-      'width=500,height=600,left=100,top=100,scrollbars=yes'
-    )
-
-    // Listen for the id_token coming back from the popup via postMessage
-    const handleMessage = async (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return
-      if (event.data?.type === 'google-auth' && event.data?.id_token) {
-        window.removeEventListener('message', handleMessage)
-        popup?.close()
-        try {
-          const code = activeCode || inviteCode
-          await authenticateAndContinue(event.data.id_token, 'google', code)
-        } catch (err: any) {
-          if (err.message && (err.message.includes('passcode') || err.message.includes('Passcode'))) {
-            setPendingOauthToken(event.data.id_token)
-            setPendingOauthProvider('google')
-            setShowPasscodeScreenAfterAuth(true)
-            setPasscodeError('')
-          } else {
-            alert(err.message || 'Login failed')
+  // Load Google SDK script once
+  const initializeGoogleOnce = () => {
+    const google = (window as any).google
+    if (google) {
+      setGoogleLoaded(true)
+      if (!(window as any).__google_initialized) {
+        google.accounts.id.initialize({
+          client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '1051090030242-du725l33veu6vl637lo1jpgpka1ilujj.apps.googleusercontent.com',
+          callback: (response: any) => {
+            if (latestCallbackRef.current) {
+              latestCallbackRef.current(response)
+            }
           }
-        }
+        })
+        ;(window as any).__google_initialized = true
       }
     }
-
-    window.addEventListener('message', handleMessage)
-
-    // Cleanup listener if popup is closed without completing auth
-    const pollClosed = setInterval(() => {
-      if (popup?.closed) {
-        clearInterval(pollClosed)
-        window.removeEventListener('message', handleMessage)
-      }
-    }, 500)
   }
+
+  // Render Google Sign-in button automatically when container mounts and SDK is ready
+  useEffect(() => {
+    const google = (window as any).google
+    if (google && googleButtonContainerRef.current && !showPasscodeScreenAfterAuth && isOpen) {
+      initializeGoogleOnce()
+      googleButtonContainerRef.current.innerHTML = ''
+      google.accounts.id.renderButton(
+        googleButtonContainerRef.current,
+        { theme: 'filled_black', size: 'large', width: '280', shape: 'rectangular' }
+      )
+    }
+  }, [isOpen, showPasscodeScreenAfterAuth, googleLoaded])
+
+  const handleGoogleCredentialResponse = async (response: any) => {
+    try {
+      const code = activeCode || inviteCode
+      await authenticateAndContinue(response.credential, 'google', code)
+    } catch (err: any) {
+      if (err.message && (err.message.includes('passcode') || err.message.includes('Passcode'))) {
+        setPendingOauthToken(response.credential)
+        setPendingOauthProvider('google')
+        setShowPasscodeScreenAfterAuth(true)
+        setPasscodeError('')
+      } else {
+        alert(err.message || 'Login failed')
+      }
+    }
+  }
+
 
   // Lock body scroll when login overlay is active
   useEffect(() => {
@@ -425,6 +425,7 @@ export function GuestLoginFlow({
     <>
       <Script 
         src="https://accounts.google.com/gsi/client" 
+        onLoad={initializeGoogleOnce}
         strategy="afterInteractive"
       />
 
@@ -567,38 +568,10 @@ export function GuestLoginFlow({
             <>
               {/* OAuth Buttons Container */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', alignItems: 'center' }}>
-                {/* Custom Google Sign-In button — always shows account chooser via prompt=select_account */}
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.75rem',
-                    width: '280px',
-                    height: '44px',
-                    background: '#fff',
-                    border: 'none',
-                    borderRadius: '2px',
-                    padding: '0 1rem',
-                    color: '#3c4043',
-                    fontFamily: '"Roboto", system-ui, sans-serif',
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    letterSpacing: '0.02em',
-                    cursor: 'pointer',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4"/>
-                    <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
-                    <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
-                    <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
-                  </svg>
-                  Continue with Google
-                </button>
+                <div 
+                  ref={googleButtonContainerRef}
+                  style={{ width: '280px', display: 'flex', justifyContent: 'center', minHeight: '44px' }} 
+                />
 
                 <button 
                   onClick={() => alert('Apple Sign-In is coming soon. Please use Google Sign-In to log in.')}
