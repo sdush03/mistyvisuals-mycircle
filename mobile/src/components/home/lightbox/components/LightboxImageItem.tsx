@@ -98,10 +98,14 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
     );
   };
 
-  const thumbnailUri = typeof item === 'object' ? (item.uri || item.r2Url || item.thumbnailUrl || getMediaUri(item)) : item;
-  const fullUri = getMediaUri(item);
-  const displayUri = fullUri || thumbnailUri;
-  const placeholderUri = thumbnailUri && thumbnailUri !== displayUri ? thumbnailUri : undefined;
+  const thumbnailUri = typeof item === 'object' ? (item.r2Url || item.thumbnailUrl || item.uri || getMediaUri(item)) : item;
+  const fullUri = typeof item === 'object' ? (item.fullUri || item.r2_url || item.file_url || item.url || thumbnailUri) : item;
+
+  const [currentUri, setCurrentUri] = useState<string | null>(fullUri || thumbnailUri);
+
+  React.useEffect(() => {
+    setCurrentUri(fullUri || thumbnailUri);
+  }, [fullUri, thumbnailUri]);
 
   const loadStartRef = useRef<number>(0);
 
@@ -109,15 +113,25 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
     <GestureDetector gesture={composedGesture}>
       <View style={{ width, height: '100%', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
         <Animated.View style={[styles.lightboxImageStack, imageZoomAnimatedStyle]}>
-          {displayUri && (
+          {/* Layer 1: Instant 0ms Cached Grid Thumbnail (Guarantees ZERO black screens) */}
+          {thumbnailUri && currentUri !== thumbnailUri && (
             <Image
-              source={{ uri: displayUri }}
+              source={{ uri: thumbnailUri }}
+              style={[styles.lightboxImage, StyleSheet.absoluteFillObject]}
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              priority="high"
+            />
+          )}
+
+          {/* Layer 2: Main Image with Failover Fallback */}
+          {currentUri && (
+            <Image
+              source={{ uri: currentUri }}
               style={styles.lightboxImage}
               contentFit="contain"
               cachePolicy="memory-disk"
               priority="high"
-              placeholder={placeholderUri ? { uri: placeholderUri } : undefined}
-              placeholderContentFit="contain"
               transition={150}
               onLoadStart={() => {
                 loadStartRef.current = Date.now();
@@ -128,6 +142,12 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
                 console.log(`[MYCIRCLE DEBUG 🔎 LIGHTBOX PAINTED] High-Res Photo Rendered | Source: ${sourceTag} | Dimensions: ${e.source?.width}x${e.source?.height}px`);
                 if (e.source && e.source.width && e.source.height && e.source.height > 0) {
                   setLoadedAspect(e.source.width / e.source.height);
+                }
+              }}
+              onError={(err) => {
+                console.warn(`[MYCIRCLE DEBUG ⚠️] Lightbox photo failed to load: ${currentUri}`, err);
+                if (thumbnailUri && currentUri !== thumbnailUri) {
+                  setCurrentUri(thumbnailUri);
                 }
               }}
             />
