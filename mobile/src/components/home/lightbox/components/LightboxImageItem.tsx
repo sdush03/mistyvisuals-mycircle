@@ -125,7 +125,7 @@ export const LightboxImageItem = React.memo(function LightboxImageItem({
               onLoad={(e) => {
                 const duration = Date.now() - (loadStartRef.current || Date.now());
                 const sourceTag = duration < 35 ? '💾 DISK CACHE HIT (0-35ms)' : `🌐 NETWORK DOWNLOAD (${duration}ms)`;
-                console.log(`[MYCIRCLE DEBUG 🔎 LIGHTBOX PAINTED] Full 4K Photo Rendered | Source: ${sourceTag} | Dimensions: ${e.source?.width}x${e.source?.height}px`);
+                console.log(`[MYCIRCLE DEBUG 🔎 LIGHTBOX PAINTED] High-Res Photo Rendered | Source: ${sourceTag} | Dimensions: ${e.source?.width}x${e.source?.height}px`);
                 if (e.source && e.source.width && e.source.height && e.source.height > 0) {
                   setLoadedAspect(e.source.width / e.source.height);
                 }
