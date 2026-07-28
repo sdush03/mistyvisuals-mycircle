@@ -277,7 +277,12 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         const mapped = Array.isArray(allList) ? allList.map(mapPhotoItem) : [];
         const total = typeof allRes.data.total === 'number' ? allRes.data.total : mapped.length;
         setTotalAllPhotosCount(total);
-        setAllPhotos(mapped);
+        setAllPhotos((prev) => {
+          if (prev.length > 0 && prev.length === mapped.length && prev[0]?.id === mapped[0]?.id && prev[prev.length - 1]?.id === mapped[mapped.length - 1]?.id) {
+            return prev; // Keep exact reference! ZERO re-render flicker!
+          }
+          return mapped;
+        });
         allPhotosOffsetRef.current = mapped.length;
         setAllPhotosOffset(mapped.length);
         const hasMore = mapped.length < total;
