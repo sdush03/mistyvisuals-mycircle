@@ -9,40 +9,83 @@ interface PhoneViewProps {
 }
 
 export default function PhoneView({ onSuccess, onCancel }: PhoneViewProps) {
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('+91 ');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   
   const profile = useAuthStore((state) => state.profile);
   const eventSlug = useAuthStore((state) => state.eventSlug);
   const updateProfile = useAuthStore((state) => state.updateProfile);
 
+  const handlePhoneChange = (text: string) => {
+    setErrorMsg('');
+    // Ensure user doesn't accidentally delete the initial '+'
+    if (!text.startsWith('+')) {
+      setPhoneNumber('+91 ' + text.replace(/\D/g, ''));
+    } else {
+      setPhoneNumber(text);
+    }
+  };
+
   const handleSubmit = async () => {
-    const sanitized = phoneNumber.replace(/\D/g, '');
-    if (sanitized.length < 10) {
-      Alert.alert('Invalid Phone Number', 'Please enter a valid 10-digit mobile number.');
+    const cleanNum = phoneNumber.replace(/[\s\-\(\)]/g, ''); // Keeps '+' if present
+    const digitsOnly = cleanNum.replace(/\D/g, '');
+
+    if (!digitsOnly) {
+      setErrorMsg('Please enter your mobile number');
+      return;
+    }
+
+    // Validation logic matching web
+    const looksLikeIndian = digitsOnly.length === 10 || 
+      (digitsOnly.length === 11 && digitsOnly.startsWith('0')) || 
+      (digitsOnly.length === 12 && digitsOnly.startsWith('91'));
+
+    let isValid = false;
+    let finalFormatted = cleanNum;
+
+    if (looksLikeIndian) {
+      isValid = /^(?:91|0)?[6-9]\d{9}$/.test(digitsOnly);
+      if (isValid && digitsOnly.length === 10) {
+        finalFormatted = `+91${digitsOnly}`;
+      } else if (isValid && digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
+        finalFormatted = `+${digitsOnly}`;
+      }
+    } else {
+      // International number with country code
+      isValid = /^\+[1-9]\d{9,14}$/.test(cleanNum);
+    }
+
+    if (!isValid) {
+      if (digitsOnly.length === 10 && !/^[6-9]/.test(digitsOnly)) {
+        setErrorMsg('Indian numbers must start with 6, 7, 8, or 9.');
+      } else {
+        setErrorMsg('Please enter a valid mobile number (e.g. +91 9876543210)');
+      }
       return;
     }
 
     try {
       setIsSubmitting(true);
+      setErrorMsg('');
 
       const updateUrl = eventSlug
         ? `/api/gallery/public/events/${eventSlug}/phone`
         : `/api/gallery/family/profile/update`;
 
       const payload = eventSlug
-        ? { phoneNumber: sanitized }
-        : { phoneNumber: sanitized, name: profile?.name || '' };
+        ? { phoneNumber: finalFormatted }
+        : { phoneNumber: finalFormatted, name: profile?.name || '' };
 
       await api.post(updateUrl, payload);
       
       // Update local profile state
-      await updateProfile({ phoneNumber: sanitized });
+      await updateProfile({ phoneNumber: finalFormatted });
       onSuccess();
     } catch (err: any) {
       console.error(err);
       const msg = err.response?.data?.error || 'Failed to save phone number. Please try again.';
-      Alert.alert('Error', msg);
+      setErrorMsg(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -59,15 +102,19 @@ export default function PhoneView({ onSuccess, onCancel }: PhoneViewProps) {
         <View style={styles.divider} />
 
         <TextInput
-          style={styles.input}
-          placeholder="10-digit mobile number"
+          style={[styles.input, !!errorMsg && styles.inputError]}
+          placeholder="+91 9876543210"
           placeholderTextColor="rgba(255, 255, 255, 0.35)"
           keyboardType="phone-pad"
-          maxLength={10}
+          maxLength={17}
           value={phoneNumber}
-          onChangeText={setPhoneNumber}
+          onChangeText={handlePhoneChange}
           editable={!isSubmitting}
         />
+
+        {!!errorMsg && (
+          <Text style={styles.errorText}>{errorMsg}</Text>
+        )}
 
         <Pressable
           style={({ pressed }) => [
@@ -144,8 +191,19 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
     letterSpacing: 2,
+  },
+  inputError: {
+    borderColor: '#ef4444',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+  },
+  errorText: {
+    color: '#f87171',
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 16,
   },
   button: {
     width: '100%',
