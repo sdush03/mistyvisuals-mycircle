@@ -119,6 +119,7 @@ export default function CameraViewScreen({ onSuccess, onCancel }: CameraViewProp
       try {
         const photo = await cameraRef.current.takePictureAsync({
           quality: 0.8,
+          mirror: false,
         });
         if (photo && photo.uri) {
           setCapturedPhoto(photo.uri);
