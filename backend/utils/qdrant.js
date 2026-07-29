@@ -115,21 +115,25 @@ class QdrantService {
     }
 
     try {
-      const res = await this.client.scroll(COLLECTION_NAME, {
-        filter: {
-          must: [
-            {
-              key: 'event_id',
-              match: { value: eid }
-            }
-          ]
-        },
-        limit: 10000,
-        with_payload: true,
-        with_vector: true
-      });
+      // Paginate through all vectors for the event (no hard limit)
+      const allPoints = [];
+      let offset = undefined;
+      do {
+        const res = await this.client.scroll(COLLECTION_NAME, {
+          filter: {
+            must: [{ key: 'event_id', match: { value: eid } }]
+          },
+          limit: 1000,
+          offset,
+          with_payload: true,
+          with_vector: true
+        });
+        const points = res?.points || [];
+        allPoints.push(...points);
+        offset = res?.next_page_offset;
+      } while (offset);
 
-      return res.points.map(p => ({
+      return allPoints.map(p => ({
         photoId: p.payload?.photo_id,
         faceId: p.payload?.face_id || p.id,
         vector: p.vector
@@ -253,7 +257,7 @@ class QdrantService {
     if (this.isMock) {
       // Perform local Cosine Similarity (which is just dot product since vectors are normalized)
       const eventVectors = this.mockCache.filter(item => item.eventId === eid);
-      
+
       const results = eventVectors.map(item => {
         let dotProduct = 0;
         const len = Math.min(item.vector.length, queryVector.length);
@@ -293,6 +297,10 @@ class QdrantService {
     }
 
     try {
+      // Use exact: true to force brute-force full scan instead of HNSW approximate search.
+      // HNSW with ef_construct=100 only explores ~100 candidates at search time,
+      // hard-capping results at ~100 regardless of how many real matches exist.
+      // At 57k vectors × 512 dims in Rust, exact search takes < 50ms — acceptable.
       const searchResult = await this.client.search(COLLECTION_NAME, {
         vector: queryVector,
         filter: {
@@ -303,48 +311,12 @@ class QdrantService {
             }
           ]
         },
-        limit: Math.min(limit, 10000),
-        score_threshold: threshold
-      });
-
-      // If Qdrant hit its 100-result search cap, scroll all vectors for this event to return uncapped matches
-      if (searchResult.length >= 100 && limit > 100) {
-        try {
-          const allPoints = [];
-          let offset = undefined;
-          do {
-            const scrollRes = await this.client.scroll(COLLECTION_NAME, {
-              filter: { must: [{ key: 'event_id', match: { value: eid } }] },
-              limit: 250,
-              offset,
-              with_vector: true,
-              with_payload: true
-            });
-            const points = scrollRes?.points || [];
-            allPoints.push(...points);
-            offset = scrollRes?.next_page_offset;
-          } while (offset);
-
-            if (allPoints.length > 0) {
-              const scored = [];
-              for (const pt of allPoints) {
-                if (pt.vector && Array.isArray(pt.vector)) {
-                  let dotProduct = 0;
-                  const len = Math.min(pt.vector.length, queryVector.length);
-                  for (let i = 0; i < len; i++) {
-                    dotProduct += pt.vector[i] * queryVector[i];
-                  }
-                  if (dotProduct >= threshold) {
-                    scored.push({ photo_id: pt.payload.photo_id, score: dotProduct });
-                  }
-                }
-              }
-              return scored.sort((a, b) => b.score - a.score).slice(0, limit);
-            }
-        } catch (scrollErr) {
-          console.warn('[Qdrant] Uncapped scroll fallback warning:', scrollErr.message);
+        limit: Math.min(limit, 100000),
+        score_threshold: threshold,
+        params: {
+          exact: true  // brute-force: guaranteed to find ALL matches above threshold
         }
-      }
+      });
 
       return searchResult.map(hit => ({
         photo_id: hit.payload.photo_id,
