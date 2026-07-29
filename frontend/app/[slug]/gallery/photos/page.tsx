@@ -1007,86 +1007,21 @@ export default function GuestGalleryPhotos({ params }: Props) {
     const safeFilename = filename || 'photo.jpg';
 
     try {
-      // 0. Synchronous DOM Canvas Draw (If image is currently rendered in lightbox)
-      const activeImg = document.querySelector('.lightbox-main-img') as HTMLImageElement;
-      if (activeImg && activeImg.complete && (activeImg.naturalWidth > 0 || activeImg.width > 0)) {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = activeImg.naturalWidth || activeImg.width;
-          canvas.height = activeImg.naturalHeight || activeImg.height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(activeImg, 0, 0);
-            const domBlob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/jpeg', 0.95));
-            if (domBlob) {
-              const blobUrl = URL.createObjectURL(domBlob);
-              const a = document.createElement('a');
-              a.href = blobUrl;
-              a.download = safeFilename;
-              a.style.display = 'none';
-              document.body.appendChild(a);
-              a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-              document.body.removeChild(a);
-              setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-              return;
-            }
-          }
-        } catch (domErr) {
-          console.warn('DOM canvas draw error:', domErr);
-        }
-      }
-
       const token = localStorage.getItem(`mv_gallery_token_${slug}`) || '';
       const downloadProxyUrl = `${apiUrl}/api/gallery/public/download-proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(safeFilename)}&token=${encodeURIComponent(token)}`;
 
-      // 1. Fetch photo binary data
-      let blob: Blob | null = null;
-      try {
-        const res = await fetch(downloadProxyUrl);
-        if (res.ok) {
-          blob = await res.blob();
-        }
-      } catch (e) {
-        console.warn('Proxy fetch error:', e);
-      }
-
-      if (!blob) {
-        try {
-          const fullUrl = url.startsWith('/') ? `${apiUrl}${url}` : url;
-          const directRes = await fetch(fullUrl, { mode: 'cors' });
-          if (directRes.ok) {
-            blob = await directRes.blob();
-          }
-        } catch (e) {
-          console.warn('Direct fetch error:', e);
-        }
-      }
-
-      // If we acquired the photo binary data: Direct File Download
-      if (blob) {
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = safeFilename;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        const evt = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
-        a.dispatchEvent(evt);
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-        return;
-      }
-
-      // 2. Hidden background iframe download fallback
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = downloadProxyUrl;
-      document.body.appendChild(iframe);
+      // Trigger direct file download via backend proxy endpoint
+      const a = document.createElement('a');
+      a.href = downloadProxyUrl;
+      a.download = safeFilename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
       setTimeout(() => {
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
+        if (document.body.contains(a)) {
+          document.body.removeChild(a);
         }
-      }, 30000);
+      }, 2000);
     } catch (err) {
       console.warn('Download error:', err);
     }
