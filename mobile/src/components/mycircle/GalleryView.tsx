@@ -1000,7 +1000,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
               }}
               activeOpacity={0.8}
             >
-              <Text style={styles.backToTopText}>↑ TOP</Text>
+              <Text style={styles.editorialBackText}>↑ TOP</Text>
             </TouchableOpacity>
           )}
         </Animated.View>
@@ -1201,27 +1201,21 @@ const styles = StyleSheet.create({
   },
   backToTopButton: {
     position: 'absolute',
-    right: 20,
+    alignSelf: 'center',
     backgroundColor: 'rgba(28, 26, 24, 0.92)',
     paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 22,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.4)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 6,
     zIndex: 99,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  backToTopText: {
-    fontFamily: FONT_JOST_MEDIUM,
-    color: '#ffffff',
-    fontSize: 12,
-    letterSpacing: 1.5,
   },
 });
