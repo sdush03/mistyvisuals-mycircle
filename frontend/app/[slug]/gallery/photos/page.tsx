@@ -708,7 +708,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const heartPopTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const handleLightboxDoubleTap = async (photoId: number, isCurrentlyLiked: boolean) => {
-    console.log('[DEBUG] handleLightboxDoubleTap called:', { photoId, isCurrentlyLiked, gesturePreventLike: gesturePreventLikeRef.current });
     if (heartPopTimeoutRef.current) {
       clearTimeout(heartPopTimeoutRef.current)
     }
@@ -718,10 +717,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
     }, 800)
 
     if (!isCurrentlyLiked) {
-      console.log('[DEBUG] Calling toggleLikeOnPhoto from double tap/click');
       await toggleLikeOnPhoto(photoId)
-    } else {
-      console.log('[DEBUG] Photo already liked, skipping toggleLikeOnPhoto in double tap');
     }
   }
 
@@ -729,10 +725,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const lastTouchDoubleTapRef = useRef(0)
 
   const toggleLikeOnPhoto = async (photoId: number) => {
-    console.log('[DEBUG] toggleLikeOnPhoto executing for photo:', photoId);
     const token = localStorage.getItem(`mv_gallery_token_${slug}`)
     if (!token) {
-      console.log('[DEBUG] No token found in localStorage for slug:', slug);
       return
     }
 
@@ -2154,27 +2148,20 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 {/* Transparent overlay capturing all pointer events to prevent right click & touch hold menus */}
                 <div
                   onDoubleClick={() => {
-                    console.log('[DEBUG] onDoubleClick fired on overlay');
                     const now = Date.now();
                     if (now - lastTouchDoubleTapRef.current < 500) {
-                      console.log('[DEBUG] onDoubleClick ignored to prevent double-firing on touch');
                       return;
                     }
                     if (!gesturePreventLikeRef.current) {
                       handleLightboxDoubleTap(activePhotosList[activePhotoIndex].id, activePhotosList[activePhotoIndex].isLiked)
-                    } else {
-                      console.log('[DEBUG] onDoubleClick blocked by gesturePreventLike');
                     }
                   }}
                   onTouchEnd={e => {
-                    console.log('[DEBUG] onTouchEnd fired on overlay');
                     if (gesturePreventLikeRef.current) {
-                      console.log('[DEBUG] onTouchEnd blocked by gesturePreventLike');
                       return;
                     }
                     const now = Date.now();
                     if (now - lastTapRef.current < 300) {
-                      console.log('[DEBUG] onTouchEnd double-tap detected');
                       lastTouchDoubleTapRef.current = now;
                       handleLightboxDoubleTap(activePhotosList[activePhotoIndex].id, activePhotosList[activePhotoIndex].isLiked);
                     }
