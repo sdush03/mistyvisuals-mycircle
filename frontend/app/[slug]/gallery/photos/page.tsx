@@ -1008,32 +1008,34 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
     try {
       const res = await fetch(downloadProxyUrl);
-      if (!res.ok) {
-        throw new Error(`Download proxy returned status ${res.status}`);
-      }
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
+      if (res.ok) {
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
 
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = safeFilename;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = safeFilename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+        return;
+      }
     } catch (err) {
       console.warn('Fetch blob download failed, attempting iframe fallback:', err);
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = downloadProxyUrl;
-      document.body.appendChild(iframe);
-      setTimeout(() => {
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
-        }
-      }, 15000);
     }
+
+    // Fallback: Trigger navigation/download via background iframe
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = downloadProxyUrl;
+    document.body.appendChild(iframe);
+    setTimeout(() => {
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe);
+      }
+    }, 15000);
   }
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

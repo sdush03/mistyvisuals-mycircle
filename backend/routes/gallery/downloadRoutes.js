@@ -279,7 +279,11 @@ module.exports = async function downloadRoutes(fastify, opts) {
 
       return reply.send(stream);
     } catch (err) {
-      req.log.error(err);
+      req.log.error(`[Download Proxy Error] ${err.message}`, err);
+      // Fallback: If backend streaming fails for any reason, redirect browser directly to target URL
+      if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+        return reply.redirect(302, url);
+      }
       return reply.code(500).send({ error: 'Failed to download file' });
     }
   });
