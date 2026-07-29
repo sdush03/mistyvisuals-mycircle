@@ -5,7 +5,7 @@ const { prisma } = require('../../prisma');
 const qdrant = require('../../utils/qdrant');
 const faceRecManager = require('../../utils/faceRecManager');
 const { uploadAssetWithRetry } = require('../../utils/r2');
-const { guestAnchors, checkUserSelfie, ensureUserSelfieMigrated, verifyFamilyAuth } = require('./galleryCommon');
+const { guestAnchors, checkUserSelfie, ensureUserSelfieMigrated, verifyFamilyAuth, verifyGuestAuth } = require('./galleryCommon');
 
 module.exports = async function familyRoutes(fastify, opts) {
   const { requireAdmin } = opts;
@@ -465,6 +465,59 @@ module.exports = async function familyRoutes(fastify, opts) {
     } catch (err) {
       req.log.error(err);
       return reply.code(400).send({ error: err.message || 'Failed to update profile' });
+    }
+  });
+
+  // Update profile from public gallery event page
+  fastify.post('/api/gallery/public/events/:slug/profile/update', { preHandler: verifyGuestAuth }, async (req, reply) => {
+    try {
+      const { name, phoneNumber, selfieBuffer } = await parseProfileUpdateParams(req);
+      const profile = await updateGuestProfileGlobal(req.guest.email, name, phoneNumber, selfieBuffer, req.log);
+      return { success: true, profile };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(400).send({ error: err.message || 'Failed to update profile' });
+    }
+  });
+
+  // Get current guest profile details
+  fastify.get('/api/gallery/public/events/:slug/profile', { preHandler: verifyGuestAuth }, async (req, reply) => {
+    try {
+      const guest = await prisma.guest.findUnique({
+        where: { id: req.guest.guestId }
+      });
+      if (!guest) return reply.code(404).send({ error: 'Guest not found' });
+
+      let user = await prisma.circleUser.findUnique({
+        where: { email: guest.email }
+      });
+
+      if (!user) {
+        user = await prisma.circleUser.create({
+          data: {
+            email: guest.email,
+            name: guest.name,
+            phoneNumber: guest.phoneNumber,
+            provider: guest.provider,
+            providerId: guest.providerId
+          }
+        });
+      }
+
+      return {
+        profile: {
+          id: guest.id,
+          name: user.name || guest.name,
+          email: guest.email,
+          phoneNumber: user.phoneNumber,
+          hasFullAccess: guest.hasFullAccess,
+          hasSelfie: await checkUserSelfie(user.id),
+          selfieGuestId: user.id
+        }
+      };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to fetch guest profile' });
     }
   });
 

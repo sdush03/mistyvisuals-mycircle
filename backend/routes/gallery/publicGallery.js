@@ -1,9 +1,48 @@
 const fs = require('fs');
 const path = require('path');
 const { prisma } = require('../../prisma');
+const qdrant = require('../../utils/qdrant');
 const faceRecManager = require('../../utils/faceRecManager');
 const { checkPreviewToken, getDerivedThumbnail, verifyGuestAuth } = require('./galleryCommon');
-const { generateUniqueCode } = require('./galleryHelpers');
+
+function purgeOrphanedFacesBackground(log) {
+  setTimeout(() => {
+    try {
+      const targetDir = path.join(__dirname, '..', '..', 'uploads', 'photos');
+      if (!fs.existsSync(targetDir)) return;
+
+      const activeFaceIds = new Set();
+      if (qdrant.isMock) {
+        qdrant.mockCache.forEach(item => {
+          if (item.faceId) activeFaceIds.add(item.faceId);
+        });
+      }
+
+      const files = fs.readdirSync(targetDir);
+      let purged = 0;
+      for (const file of files) {
+        if (file.startsWith('face-')) {
+          let faceId = path.parse(file).name;
+          if (faceId.endsWith('.jpg')) {
+            faceId = faceId.slice(0, -4);
+          }
+          if (!activeFaceIds.has(faceId)) {
+            const filepath = path.join(targetDir, file);
+            try {
+              fs.unlinkSync(filepath);
+              purged++;
+            } catch (e) {}
+          }
+        }
+      }
+      if (purged > 0) {
+        log.info(`Background garbage collector purged ${purged} orphaned face files.`);
+      }
+    } catch (e) {
+      log.error('Failed to run background faces purge:', e);
+    }
+  }, 100);
+}
 
 module.exports = async function publicGalleryRoutes(fastify, opts) {
   const { requireAdmin } = opts;
@@ -430,6 +469,141 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
     } catch (err) {
       req.log.error(err);
       return reply.code(500).send({ error: 'Failed to toggle photo like' });
+    }
+  });
+
+  // Get clustered people from the event photos — ADMIN ONLY
+  fastify.get('/api/gallery/public/events/:slug/people', async (req, reply) => {
+    const auth = requireAdmin(req, reply);
+    if (!auth) return;
+
+    const slug = req.params.slug.toLowerCase().trim();
+    try {
+      const event = await prisma.galleryEvent.findUnique({ where: { slug } });
+      if (!event) return reply.code(404).send({ error: 'Event not found' });
+
+      if (!event.clustersDirty && event.clustersCache) {
+        return { people: event.clustersCache, fromCache: true };
+      }
+
+      const validPhotos = await prisma.photo.findMany({
+        where: { eventId: event.id },
+        select: { id: true }
+      });
+      const validPhotoIds = new Set(validPhotos.map(p => p.id));
+
+      let dbVectors = [];
+      if (qdrant.isMock) {
+        dbVectors = qdrant.mockCache
+          .filter(item => item.eventId === event.id && validPhotoIds.has(item.photoId))
+          .map(item => ({
+            photoId: item.photoId,
+            faceId: item.faceId,
+            vector: item.vector
+          }));
+      } else {
+        const allVectors = await qdrant.getAllVectorsForEvent(event.id);
+        dbVectors = allVectors.filter(item => validPhotoIds.has(item.photoId));
+      }
+
+      if (dbVectors.length === 0) {
+        await prisma.galleryEvent.update({
+          where: { id: event.id },
+          data: { clustersCache: [], clustersDirty: false }
+        });
+        return { people: [] };
+      }
+
+      const res = await faceRecManager.clusterFaces(dbVectors);
+      
+      purgeOrphanedFacesBackground(req.log);
+
+      if (!res.clusters) {
+        await prisma.galleryEvent.update({
+          where: { id: event.id },
+          data: { clustersCache: [], clustersDirty: false }
+        });
+        return { people: [] };
+      }
+
+      const people = [];
+      for (const cluster of res.clusters) {
+        const photosInCluster = await prisma.photo.findMany({
+          where: { id: { in: cluster.photoIds } },
+          select: { r2Url: true, filename: true }
+        });
+
+        if (photosInCluster.length > 0) {
+          let coverPhotoUrl = photosInCluster[0].r2Url;
+          if (cluster.faceIds && cluster.faceIds.length > 0) {
+            const firstFaceId = cluster.faceIds[0];
+            if (photosInCluster[0].r2Url && photosInCluster[0].r2Url.startsWith('http')) {
+              const urlParts = photosInCluster[0].r2Url.split('/');
+              urlParts[urlParts.length - 2] = 'faces';
+              urlParts[urlParts.length - 1] = encodeURIComponent(`${firstFaceId}.jpg`);
+              coverPhotoUrl = urlParts.join('/');
+            } else {
+              coverPhotoUrl = `/api/photos/file/events/${slug}/faces/${encodeURIComponent(firstFaceId)}.jpg`;
+            }
+          }
+          people.push({
+            id: cluster.id,
+            photoCount: cluster.photoCount,
+            coverPhotoUrl,
+            photos: photosInCluster
+          });
+        }
+      }
+
+      await prisma.galleryEvent.update({
+        where: { id: event.id },
+        data: { clustersCache: people, clustersDirty: false }
+      });
+
+      return { people };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to cluster event faces' });
+    }
+  });
+
+  // Temporary debug endpoint to inspect deploy logs and database status
+  fastify.get('/api/gallery/public/debug-deploy', async (req, reply) => {
+    try {
+      const dbStatus = await prisma.galleryEvent.findMany({
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          fullCode: true,
+          partialCode: true
+        }
+      });
+
+      let logs = [];
+      const homedir = require('os').homedir();
+      const logDir = path.join(homedir, 'deploy-logs', 'mistyvisuals-mycircle');
+      if (fs.existsSync(logDir)) {
+        const files = fs.readdirSync(logDir).filter(f => f.startsWith('deploy_') && f.endsWith('.log'));
+        files.sort().reverse();
+        for (const file of files.slice(0, 3)) {
+          const content = fs.readFileSync(path.join(logDir, file), 'utf8');
+          logs.push({
+            filename: file,
+            content: content.slice(-5000)
+          });
+        }
+      }
+
+      return {
+        dbStatus,
+        logs
+      };
+    } catch (err) {
+      return {
+        error: err.message,
+        stack: err.stack
+      };
     }
   });
 };
