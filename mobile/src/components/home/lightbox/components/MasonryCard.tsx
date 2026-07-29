@@ -16,7 +16,7 @@ export const MasonryCard = React.memo(function MasonryCard({
   img, index, isColumn0, onSelect, onRegisterRef, onToggleLike
 }: MasonryCardProps) {
   const cardRef = useRef<View>(null);
-  const cardId = img.id || img.uri || `idx-${index}`;
+  const cardId = String(img.id || img.uri || `idx-${index}`);
   const primaryUri = typeof img === 'object' && img.uri ? img.uri : (typeof img === 'string' ? img : '');
   const fallbackUri = typeof img === 'object' && img.fullUri ? img.fullUri : '';
   const blurUri = typeof img === 'object' && img.blurUri ? img.blurUri : null;
@@ -68,6 +68,7 @@ export const MasonryCard = React.memo(function MasonryCard({
           contentFit="cover"
           priority={index < 40 ? "high" : "normal"}
           cachePolicy="memory-disk"
+          recyclingKey={String(cardId)}
           placeholder={blurUri ? { uri: blurUri } : undefined}
           placeholderContentFit="cover"
           transition={blurUri ? 200 : 0}

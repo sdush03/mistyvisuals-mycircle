@@ -136,22 +136,25 @@ export function EditorialLightbox({
         thumbH.value = 120;
       }
 
-      // 60fps smooth opening: Wait for native Modal mount & layout pass to complete before animating expansion
+      // 60-120fps smooth opening: Wait for native Modal mount & layout pass to complete before animating expansion
       animTimer = setTimeout(() => {
         requestAnimationFrame(() => {
           expandProgress.value = withTiming(1, {
-            duration: 360,
-            easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+            duration: 320,
+            easing: Easing.bezier(0.16, 1, 0.3, 1),
           });
         });
-      }, 20);
+      }, Platform.OS === 'android' ? 45 : 30);
 
       resetAutoHideTimer();
 
-      savesService.getSavedPhotos().then((items) => {
-        const urls = new Set(items.map((i) => i.photoUrl));
-        setSavedUrls(urls);
-      });
+      // Defer async storage fetch until opening animation completes
+      setTimeout(() => {
+        savesService.getSavedPhotos().then((items) => {
+          const urls = new Set(items.map((i) => i.photoUrl));
+          setSavedUrls(urls);
+        });
+      }, 350);
     }
 
     return () => {
@@ -192,23 +195,27 @@ export function EditorialLightbox({
     };
   }, [visible, showControls, isZoomed]);
 
-  // High-performance background prefetching of adjacent photos (+/- 2 photos) in memory-disk cache
+  // High-performance background prefetching of adjacent photos (+/- 2 photos) in memory-disk cache (Deferred after open)
   useEffect(() => {
     if (visible && activeIdx !== null && images.length > 0) {
-      const urlsToPrefetch: string[] = [];
-      [activeIdx - 1, activeIdx + 1, activeIdx + 2, activeIdx - 2].forEach((idx) => {
-        if (idx >= 0 && idx < images.length) {
-          const item = images[idx];
-          const uri =
-            typeof item === 'string'
-              ? item
-              : item.fullUri || item.uri || item.photoUrl || item.r2Url || item.file_url || item.url;
-          if (uri) urlsToPrefetch.push(uri);
-        }
-      });
-      urlsToPrefetch.forEach((url) => {
-        ExpoImage.prefetch(url, 'memory-disk');
-      });
+      const timer = setTimeout(() => {
+        const urlsToPrefetch: string[] = [];
+        [activeIdx - 1, activeIdx + 1, activeIdx + 2, activeIdx - 2].forEach((idx) => {
+          if (idx >= 0 && idx < images.length) {
+            const item = images[idx];
+            const uri =
+              typeof item === 'string'
+                ? item
+                : item.fullUri || item.uri || item.photoUrl || item.r2Url || item.file_url || item.url;
+            if (uri) urlsToPrefetch.push(uri);
+          }
+        });
+        urlsToPrefetch.forEach((url) => {
+          ExpoImage.prefetch(url, 'memory-disk');
+        });
+      }, 350);
+
+      return () => clearTimeout(timer);
     }
   }, [visible, activeIdx, images]);
 
@@ -252,8 +259,8 @@ export function EditorialLightbox({
     expandProgress.value = withTiming(
       0,
       {
-        duration: 350,
-        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+        duration: 280,
+        easing: Easing.bezier(0.16, 1, 0.3, 1),
       },
       (finished) => {
         'worklet';
@@ -517,7 +524,7 @@ export function EditorialLightbox({
     }
   };
 
-  // Universal hero expansion style calculated directly from thumbnail bounds
+  // 120 FPS Un-Squeezed Uniform Scale Expansion (translateX, translateY, scale)
   const heroAnimatedStyle = useAnimatedStyle(() => {
     'worklet';
     const p = expandProgress.value;
@@ -529,16 +536,14 @@ export function EditorialLightbox({
     const initialScale = Math.max(thumbW.value / width, 0.12);
     const scale = initialScale + (1 - initialScale) * p;
 
-    const initialTx = cx_grid - cx_screen;
-    const initialTy = cy_grid - cy_screen;
-    const translateX = initialTx * (1 - p);
-    const translateY = initialTy * (1 - p);
+    const translateX = (cx_grid - cx_screen) * (1 - p);
+    const translateY = (cy_grid - cy_screen) * (1 - p);
 
     return {
-      opacity: p > 0.002 ? 1 : 0,
       transform: [{ translateX }, { translateY }, { scale }],
       borderRadius: (1 - p) * 16,
       overflow: 'hidden',
+      opacity: p > 0.001 ? 1 : 0,
     };
   });
 
@@ -639,7 +644,7 @@ export function EditorialLightbox({
             </Animated.View>
           )}
 
-          {/* Animated Hero Stage (Scale and Translate directly from Thumbnail Bounds) */}
+          {/* Animated Hero Stage (GPU Hardware Accelerated 120 FPS Transform Stage) */}
           <Animated.View
             style={[
               StyleSheet.absoluteFillObject,
