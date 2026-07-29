@@ -34,13 +34,11 @@ function download(url, dest) {
 async function main() {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 
-  const users = await prisma.circleUser.findMany({
-    where: {
-      selfieUrl: { not: null },
-      selfieVector: null
-    },
-    select: { id: true, email: true, selfieUrl: true }
-  });
+  const users = await prisma.$queryRaw`
+    SELECT id, email, selfie_url AS "selfieUrl"
+    FROM circle_users
+    WHERE selfie_url IS NOT NULL AND selfie_vector IS NULL
+  `;
 
   console.log(`[Backfill] Found ${users.length} users with selfieUrl but no selfieVector`);
 
