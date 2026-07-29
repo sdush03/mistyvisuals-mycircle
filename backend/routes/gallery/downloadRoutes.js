@@ -191,72 +191,47 @@ module.exports = async function downloadRoutes(fastify, opts) {
         return reply.code(403).send({ error: 'Downloads are disabled for this gallery' });
       }
 
-      const { isR2Enabled, getObjectStream } = require('../../utils/r2');
-      let stream = null;
-      let contentType = 'image/jpeg';
-
-      if (isR2Enabled) {
-        let key = '';
-        try {
-          const parsed = new URL(url);
-          key = decodeURIComponent(parsed.pathname.substring(1));
-        } catch (e) {
-          key = decodeURIComponent(url.replace(/^\/?api\/photos\/file\//, ''));
-        }
-        if (key) {
-          try {
-            stream = await getObjectStream(key);
-          } catch (r2Err) {
-            req.log.warn(`[Download Proxy] R2 getObjectStream failed for ${key}, falling back to fetch:`, r2Err);
-          }
-        }
+      // Determine true image target URL
+      let targetImageUrl = (photo && photo.r2Url) ? photo.r2Url : url;
+      if (targetImageUrl.startsWith('/')) {
+        const host = req.headers.host || 'localhost:5001';
+        const protocol = req.protocol || 'http';
+        targetImageUrl = `${protocol}://${host}${targetImageUrl}`;
       }
 
-      if (!stream) {
-        let fetchUrl = url;
-        if (url.startsWith('/')) {
-          const host = req.headers.host || 'localhost:5001';
-          const protocol = req.protocol || 'http';
-          fetchUrl = `${protocol}://${host}${url}`;
-        }
+      const parsedUrl = new URL(targetImageUrl);
+      const hostname = parsedUrl.hostname.toLowerCase();
 
-        const parsedUrl = new URL(fetchUrl);
-        const hostname = parsedUrl.hostname.toLowerCase();
+      const isDev = process.env.NODE_ENV === 'development';
+      const isLocal = 
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname === '0.0.0.0' ||
+        hostname === '[::1]' ||
+        hostname.startsWith('10.') ||
+        hostname.startsWith('192.168.') ||
+        hostname.startsWith('169.254.') ||
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname);
 
-        const isDev = process.env.NODE_ENV === 'development';
-        const isLocal = 
-          hostname === 'localhost' ||
-          hostname === '127.0.0.1' ||
-          hostname === '0.0.0.0' ||
-          hostname === '[::1]' ||
-          hostname.startsWith('10.') ||
-          hostname.startsWith('192.168.') ||
-          hostname.startsWith('169.254.') ||
-          /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname);
-
-        if (isLocal && !isDev) {
-          req.log.warn(`Blocked download-proxy request to local network/loopback target: ${url}`);
-          return reply.code(400).send({ error: 'Invalid URL target' });
-        }
-
-        if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-          return reply.code(400).send({ error: 'Only HTTP and HTTPS protocols are allowed' });
-        }
-
-        const response = await fetch(fetchUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          }
-        });
-        if (!response.ok) throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
-
-        contentType = response.headers.get('content-type') || 'image/jpeg';
-        const arrayBuffer = await response.arrayBuffer();
-        stream = Buffer.from(arrayBuffer);
+      if (isLocal && !isDev) {
+        req.log.warn(`Blocked download-proxy request to local network/loopback target: ${targetImageUrl}`);
+        return reply.code(400).send({ error: 'Invalid URL target' });
       }
+
+      const response = await fetch(targetImageUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+
+      if (!response.ok) throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
+
+      const contentType = response.headers.get('content-type') || 'image/jpeg';
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
 
       reply.header('Content-Type', contentType);
-      reply.header('Content-Disposition', `attachment; filename="${filename || 'download.jpg'}"`);
+      reply.header('Content-Disposition', `attachment; filename="${filename || filenameFromUrl || 'download.jpg'}"`);
       reply.header('Access-Control-Allow-Origin', '*');
 
       try {
@@ -277,10 +252,9 @@ module.exports = async function downloadRoutes(fastify, opts) {
         // Silent error
       }
 
-      return reply.send(stream);
+      return reply.send(buffer);
     } catch (err) {
       req.log.error(`[Download Proxy Error] ${err.message}`, err);
-      // Fallback: If backend streaming fails for any reason, redirect browser directly to target URL
       if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
         return reply.redirect(302, url);
       }
