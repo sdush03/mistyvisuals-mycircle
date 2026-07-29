@@ -95,13 +95,18 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
 
   const scrollToTopSmoothly = useCallback(() => {
     const startY = currentYRef.current;
+    if (startY <= 0) return;
+
+    // Scale duration with distance (850ms - 1400ms) so gentle start/end are clearly visible
+    const dynamicDuration = Math.min(1400, Math.max(850, Math.round(startY * 0.18)));
+
     scrollTargetY.value = startY;
     isSmoothScrollingToTop.value = true;
     scrollTargetY.value = withTiming(
       0,
       {
-        duration: 750,
-        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+        duration: dynamicDuration,
+        easing: Easing.bezier(0.45, 0.05, 0.2, 0.98),
       },
       (finished) => {
         if (finished) {
