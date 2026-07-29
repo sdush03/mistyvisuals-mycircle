@@ -22,37 +22,22 @@ module.exports = async function downloadRoutes(fastify, opts) {
         return reply.code(403).send({ error: 'Downloads are disabled for this gallery' });
       }
 
-      const selfiePath = path.join(__dirname, '..', '..', 'uploads', 'photos', 'selfies', `user_${userId}.jpg`);
-      const vectorPath = path.join(__dirname, '..', '..', 'uploads', 'photos', 'selfies', `user_${userId}.json`);
+      let anchorVector = guestAnchors[guestKey]?.anchorVector;
 
-      if (!fs.existsSync(selfiePath)) {
-        return reply.code(400).send({ error: 'No selfie captured yet' });
+      if (!anchorVector && userId) {
+        const circleUser = await prisma.circleUser.findUnique({
+          where: { id: userId },
+          select: { selfieVector: true }
+        });
+
+        if (circleUser?.selfieVector) {
+          anchorVector = circleUser.selfieVector;
+          guestAnchors[guestKey] = { anchorVector, extraVectors: [] };
+        }
       }
 
-      if (!guestAnchors[guestKey] || !guestAnchors[guestKey].anchorVector) {
-        if (fs.existsSync(vectorPath)) {
-          const vector = JSON.parse(fs.readFileSync(vectorPath, 'utf8'));
-          guestAnchors[guestKey] = {
-            anchorVector: vector,
-            extraVectors: []
-          };
-        } else {
-          try {
-            const res = await faceRecManager.validateSelfie(selfiePath);
-            if (res.success && res.vector) {
-              fs.writeFileSync(vectorPath, JSON.stringify(res.vector), 'utf8');
-              guestAnchors[guestKey] = {
-                anchorVector: res.vector,
-                extraVectors: []
-              };
-            } else {
-              return reply.code(400).send({ error: 'Face could not be parsed from saved selfie' });
-            }
-          } catch (extractErr) {
-            req.log.error('Fallback face extraction failed:', extractErr.message);
-            return reply.code(500).send({ error: 'Failed to process saved selfie' });
-          }
-        }
+      if (!anchorVector) {
+        return reply.code(400).send({ error: 'No selfie captured yet' });
       }
 
       const anchorVector = guestAnchors[guestKey].anchorVector;
