@@ -3460,10 +3460,22 @@ module.exports = async function galleryRoutes(fastify, opts) {
       }
     }
 
-    // 1. Check if selfieUrl is stored in PostgreSQL (e.g. Cloudflare R2) and redirect directly
+    // 1. Check if selfieUrl is stored in PostgreSQL (e.g. Cloudflare R2) and serve directly
     const targetUser = await prisma.circleUser.findUnique({ where: { id: resolvedUserId }, select: { selfieUrl: true } });
     if (targetUser && targetUser.selfieUrl && targetUser.selfieUrl.startsWith('http')) {
-      return reply.redirect(targetUser.selfieUrl);
+      try {
+        const imgRes = await fetch(targetUser.selfieUrl);
+        if (imgRes.ok) {
+          const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+          const buffer = await imgRes.arrayBuffer();
+          return reply
+            .type(contentType)
+            .header('Cache-Control', 'public, max-age=86400')
+            .send(Buffer.from(buffer));
+        }
+      } catch (e) {
+        req.log.warn(`Failed to proxy selfie from remote URL ${targetUser.selfieUrl}: ${e.message}`);
+      }
     }
 
     let selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${resolvedUserId}.jpg`);
