@@ -352,7 +352,7 @@ export function EditorialLightbox({
   };
 
   const handleDownload = async () => {
-    if (!currentItem || isDownloading) return;
+    if (!enableDownload || !currentItem || isDownloading) return;
     try {
       setIsDownloading(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
