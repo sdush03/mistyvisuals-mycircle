@@ -814,7 +814,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
               handleScroll(e);
               // Infinite Scroll threshold listener
               const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-              const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 2800;
+              const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 4500;
               if (isNearBottom && hasMorePhotos) {
                 loadMorePhotos();
               }
