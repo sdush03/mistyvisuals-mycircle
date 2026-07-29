@@ -112,4 +112,22 @@ async function verifyGuestAuth(req, reply) {
   }
 }
 
-module.exports = { verifyGuestAuth };
+// Middleware helper to verify global family JWT token
+async function verifyFamilyAuth(req, reply) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return reply.code(401).send({ error: 'Missing or invalid token' });
+    }
+    const token = authHeader.split(' ')[1];
+    const decoded = req.server.jwt.verify(token);
+    if (decoded.role !== 'family') {
+      return reply.code(403).send({ error: 'Access denied' });
+    }
+    req.family = decoded;
+  } catch (err) {
+    return reply.code(401).send({ error: 'Unauthorized session' });
+  }
+}
+
+module.exports = { verifyGuestAuth, verifyFamilyAuth };
