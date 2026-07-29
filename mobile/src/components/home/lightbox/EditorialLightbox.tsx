@@ -11,6 +11,7 @@ import {
   Platform,
   Linking,
   StatusBar,
+  Alert,
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -352,12 +353,26 @@ export function EditorialLightbox({
   };
 
   const handleDownload = async () => {
-    if (!enableDownload || !currentItem || isDownloading) return;
+    console.log('[DOWNLOAD DEBUG 🚀] handleDownload invoked!');
+    if (!enableDownload) {
+      console.warn('[DOWNLOAD DEBUG ⚠️] enableDownload is false!');
+      showToast('Download disabled');
+      return;
+    }
+    if (!currentItem) {
+      console.warn('[DOWNLOAD DEBUG ⚠️] currentItem is null!');
+      showToast('No item selected');
+      return;
+    }
+    if (isDownloading) {
+      console.log('[DOWNLOAD DEBUG ⏳] Already downloading, ignoring duplicate press');
+      return;
+    }
+
     try {
       setIsDownloading(true);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-      const targetUri =
+      const rawTargetUri =
         currentItem.fullUri ||
         currentItem.r2Url ||
         currentItem.r2_url ||
@@ -367,18 +382,27 @@ export function EditorialLightbox({
         currentItem.uri ||
         currentUrl;
 
-      if (!targetUri) {
+      console.log('[DOWNLOAD DEBUG 🔗] Target URI:', rawTargetUri);
+
+      if (!rawTargetUri) {
+        console.warn('[DOWNLOAD DEBUG ❌] No valid target URL found on photo item!');
         showToast('Download unavailable');
         return;
       }
 
-      const filename = currentItem.filename || `photo_${Date.now()}.jpg`;
-      const safeName = filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
+      const filename = currentItem.filename || `photo_${Date.now()}`;
+      let safeName = filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
+      if (!safeName.match(/\.(jpg|jpeg|png)$/i)) {
+        safeName += '.jpg';
+      }
+
+      console.log(`[DOWNLOAD DEBUG 📁] Target Filename: ${safeName} | OS: ${Platform.OS}`);
 
       if (Platform.OS === 'web') {
         try {
-          const response = await fetch(targetUri);
-          if (!response.ok) throw new Error('Fetch failed');
+          console.log('[DOWNLOAD DEBUG 🌐] Executing Web download...');
+          const response = await fetch(rawTargetUri);
+          if (!response.ok) throw new Error(`HTTP fetch status ${response.status}`);
           const blob = await response.blob();
           const blobUrl = URL.createObjectURL(blob);
           const link = document.createElement('a');
@@ -389,9 +413,11 @@ export function EditorialLightbox({
           document.body.removeChild(link);
           setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
           showToast('Photo downloaded!');
-        } catch (webErr) {
+          console.log('[DOWNLOAD DEBUG ✅] Web Download successful!');
+        } catch (webErr: any) {
+          console.warn('[DOWNLOAD DEBUG ⚠️] Web fetch blob failed, falling back to direct target link:', webErr);
           const link = document.createElement('a');
-          link.href = targetUri;
+          link.href = rawTargetUri;
           link.download = safeName;
           link.target = '_blank';
           document.body.appendChild(link);
@@ -400,47 +426,94 @@ export function EditorialLightbox({
           showToast('Downloading photo...');
         }
       } else {
-        // Native Mobile: Save photo directly into device Photos Gallery / Camera Roll
-        showToast('Saving photo to gallery...');
+        // Native Mobile (iOS / Android)
+        showToast('Saving photo to Photos...');
+        console.log('[DOWNLOAD DEBUG 📱 STEP 1] Preparing FileSystem cache path...');
 
-        // 1. Request Photo Library Permission from user
-        const { status, canAskAgain } = await MediaLibrary.requestPermissionsAsync();
-        if (status !== 'granted') {
-          if (!canAskAgain) {
-            showToast('Enable Photos permission in app settings');
-          } else {
-            showToast('Photo Gallery permission required');
+        const cacheDir = FileSystem.cacheDirectory || FileSystem.documentDirectory || '';
+        const cleanCacheDir = cacheDir.replace(/\/+$/, '');
+        const localPath = `${cleanCacheDir}/${safeName}`;
+        console.log('[DOWNLOAD DEBUG 📱 STEP 1] Local Path:', localPath);
+
+        let downloadedFileUri: string | null = null;
+        try {
+          console.log('[DOWNLOAD DEBUG 📱 STEP 2] Starting FileSystem.downloadAsync...');
+          const startTime = Date.now();
+          const downloadRes = await FileSystem.downloadAsync(rawTargetUri, localPath);
+          const duration = Date.now() - startTime;
+          console.log(`[DOWNLOAD DEBUG 📱 STEP 2] Download completed in ${duration}ms | Status: ${downloadRes?.status} | URI: ${downloadRes?.uri}`);
+          if (downloadRes && downloadRes.uri) {
+            downloadedFileUri = downloadRes.uri;
           }
+        } catch (dlErr: any) {
+          console.error('[DOWNLOAD DEBUG ❌ STEP 2 DOWNLOAD CRASH]:', dlErr);
+          Alert.alert('Download File Error', `FileSystem.downloadAsync error: ${dlErr?.message || String(dlErr)}`);
+        }
+
+        if (!downloadedFileUri) {
+          console.warn('[DOWNLOAD DEBUG ❌ STEP 2] downloadedFileUri is null!');
+          showToast('Failed to download photo file');
           return;
         }
 
-        // 2. Download actual high-res photo to local device storage
-        const localUri = `${FileSystem.cacheDirectory}${safeName}`;
-        const downloadRes = await FileSystem.downloadAsync(targetUri, localUri);
+        console.log('[DOWNLOAD DEBUG 📱 STEP 3] Checking MediaLibrary permissions...');
+        let hasPermission = false;
+        try {
+          const perm = await MediaLibrary.requestPermissionsAsync();
+          console.log('[DOWNLOAD DEBUG 📱 STEP 3] Permission result:', JSON.stringify(perm));
+          hasPermission = perm.status === 'granted';
+        } catch (pErr: any) {
+          console.error('[DOWNLOAD DEBUG ❌ STEP 3 PERMISSION CRASH]:', pErr);
+        }
 
-        if (downloadRes && downloadRes.status === 200) {
-          // 3. Save photo asset directly into phone's native Photo Gallery / Camera Roll
-          const asset = await MediaLibrary.createAssetAsync(downloadRes.uri);
-          if (asset) {
-            showToast('Photo saved to Gallery!');
-            return;
+        if (hasPermission) {
+          console.log('[DOWNLOAD DEBUG 📱 STEP 4] Saving photo asset to device Photos Library...');
+          try {
+            if (typeof (MediaLibrary as any).saveToLibraryAsync === 'function') {
+              console.log('[DOWNLOAD DEBUG 📱 STEP 4] Calling MediaLibrary.saveToLibraryAsync...');
+              await (MediaLibrary as any).saveToLibraryAsync(downloadedFileUri);
+              console.log('[DOWNLOAD DEBUG ✅ STEP 4 SUCCESS] Photo saved via saveToLibraryAsync!');
+              showToast('Photo saved to Photos! ✨');
+              return;
+            } else if (typeof MediaLibrary.createAssetAsync === 'function') {
+              console.log('[DOWNLOAD DEBUG 📱 STEP 4] Calling MediaLibrary.createAssetAsync...');
+              const asset = await MediaLibrary.createAssetAsync(downloadedFileUri);
+              console.log('[DOWNLOAD DEBUG ✅ STEP 4 SUCCESS] Created Asset:', JSON.stringify(asset));
+              if (asset) {
+                showToast('Photo saved to Photos! ✨');
+                return;
+              }
+            }
+          } catch (saveErr: any) {
+            console.error('[DOWNLOAD DEBUG ❌ STEP 4 SAVE CRASH]:', saveErr);
           }
         }
 
-        // Fallback: If MediaLibrary save fails, share local file URI (file://...) directly so user can tap 'Save Image'
-        if (Sharing && (await Sharing.isAvailableAsync())) {
-          await Sharing.shareAsync(localUri, {
-            mimeType: 'image/jpeg',
-            dialogTitle: 'Save Photo to Gallery',
-          });
-          showToast('Photo ready to save');
+        console.log('[DOWNLOAD DEBUG 📱 STEP 5] Attempting Native Sharing fallback...');
+        try {
+          if (Sharing && typeof Sharing.isAvailableAsync === 'function' && (await Sharing.isAvailableAsync())) {
+            console.log('[DOWNLOAD DEBUG 📱 STEP 5] Launching Sharing.shareAsync...');
+            await Sharing.shareAsync(downloadedFileUri, {
+              mimeType: 'image/jpeg',
+              UTI: 'public.jpeg',
+            });
+            console.log('[DOWNLOAD DEBUG ✅ STEP 5 SUCCESS] Sharing sheet displayed!');
+            showToast('Photo ready to save');
+            return;
+          }
+        } catch (shareErr: any) {
+          console.error('[DOWNLOAD DEBUG ❌ STEP 5 SHARING CRASH]:', shareErr);
         }
+
+        showToast('Save failed, please check permissions');
       }
     } catch (err: any) {
-      console.warn('Native download error:', err);
-      showToast(err?.message || 'Save failed, please try again');
+      console.error('[DOWNLOAD DEBUG ❌ UNHANDLED TOP-LEVEL CRASH]:', err);
+      Alert.alert('Download Error', `Unhandled error in handleDownload: ${err?.message || String(err)}`);
+      showToast('Save failed');
     } finally {
       setIsDownloading(false);
+      console.log('[DOWNLOAD DEBUG 🏁] handleDownload finished');
     }
   };
 
@@ -702,7 +775,9 @@ export function EditorialLightbox({
                           styles.lightboxIconOnlyBtn,
                           pressed && { opacity: 0.6 },
                         ]}
-                        onPress={handleDownload}
+                        onPress={() => {
+                          handleDownload().catch((e) => console.warn('Download press error:', e));
+                        }}
                         disabled={isDownloading}
                         hitSlop={14}
                       >
