@@ -1527,7 +1527,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
           </button>
 
           {/* MY FAVOURITES Tab */}
-          {hasFavorites && (
+          {favoritesList.length > 0 && (
             <button 
               onClick={() => {
                 setViewMode('favorites');
