@@ -78,7 +78,8 @@ export default function CirclePage() {
         background: 'linear-gradient(180deg, #fdfbf9 0%, #f7f4ee 100%)',
         boxShadow: '0 10px 30px rgba(0, 0, 0, 0.03)'
       }}>
-        <p style={{
+        <label htmlFor="invite-code-input" style={{
+          display: 'block',
           fontFamily: 'Montserrat, system-ui, sans-serif',
           fontSize: '0.6875rem',
           fontWeight: 600,
@@ -88,9 +89,13 @@ export default function CirclePage() {
           margin: 0
         }}>
           Have an invite code?
-        </p>
+        </label>
         <div style={{ display: 'flex', width: '100%', border: '1px solid #1c1a18', borderRadius: '3px', overflow: 'hidden', height: '44px', background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
           <input 
+            id="invite-code-input"
+            name="inviteCode"
+            aria-label="Enter 6-character invite code"
+            autoComplete="off"
             type="text"
             placeholder="ENTER 6-CHAR CODE"
             value={inviteCodeInput}
@@ -1124,18 +1129,24 @@ export default function CirclePage() {
               </div>
 
               <div style={{ marginBottom: '1.25rem' }}>
-                <label style={{
-                  display: 'block',
-                  fontSize: '0.625rem',
-                  fontWeight: 600,
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  color: '#8c867e',
-                  marginBottom: '0.5rem'
-                }}>
+                <label 
+                  htmlFor="profile-full-name"
+                  style={{
+                    display: 'block',
+                    fontSize: '0.625rem',
+                    fontWeight: 600,
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    color: '#8c867e',
+                    marginBottom: '0.5rem'
+                  }}
+                >
                   Full Name
                 </label>
                 <input 
+                  id="profile-full-name"
+                  name="name"
+                  autoComplete="name"
                   type="text"
                   required
                   value={editName}
@@ -1154,18 +1165,24 @@ export default function CirclePage() {
               </div>
 
               <div style={{ marginBottom: '2.5rem' }}>
-                <label style={{
-                  display: 'block',
-                  fontSize: '0.625rem',
-                  fontWeight: 600,
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  color: '#8c867e',
-                  marginBottom: '0.5rem'
-                }}>
+                <label 
+                  htmlFor="profile-phone-number"
+                  style={{
+                    display: 'block',
+                    fontSize: '0.625rem',
+                    fontWeight: 600,
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    color: '#8c867e',
+                    marginBottom: '0.5rem'
+                  }}
+                >
                   Phone Number
                 </label>
                 <input 
+                  id="profile-phone-number"
+                  name="phoneNumber"
+                  autoComplete="tel"
                   type="text"
                   value={editPhone}
                   onChange={(e) => {

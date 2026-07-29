@@ -2517,19 +2517,25 @@ export default function GuestGalleryPhotos({ params }: Props) {
               </div>
 
               <div style={{ marginBottom: '1.25rem' }}>
-                <label style={{
-                  display: 'block',
-                  fontSize: '0.625rem',
-                  fontWeight: 600,
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  color: '#8c867e',
-                  marginBottom: '0.5rem',
-                  fontFamily: 'Montserrat, sans-serif'
-                }}>
+                <label 
+                  htmlFor="gallery-profile-full-name"
+                  style={{
+                    display: 'block',
+                    fontSize: '0.625rem',
+                    fontWeight: 600,
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    color: '#8c867e',
+                    marginBottom: '0.5rem',
+                    fontFamily: 'Montserrat, sans-serif'
+                  }}
+                >
                   Full Name
                 </label>
                 <input 
+                  id="gallery-profile-full-name"
+                  name="name"
+                  autoComplete="name"
                   type="text"
                   required
                   value={editName}
@@ -2548,19 +2554,25 @@ export default function GuestGalleryPhotos({ params }: Props) {
               </div>
 
               <div style={{ marginBottom: '2.5rem' }}>
-                <label style={{
-                  display: 'block',
-                  fontSize: '0.625rem',
-                  fontWeight: 600,
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  color: '#8c867e',
-                  marginBottom: '0.5rem',
-                  fontFamily: 'Montserrat, sans-serif'
-                }}>
+                <label 
+                  htmlFor="gallery-profile-phone-number"
+                  style={{
+                    display: 'block',
+                    fontSize: '0.625rem',
+                    fontWeight: 600,
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    color: '#8c867e',
+                    marginBottom: '0.5rem',
+                    fontFamily: 'Montserrat, sans-serif'
+                  }}
+                >
                   Phone Number
                 </label>
                 <input 
+                  id="gallery-profile-phone-number"
+                  name="phoneNumber"
+                  autoComplete="tel"
                   type="text"
                   value={editPhone}
                   onChange={(e) => {
@@ -2718,18 +2730,24 @@ export default function GuestGalleryPhotos({ params }: Props) {
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '1.5rem' }}>
-                <label style={{
-                  fontSize: '0.625rem',
-                  fontWeight: 600,
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  color: '#8c867e',
-                  marginBottom: '0.5rem',
-                  fontFamily: 'Montserrat, sans-serif'
-                }}>
+                <label 
+                  htmlFor="bulk-download-pin"
+                  style={{
+                    fontSize: '0.625rem',
+                    fontWeight: 600,
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    color: '#8c867e',
+                    marginBottom: '0.5rem',
+                    fontFamily: 'Montserrat, sans-serif'
+                  }}
+                >
                   Enter Download PIN
                 </label>
                 <input 
+                  id="bulk-download-pin"
+                  name="bulkPin"
+                  autoComplete="current-password"
                   type="password"
                   value={bulkDownloadPinInput}
                   onChange={(e) => {
