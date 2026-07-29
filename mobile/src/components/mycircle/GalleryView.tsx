@@ -20,7 +20,7 @@ import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle, useAnimatedRef, useDerivedValue, scrollTo, withTiming, withSpring, runOnJS, Easing } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, useAnimatedRef, useDerivedValue, useFrameCallback, scrollTo, withTiming, withSpring, runOnJS, Easing } from 'react-native-reanimated';
 import { usePathname } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { useScrollTabBarCollapse } from '../../hooks/useScrollTabBarCollapse';
@@ -87,11 +87,12 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const isSmoothScrollingToTop = useSharedValue(false);
   const [isPast60Photos, setIsPast60Photos] = useState(false);
 
-  useDerivedValue(() => {
+  useFrameCallback(() => {
+    'worklet';
     if (isSmoothScrollingToTop.value) {
       scrollTo(mainScrollRef, 0, scrollTargetY.value, false);
     }
-  });
+  }, true);
 
   const scrollToTopSmoothly = useCallback(() => {
     const startY = currentYRef.current;
