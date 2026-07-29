@@ -2246,7 +2246,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 />
                 <img
                   src={activePhotosList[activePhotoIndex].r2Url}
-                  crossOrigin="anonymous"
                   alt=""
                   onLoad={() => setHighResLoaded(true)}
                   onDragStart={(e) => e.preventDefault()}
