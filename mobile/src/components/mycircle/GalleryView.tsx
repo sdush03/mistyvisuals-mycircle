@@ -63,6 +63,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [allPhotosOffset, setAllPhotosOffset] = useState(0);
   const [hasMorePhotos, setHasMorePhotos] = useState(true);
+  const [showBackToTop, setShowBackToTop] = useState(false);
 
   // Lightbox State
   const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
@@ -815,8 +816,10 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
             removeClippedSubviews={true}
             onScroll={(e) => {
               handleScroll(e);
-              // Infinite Scroll threshold listener
+              // Infinite Scroll threshold listener & Back to Top toggle
               const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+              const currentY = contentOffset.y;
+              setShowBackToTop(currentY > 600);
               const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 4500;
               if (isNearBottom && hasMorePhotos) {
                 loadMorePhotos();
@@ -987,6 +990,19 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
               ) : null}
             </View>
           </ScrollView>
+
+          {/* ── Floating Editorial Back to Top Button ── */}
+          {showBackToTop && (
+            <TouchableOpacity
+              style={[styles.backToTopButton, { bottom: Math.max(insets.bottom + 20, 30) }]}
+              onPress={() => {
+                mainScrollRef.current?.scrollTo({ y: 0, animated: true });
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.backToTopText}>↑ TOP</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </GestureDetector>
 
@@ -1182,5 +1198,30 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: '#8c867e',
     textAlign: 'center',
+  },
+  backToTopButton: {
+    position: 'absolute',
+    right: 20,
+    backgroundColor: 'rgba(28, 26, 24, 0.92)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.4)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    zIndex: 99,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backToTopText: {
+    fontFamily: FONT_JOST_MEDIUM,
+    color: '#ffffff',
+    fontSize: 12,
+    letterSpacing: 1.5,
   },
 });
