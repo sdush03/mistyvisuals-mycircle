@@ -77,10 +77,19 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const tabOffsetsRef = useRef<Record<string, number>>({});
   const isFetchingMoreRef = useRef<boolean>(false);
 
-  // Reanimated values for edge-swipe back gesture
   const screenSwipeX = useSharedValue(0);
   const touchStartedOnLeftEdge = useSharedValue(false);
   const isLightboxOpen = useSharedValue(false);
+  const backToTopOpacity = useSharedValue(0);
+  const [isPast60Photos, setIsPast60Photos] = useState(false);
+
+  const backToTopAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: backToTopOpacity.value,
+    transform: [
+      { translateY: (1 - backToTopOpacity.value) * 12 },
+      { scale: 0.92 + backToTopOpacity.value * 0.08 },
+    ],
+  }));
 
   useEffect(() => {
     isLightboxOpen.value = activeImageIndex !== null;
@@ -816,10 +825,18 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
             removeClippedSubviews={true}
             onScroll={(e) => {
               handleScroll(e);
-              // Infinite Scroll threshold listener & Back to Top toggle
               const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
               const currentY = contentOffset.y;
-              setShowBackToTop(currentY > 600);
+              // Appears slowly after scrolling past 60 photos (~4200px scroll depth)
+              const past60 = currentY > 4200;
+              if (past60) {
+                if (!isPast60Photos) setIsPast60Photos(true);
+                backToTopOpacity.value = withTiming(1, { duration: 450, easing: Easing.out(Easing.quad) });
+              } else {
+                if (isPast60Photos) setIsPast60Photos(false);
+                backToTopOpacity.value = withTiming(0, { duration: 350, easing: Easing.in(Easing.quad) });
+              }
+
               const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 4500;
               if (isNearBottom && hasMorePhotos) {
                 loadMorePhotos();
@@ -991,10 +1008,17 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
             </View>
           </ScrollView>
 
-          {/* ── Floating Editorial Back to Top Button ── */}
-          {showBackToTop && (
+          {/* ── Floating Editorial Back to Top Button with Slow Smooth Fade-In ── */}
+          <Animated.View
+            style={[
+              styles.backToTopContainer,
+              { bottom: Math.max(insets.bottom + 20, 30) },
+              backToTopAnimatedStyle,
+            ]}
+            pointerEvents={isPast60Photos ? 'auto' : 'none'}
+          >
             <TouchableOpacity
-              style={[styles.backToTopButton, { bottom: Math.max(insets.bottom + 20, 30) }]}
+              style={styles.backToTopButton}
               onPress={() => {
                 mainScrollRef.current?.scrollTo({ y: 0, animated: true });
               }}
@@ -1002,7 +1026,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
             >
               <Text style={styles.editorialBackText}>↑ BACK TO TOP</Text>
             </TouchableOpacity>
-          )}
+          </Animated.View>
         </Animated.View>
       </GestureDetector>
 
@@ -1199,9 +1223,12 @@ const styles = StyleSheet.create({
     color: '#8c867e',
     textAlign: 'center',
   },
-  backToTopButton: {
+  backToTopContainer: {
     position: 'absolute',
     alignSelf: 'center',
+    zIndex: 99,
+  },
+  backToTopButton: {
     backgroundColor: 'rgba(28, 26, 24, 0.55)',
     paddingVertical: 7,
     paddingHorizontal: 12,
