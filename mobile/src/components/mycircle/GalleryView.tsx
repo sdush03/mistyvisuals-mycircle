@@ -78,6 +78,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const tabOffsetsRef = useRef<Record<string, number>>({});
   const isFetchingMoreRef = useRef<boolean>(false);
   const lastScrollYRef = useRef<number>(0);
+  const btnStateRef = useRef<'hidden' | 'dim' | 'bright'>('hidden');
 
   const screenSwipeX = useSharedValue(0);
   const touchStartedOnLeftEdge = useSharedValue(false);
@@ -102,6 +103,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
 
     scrollTargetY.value = startY;
     isSmoothScrollingToTop.value = true;
+    btnStateRef.current = 'hidden';
     backToTopOpacity.value = withTiming(0, { duration: 200 });
 
     scrollTargetY.value = withTiming(
@@ -857,7 +859,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             bounces={true}
-            scrollEventThrottle={16}
+            scrollEventThrottle={32}
             removeClippedSubviews={true}
             onScroll={(e) => {
               if (isSmoothScrollingToTop.value) return; // 120 FPS Lock: Bypass JS re-renders during active smooth scroll to top animation
@@ -871,20 +873,29 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
               // Appears after scrolling past 60 photos (~4200px scroll depth)
               const past60 = currentY > 4200;
               if (past60) {
-                if (!isPast60Photos) setIsPast60Photos(true);
-
-                if (deltaY < -15) {
-                  // User starts scrolling UP significantly -> Full bright opacity
-                  backToTopOpacity.value = withTiming(1, { duration: 250, easing: Easing.out(Easing.quad) });
-                } else if (deltaY > 15) {
-                  // User browsing / scrolling DOWN -> Dim lower opacity (0.28)
-                  backToTopOpacity.value = withTiming(0.28, { duration: 300, easing: Easing.out(Easing.quad) });
-                } else if (backToTopOpacity.value === 0) {
+                if (deltaY < -20) {
+                  if (btnStateRef.current !== 'bright') {
+                    btnStateRef.current = 'bright';
+                    if (!isPast60Photos) setIsPast60Photos(true);
+                    backToTopOpacity.value = withTiming(1, { duration: 250, easing: Easing.out(Easing.quad) });
+                  }
+                } else if (deltaY > 20) {
+                  if (btnStateRef.current !== 'dim') {
+                    btnStateRef.current = 'dim';
+                    if (!isPast60Photos) setIsPast60Photos(true);
+                    backToTopOpacity.value = withTiming(0.28, { duration: 300, easing: Easing.out(Easing.quad) });
+                  }
+                } else if (btnStateRef.current === 'hidden') {
+                  btnStateRef.current = 'dim';
+                  if (!isPast60Photos) setIsPast60Photos(true);
                   backToTopOpacity.value = withTiming(0.28, { duration: 300, easing: Easing.out(Easing.quad) });
                 }
               } else {
-                if (isPast60Photos) setIsPast60Photos(false);
-                backToTopOpacity.value = withTiming(0, { duration: 300, easing: Easing.in(Easing.quad) });
+                if (btnStateRef.current !== 'hidden') {
+                  btnStateRef.current = 'hidden';
+                  if (isPast60Photos) setIsPast60Photos(false);
+                  backToTopOpacity.value = withTiming(0, { duration: 300, easing: Easing.in(Easing.quad) });
+                }
               }
 
               const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 4500;
