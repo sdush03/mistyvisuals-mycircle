@@ -1005,6 +1005,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
       return;
     }
     const safeFilename = filename || 'photo.jpg';
+    const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
     try {
       // 0. Synchronous DOM Canvas Draw (If image is currently rendered in lightbox)
@@ -1020,7 +1021,9 @@ export default function GuestGalleryPhotos({ params }: Props) {
             const domBlob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/jpeg', 0.95));
             if (domBlob) {
               const file = new File([domBlob], safeFilename, { type: 'image/jpeg' });
-              if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              
+              // Only trigger Web Share API on Mobile Devices (phones/tablets)
+              if (isMobileDevice && navigator.canShare && navigator.canShare({ files: [file] })) {
                 try {
                   await navigator.share({
                     files: [file],
@@ -1031,6 +1034,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
                   if ((sErr as Error).name === 'AbortError') return;
                 }
               }
+
+              // Direct Download into Downloads folder for Desktop Browsers (Mac / PC)
               const blobUrl = URL.createObjectURL(domBlob);
               const a = document.createElement('a');
               a.href = blobUrl;
@@ -1078,8 +1083,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
       if (blob) {
         const file = new File([blob], safeFilename, { type: blob.type || 'image/jpeg' });
 
-        // A. Web Share API for Mobile Chrome / Safari
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        // Web Share API only on Mobile Devices
+        if (isMobileDevice && navigator.canShare && navigator.canShare({ files: [file] })) {
           try {
             await navigator.share({
               files: [file],
@@ -1092,7 +1097,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
           }
         }
 
-        // B. MouseEvent Blob Download (Desktop / fallback)
+        // Direct Download into Downloads folder for Desktop Browsers (Mac / PC)
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = blobUrl;
