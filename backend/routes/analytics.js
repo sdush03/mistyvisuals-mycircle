@@ -1,9 +1,6 @@
 const { prisma } = require('../prisma');
 const { verifyGuestAuth } = require('../utils/galleryAuth');
 const qdrant = require('../utils/qdrant');
-const faceRecManager = require('../utils/faceRecManager');
-const path = require('path');
-const fs = require('fs');
 
 module.exports = async function analyticsRoutes(fastify, opts) {
   const { requireAdmin } = opts;
@@ -74,6 +71,7 @@ module.exports = async function analyticsRoutes(fastify, opts) {
       const totalDownloads = aggregates._sum.downloadCount || 0;
       const registeredUsers = aggregates._count.id || 0;
 
+      // selfieVector and selfieUrl live on circle_users only (dropped from guests)
       const guests = await prisma.guest.findMany({
         where: { eventId },
         select: {
@@ -84,8 +82,6 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           impressions: true,
           matchCount: true,
           downloadCount: true,
-          selfieVector: true,
-          selfieUrl: true,
           circleUser: {
             select: { id: true, selfieVector: true, selfieUrl: true }
           }
@@ -93,79 +89,15 @@ module.exports = async function analyticsRoutes(fastify, opts) {
         orderBy: { impressions: 'desc' }
       });
 
-      // Recalculate live matchCount from Qdrant for guests with saved selfie vectors
+      // Recalculate live matchCount from Qdrant using circle_users.selfieVector
       const updatedGuests = await Promise.all(guests.map(async (g) => {
         let liveMatchCount = g.matchCount;
-        let vector = g.selfieVector || g.circleUser?.selfieVector;
-        const userId = g.circleUser?.id;
-
-        // 1. Check user_${userId}.json fallback if DB is null
-        if (!vector) {
-          let vecPath = userId ? path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.json`) : null;
-          if (vecPath && fs.existsSync(vecPath)) {
-            try { vector = JSON.parse(fs.readFileSync(vecPath, 'utf8')); } catch (e) {}
-          }
-        }
-
-        // 2. Check guest_${g.id}.json fallback if DB is null
-        if (!vector) {
-          const guestVecPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${g.id}.json`);
-          if (fs.existsSync(guestVecPath)) {
-            try { vector = JSON.parse(fs.readFileSync(guestVecPath, 'utf8')); } catch (e) {}
-          }
-        }
-
-        // 3. Image extraction fallback (R2 Cloud URL or Local File)
-        if (!vector) {
-          const selfieUrl = g.selfieUrl || g.circleUser?.selfieUrl;
-          if (selfieUrl && selfieUrl.startsWith('http')) {
-            try {
-              const fetchRes = await fetch(selfieUrl);
-              if (fetchRes.ok) {
-                const arrayBuffer = await fetchRes.arrayBuffer();
-                const buffer = Buffer.from(arrayBuffer);
-                const tempDir = path.join(__dirname, '..', 'uploads', 'photos', 'selfies');
-                if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-                const tempPath = path.join(tempDir, `temp_analytics_${g.id}_${Date.now()}.jpg`);
-                fs.writeFileSync(tempPath, buffer);
-                const res = await faceRecManager.validateSelfie(tempPath);
-                if (res && res.success && res.vector) {
-                  vector = res.vector;
-                  if (userId) {
-                    prisma.circleUser.update({ where: { id: userId }, data: { selfieVector: vector } }).catch(() => {});
-                  }
-                  prisma.guest.update({ where: { id: g.id }, data: { selfieVector: vector } }).catch(() => {});
-                }
-                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-              }
-            } catch (e) {}
-          }
-        }
-
-        if (!vector) {
-          let imgPath = userId ? path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.jpg`) : null;
-          if (!imgPath || !fs.existsSync(imgPath)) {
-            imgPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${g.id}.jpg`);
-          }
-          if (fs.existsSync(imgPath)) {
-            try {
-              const res = await faceRecManager.validateSelfie(imgPath);
-              if (res && res.success && res.vector) {
-                vector = res.vector;
-              }
-            } catch (e) {}
-          }
-        }
+        const vector = g.circleUser?.selfieVector;
 
         if (vector) {
           try {
-            // Persist vector to DB if it wasn't already stored
-            if (!g.selfieVector) {
-              prisma.guest.update({ where: { id: g.id }, data: { selfieVector: vector } }).catch(() => {});
-            }
             const matches = await qdrant.searchVectors(eventId, vector, 100000, 0.35);
             liveMatchCount = new Set(matches.map(m => m.photo_id)).size;
-            // Persist updated matchCount to database asynchronously
             if (liveMatchCount !== g.matchCount) {
               prisma.guest.update({
                 where: { id: g.id },
@@ -184,7 +116,8 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           phoneNumber: g.phoneNumber,
           impressions: g.impressions,
           matchCount: liveMatchCount,
-          downloadCount: g.downloadCount
+          downloadCount: g.downloadCount,
+          selfieUrl: g.circleUser?.selfieUrl || null
         };
       }));
 
