@@ -187,7 +187,7 @@ module.exports = async function downloadRoutes(fastify, opts) {
         include: { galleryEvent: true }
       });
 
-      if (photo && !photo.galleryEvent.allowDownloads) {
+      if (photo && photo.galleryEvent && photo.galleryEvent.allowDownloads === false) {
         return reply.code(403).send({ error: 'Downloads are disabled for this gallery' });
       }
 
