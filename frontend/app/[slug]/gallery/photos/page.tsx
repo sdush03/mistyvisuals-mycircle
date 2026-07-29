@@ -307,16 +307,16 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
 
   const getTabCount = useCallback((tabName: string) => {
-    if (!event?.tabCounts) return null
+    if (!event?.tabCounts || !tabName || typeof tabName !== 'string') return null
     const key = tabName.trim().toUpperCase()
     return event.tabCounts[key] ?? event.tabCounts[tabName] ?? null
   }, [event?.tabCounts])
 
   const totalPhotosForActiveView = useMemo(() => {
     if (viewMode === 'matched') {
-      return photos.length
+      return photos?.length || 0
     } else if (viewMode === 'favorites') {
-      return favoritesList.length
+      return favoritesList?.length || 0
     } else if (viewMode === 'all') {
       if (activeAllTab) {
         const count = getTabCount(activeAllTab)
@@ -326,8 +326,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
         if (allCount) return allCount
       }
     }
-    return activePhotosList.length
-  }, [viewMode, photos.length, favoritesList.length, activeAllTab, getTabCount, event?.tabCounts, totalPhotos, activePhotosList.length])
+    return activePhotosList?.length || 0
+  }, [viewMode, photos, favoritesList, activeAllTab, getTabCount, event?.tabCounts, totalPhotos, activePhotosList])
 
 
 
@@ -523,7 +523,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
   // Hide tabs that have no photos yet only if they've been attempted (hasMore=false, photos=[]).
   // If guest is not full access, only show Highlights.
   const allPhotosTabs = useMemo(() => {
-    let tabs: string[] = event?.tabs || []
+    let tabs: string[] = (event?.tabs || []).filter((t: any) => typeof t === 'string' && t.trim().length > 0)
     if (guest && !guest.hasFullAccess) {
       tabs = tabs.filter((t: string) => t === 'Highlights')
     }

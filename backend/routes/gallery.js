@@ -1432,7 +1432,9 @@ module.exports = async function galleryRoutes(fastify, opts) {
           _all: true
         }
       });
-      const activeTabNames = activePhotoTabs.map(t => t.tabName);
+      const activeTabNames = activePhotoTabs
+        .filter(t => t.tabName)
+        .map(t => t.tabName.trim().toUpperCase());
       const tabCounts = {};
       activePhotoTabs.forEach(t => {
         if (t.tabName) {
@@ -1443,7 +1445,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
       const totalAllCount = await prisma.photo.count({ where: { eventId: event.id } });
       tabCounts['ALL'] = totalAllCount;
 
-      event.tabs = (event.tabs || []).filter(tab => activeTabNames.includes(tab));
+      event.tabs = (event.tabs || []).filter(tab => typeof tab === 'string' && activeTabNames.includes(tab.trim().toUpperCase()));
       event.tabCounts = tabCounts;
 
       return event;
