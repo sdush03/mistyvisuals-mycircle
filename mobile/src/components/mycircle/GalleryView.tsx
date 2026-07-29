@@ -20,7 +20,7 @@ import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS, Easing } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, useAnimatedRef, useDerivedValue, scrollTo, withTiming, withSpring, runOnJS, Easing } from 'react-native-reanimated';
 import { usePathname } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { useScrollTabBarCollapse } from '../../hooks/useScrollTabBarCollapse';
@@ -70,7 +70,8 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const [selectedBounds, setSelectedBounds] = useState<LightboxBounds | null>(null);
 
   const PAGE_SIZE = 60;
-  const mainScrollRef = useRef<ScrollView>(null);
+  const mainScrollRef = useAnimatedRef<Animated.ScrollView>();
+  const currentYRef = useRef<number>(0);
   const cardRefs = useRef<{ [key: string]: View | null }>({});
   const eventHeadersRef = useRef<Record<string, string>>({});
   const allPhotosOffsetRef = useRef<number>(0);
@@ -82,7 +83,33 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const touchStartedOnLeftEdge = useSharedValue(false);
   const isLightboxOpen = useSharedValue(false);
   const backToTopOpacity = useSharedValue(0);
+  const scrollTargetY = useSharedValue(0);
+  const isSmoothScrollingToTop = useSharedValue(false);
   const [isPast60Photos, setIsPast60Photos] = useState(false);
+
+  useDerivedValue(() => {
+    if (isSmoothScrollingToTop.value) {
+      scrollTo(mainScrollRef, 0, scrollTargetY.value, false);
+    }
+  });
+
+  const scrollToTopSmoothly = useCallback(() => {
+    const startY = currentYRef.current;
+    scrollTargetY.value = startY;
+    isSmoothScrollingToTop.value = true;
+    scrollTargetY.value = withTiming(
+      0,
+      {
+        duration: 750,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      },
+      (finished) => {
+        if (finished) {
+          isSmoothScrollingToTop.value = false;
+        }
+      }
+    );
+  }, [scrollTargetY, isSmoothScrollingToTop]);
 
   const backToTopAnimatedStyle = useAnimatedStyle(() => ({
     opacity: backToTopOpacity.value,
@@ -817,17 +844,18 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
             <Text style={styles.editorialBackText}>← BACK</Text>
           </Pressable>
 
-          <ScrollView
+          <Animated.ScrollView
             ref={mainScrollRef}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             bounces={true}
-            scrollEventThrottle={32}
+            scrollEventThrottle={16}
             removeClippedSubviews={true}
             onScroll={(e) => {
               handleScroll(e);
               const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
               const currentY = contentOffset.y;
+              currentYRef.current = currentY;
               const deltaY = currentY - lastScrollYRef.current;
               lastScrollYRef.current = currentY;
 
@@ -1019,7 +1047,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
                 </View>
               ) : null}
             </View>
-          </ScrollView>
+          </Animated.ScrollView>
 
           {/* ── Floating Editorial Back to Top Button with Slow Smooth Fade-In ── */}
           <Animated.View
@@ -1032,9 +1060,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           >
             <TouchableOpacity
               style={styles.backToTopButton}
-              onPress={() => {
-                mainScrollRef.current?.scrollTo({ y: 0, animated: true });
-              }}
+              onPress={scrollToTopSmoothly}
               activeOpacity={0.8}
             >
               <Text style={styles.editorialBackText}>↑ BACK TO TOP</Text>
