@@ -76,6 +76,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const allPhotosOffsetRef = useRef<number>(0);
   const tabOffsetsRef = useRef<Record<string, number>>({});
   const isFetchingMoreRef = useRef<boolean>(false);
+  const lastScrollYRef = useRef<number>(0);
 
   const screenSwipeX = useSharedValue(0);
   const touchStartedOnLeftEdge = useSharedValue(false);
@@ -827,14 +828,26 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
               handleScroll(e);
               const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
               const currentY = contentOffset.y;
-              // Appears slowly after scrolling past 60 photos (~4200px scroll depth)
+              const deltaY = currentY - lastScrollYRef.current;
+              lastScrollYRef.current = currentY;
+
+              // Appears after scrolling past 60 photos (~4200px scroll depth)
               const past60 = currentY > 4200;
               if (past60) {
                 if (!isPast60Photos) setIsPast60Photos(true);
-                backToTopOpacity.value = withTiming(1, { duration: 450, easing: Easing.out(Easing.quad) });
+
+                if (deltaY < -15) {
+                  // User starts scrolling UP significantly -> Full bright opacity
+                  backToTopOpacity.value = withTiming(1, { duration: 250, easing: Easing.out(Easing.quad) });
+                } else if (deltaY > 15) {
+                  // User browsing / scrolling DOWN -> Dim lower opacity (0.28)
+                  backToTopOpacity.value = withTiming(0.28, { duration: 300, easing: Easing.out(Easing.quad) });
+                } else if (backToTopOpacity.value === 0) {
+                  backToTopOpacity.value = withTiming(0.28, { duration: 300, easing: Easing.out(Easing.quad) });
+                }
               } else {
                 if (isPast60Photos) setIsPast60Photos(false);
-                backToTopOpacity.value = withTiming(0, { duration: 350, easing: Easing.in(Easing.quad) });
+                backToTopOpacity.value = withTiming(0, { duration: 300, easing: Easing.in(Easing.quad) });
               }
 
               const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 4500;
