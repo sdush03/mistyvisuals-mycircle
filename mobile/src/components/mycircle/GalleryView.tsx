@@ -306,10 +306,9 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           if (p.r2Url) Image.prefetch(p.r2Url);
         });
 
-        if (hasMore) {
-          setTimeout(() => {
-            loadMorePhotos();
-          }, 100);
+        // hasMorePhotos set based on total
+        if (!hasMore) {
+          setHasMorePhotos(false);
         }
       } catch (e: any) {
         console.warn('[MYCIRCLE DEBUG ⚠️] Parallel photo fetch error:', e);
@@ -371,12 +370,6 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           const reachedTotal = totalAllPhotosCount !== null && dedupped.length >= totalAllPhotosCount;
           if (reachedTotal) {
             setHasMorePhotos(false);
-          }
-          // Continuous Pipeline Buffer: If buffer has less than 180 photos, chain next batch automatically
-          if (!reachedTotal && dedupped.length < 180) {
-            setTimeout(() => {
-              loadMorePhotos();
-            }, 200);
           }
           return dedupped;
         });
@@ -791,7 +784,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
               handleScroll(e);
               // Infinite Scroll threshold listener
               const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-              const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 2200;
+              const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 900;
               if (isNearBottom && hasMorePhotos) {
                 loadMorePhotos();
               }
