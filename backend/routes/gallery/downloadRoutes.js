@@ -179,7 +179,6 @@ module.exports = async function downloadRoutes(fastify, opts) {
         where: {
           OR: [
             { r2Url: url },
-            { url: url },
             { filename: filenameFromUrl },
             { r2Url: { endsWith: filenameFromUrl } }
           ]
