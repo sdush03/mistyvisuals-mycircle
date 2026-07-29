@@ -1000,30 +1000,39 @@ export default function GuestGalleryPhotos({ params }: Props) {
       alert('Downloads are disabled for this gallery.');
       return;
     }
-    if (!url) {
-      console.warn('Download url missing');
-      return;
-    }
+    if (!url) return;
     const safeFilename = filename || 'photo.jpg';
 
-    try {
-      const token = localStorage.getItem(`mv_gallery_token_${slug}`) || '';
-      const downloadProxyUrl = `${apiUrl}/api/gallery/public/download-proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(safeFilename)}&token=${encodeURIComponent(token)}`;
+    const token = localStorage.getItem(`mv_gallery_token_${slug}`) || '';
+    const downloadProxyUrl = `${apiUrl}/api/gallery/public/download-proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(safeFilename)}&token=${encodeURIComponent(token)}`;
 
-      // Trigger direct file download via backend proxy endpoint
+    try {
+      const res = await fetch(downloadProxyUrl);
+      if (!res.ok) {
+        throw new Error(`Download proxy returned status ${res.status}`);
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
       const a = document.createElement('a');
-      a.href = downloadProxyUrl;
+      a.href = blobUrl;
       a.download = safeFilename;
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
-      setTimeout(() => {
-        if (document.body.contains(a)) {
-          document.body.removeChild(a);
-        }
-      }, 2000);
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
     } catch (err) {
-      console.warn('Download error:', err);
+      console.warn('Fetch blob download failed, attempting iframe fallback:', err);
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = downloadProxyUrl;
+      document.body.appendChild(iframe);
+      setTimeout(() => {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+      }, 15000);
     }
   }
 
