@@ -73,6 +73,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   const cardRefs = useRef<{ [key: string]: View | null }>({});
   const eventHeadersRef = useRef<Record<string, string>>({});
   const allPhotosOffsetRef = useRef<number>(0);
+  const tabOffsetsRef = useRef<Record<string, number>>({});
   const isFetchingMoreRef = useRef<boolean>(false);
 
   // Reanimated values for edge-swipe back gesture
@@ -321,19 +322,32 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
   };
 
   const loadMorePhotos = async () => {
-    if (isFetchingMoreRef.current || !hasMorePhotos || isLoadingMore || isLoading || !eventSlug) return;
+    if (isFetchingMoreRef.current || isLoadingMore || isLoading || !eventSlug) return;
+
+    const normTab = activeTab.toUpperCase();
+    const isCeremonyTab = normTab !== 'ALL' && normTab !== 'MY PHOTOS' && normTab !== 'MY FAVOURITES';
+
+    if (!isCeremonyTab && !hasMorePhotos) return;
+
     try {
       isFetchingMoreRef.current = true;
       setIsLoadingMore(true);
-      const currentOffset = allPhotosOffsetRef.current;
-      const loadMoreStartTime = Date.now();
-      console.log(`[MYCIRCLE DEBUG 📥] Pre-fetching next page -> offset=${currentOffset}, limit=${PAGE_SIZE}...`);
+
+      const currentOffset = isCeremonyTab
+        ? (tabOffsetsRef.current[normTab] ?? (tabCache[normTab]?.length || 0))
+        : allPhotosOffsetRef.current;
+
+      const tabQuery = isCeremonyTab ? `&tab=${encodeURIComponent(activeTab)}` : '';
       const eventHeaders = eventHeadersRef.current;
-      const allRes = await guestApi.get(
-        `/api/gallery/public/events/${eventSlug}/photos?limit=${PAGE_SIZE}&offset=${currentOffset}`,
+      const loadMoreStartTime = Date.now();
+
+      console.log(`[MYCIRCLE DEBUG 📥] Pre-fetching next page for '${activeTab}' -> offset=${currentOffset}, limit=${PAGE_SIZE}...`);
+
+      const res = await guestApi.get(
+        `/api/gallery/public/events/${eventSlug}/photos?limit=${PAGE_SIZE}&offset=${currentOffset}${tabQuery}`,
         { headers: eventHeaders }
       );
-      const allList = allRes.data.photos || (Array.isArray(allRes.data) ? allRes.data : []);
+      const rawList = res.data.photos || (Array.isArray(res.data) ? res.data : []);
       const mapPhotoItem = (p: any): Photo => {
         const thumbUri = p.thumbnailUrl || p.thumbnail_url || p.r2Url || p.r2_url || p.file_url_mobile || p.file_url || p.url || '';
         const fullUri = p.r2Url || p.r2_url || p.file_url || p.url || thumbUri;
@@ -350,31 +364,44 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           likeCount: typeof p.likeCount === 'number' ? p.likeCount : (typeof p.likesCount === 'number' ? p.likesCount : (p._count?.likes || 0)),
         };
       };
-      const mapped = Array.isArray(allList) ? allList.map(mapPhotoItem) : [];
+      const mapped = Array.isArray(rawList) ? rawList.map(mapPhotoItem) : [];
       const loadMoreDuration = Date.now() - loadMoreStartTime;
-      console.log(`[MYCIRCLE DEBUG ✅] Page Fetch Done in ${loadMoreDuration}ms | Received ${mapped.length} new photos | New Offset: ${currentOffset + mapped.length}`);
+      console.log(`[MYCIRCLE DEBUG ✅] Page Fetch Done in ${loadMoreDuration}ms | Received ${mapped.length} new photos for '${activeTab}' | New Offset: ${currentOffset + mapped.length}`);
 
       if (mapped.length > 0) {
-        // Silent background prefetch of next batch into native disk memory cache
         mapped.forEach((p) => {
           if (p.r2Url) Image.prefetch(p.r2Url);
         });
 
-        allPhotosOffsetRef.current += mapped.length;
-        setAllPhotosOffset(allPhotosOffsetRef.current);
-        setAllPhotos((prev) => {
-          const next = [...prev, ...mapped];
-          const dedupped = next.filter((item, index, self) =>
-            index === self.findIndex((t) => (t.id && item.id ? t.id === item.id : t.r2Url === item.r2Url))
-          );
-          const reachedTotal = totalAllPhotosCount !== null && dedupped.length >= totalAllPhotosCount;
-          if (reachedTotal) {
-            setHasMorePhotos(false);
-          }
-          return dedupped;
-        });
+        if (isCeremonyTab) {
+          tabOffsetsRef.current[normTab] = currentOffset + mapped.length;
+          setTabCache((prev) => {
+            const existing = prev[normTab] || [];
+            const next = [...existing, ...mapped];
+            const dedupped = next.filter((item, index, self) =>
+              index === self.findIndex((t) => (t.id && item.id ? t.id === item.id : t.r2Url === item.r2Url))
+            );
+            return { ...prev, [normTab]: dedupped };
+          });
+        } else {
+          allPhotosOffsetRef.current += mapped.length;
+          setAllPhotosOffset(allPhotosOffsetRef.current);
+          setAllPhotos((prev) => {
+            const next = [...prev, ...mapped];
+            const dedupped = next.filter((item, index, self) =>
+              index === self.findIndex((t) => (t.id && item.id ? t.id === item.id : t.r2Url === item.r2Url))
+            );
+            const reachedTotal = totalAllPhotosCount !== null && dedupped.length >= totalAllPhotosCount;
+            if (reachedTotal) {
+              setHasMorePhotos(false);
+            }
+            return dedupped;
+          });
+        }
       } else {
-        setHasMorePhotos(false);
+        if (!isCeremonyTab) {
+          setHasMorePhotos(false);
+        }
       }
     } catch (e: any) {
       console.warn('Load more error:', e?.response?.status);
@@ -454,6 +481,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
         if (p.r2Url) Image.prefetch(p.r2Url);
       });
 
+      tabOffsetsRef.current[norm] = mapped.length;
       setTabCache((prev) => ({ ...prev, [norm]: mapped }));
     } catch (err) {
       console.warn(`Failed to fetch photos for tab ${tabName}:`, err);
