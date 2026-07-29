@@ -307,9 +307,11 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
           if (p.r2Url) Image.prefetch(p.r2Url);
         });
 
-        // hasMorePhotos set based on total
-        if (!hasMore) {
-          setHasMorePhotos(false);
+        // Pre-buffer Page 2 (photos 61-120) immediately so user always stays 1 page ahead
+        if (hasMore) {
+          setTimeout(() => {
+            loadMorePhotos();
+          }, 200);
         }
       } catch (e: any) {
         console.warn('[MYCIRCLE DEBUG ⚠️] Parallel photo fetch error:', e);
@@ -812,7 +814,7 @@ export default function GalleryView({ onLogout, onChangeEvent }: GalleryViewProp
               handleScroll(e);
               // Infinite Scroll threshold listener
               const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-              const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 900;
+              const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 2800;
               if (isNearBottom && hasMorePhotos) {
                 loadMorePhotos();
               }
