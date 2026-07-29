@@ -1005,7 +1005,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
       return;
     }
     const safeFilename = filename || 'photo.jpg';
-    const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
     try {
       // 0. Synchronous DOM Canvas Draw (If image is currently rendered in lightbox)
@@ -1020,22 +1019,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
             ctx.drawImage(activeImg, 0, 0);
             const domBlob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/jpeg', 0.95));
             if (domBlob) {
-              const file = new File([domBlob], safeFilename, { type: 'image/jpeg' });
-              
-              // Only trigger Web Share API on Mobile Devices (phones/tablets)
-              if (isMobileDevice && navigator.canShare && navigator.canShare({ files: [file] })) {
-                try {
-                  await navigator.share({
-                    files: [file],
-                    title: safeFilename,
-                  });
-                  return;
-                } catch (sErr) {
-                  if ((sErr as Error).name === 'AbortError') return;
-                }
-              }
-
-              // Direct Download into Downloads folder for Desktop Browsers (Mac / PC)
               const blobUrl = URL.createObjectURL(domBlob);
               const a = document.createElement('a');
               a.href = blobUrl;
@@ -1079,25 +1062,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
         }
       }
 
-      // If we acquired the photo binary data
+      // If we acquired the photo binary data: Direct File Download
       if (blob) {
-        const file = new File([blob], safeFilename, { type: blob.type || 'image/jpeg' });
-
-        // Web Share API only on Mobile Devices
-        if (isMobileDevice && navigator.canShare && navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({
-              files: [file],
-              title: safeFilename,
-            });
-            return;
-          } catch (shareErr) {
-            if ((shareErr as Error).name === 'AbortError') return;
-            console.warn('Web Share failed, falling back to Blob download:', shareErr);
-          }
-        }
-
-        // Direct Download into Downloads folder for Desktop Browsers (Mac / PC)
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = blobUrl;
