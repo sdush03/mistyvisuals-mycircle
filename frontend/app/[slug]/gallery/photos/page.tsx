@@ -304,6 +304,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
     return []
   }, [viewMode, photos, allPhotos, favoritesList])
 
+
+
   const getTabCount = useCallback((tabName: string) => {
     if (!event?.tabCounts) return null
     const key = tabName.trim().toUpperCase()
@@ -327,53 +329,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
     return activePhotosList.length
   }, [viewMode, photos.length, favoritesList.length, activeAllTab, getTabCount, event?.tabCounts, totalPhotos, activePhotosList.length])
 
-  const [pendingNextInLightbox, setPendingNextInLightbox] = useState(false)
 
-  // Lightbox keyboard arrows handler
-  const handlePrevPhoto = () => {
-    if (activePhotoIndex !== null && activePhotoIndex > 0) {
-      setActivePhotoIndex(activePhotoIndex - 1)
-    }
-  }
-
-  const handleNextPhoto = useCallback(() => {
-    if (activePhotoIndex !== null) {
-      if (activePhotoIndex < activePhotosList.length - 1) {
-        setActivePhotoIndex(activePhotoIndex + 1)
-      } else if (viewMode === 'all' && hasMore && !loadingMore) {
-        setPendingNextInLightbox(true)
-        loadAllPhotos(activeAllTab)
-      }
-    }
-  }, [activePhotoIndex, activePhotosList.length, viewMode, hasMore, loadingMore, loadAllPhotos, activeAllTab])
-
-  // Advance lightbox when next batch finishes loading
-  useEffect(() => {
-    if (pendingNextInLightbox && activePhotoIndex !== null && activePhotoIndex < activePhotosList.length - 1) {
-      setPendingNextInLightbox(false)
-      setActivePhotoIndex(prev => (prev !== null ? prev + 1 : null))
-    }
-  }, [pendingNextInLightbox, activePhotoIndex, activePhotosList.length])
-
-  // Pre-fetch next page when lightbox index approaches end of loaded photos
-  useEffect(() => {
-    if (activePhotoIndex !== null && viewMode === 'all' && hasMore && !loadingMore) {
-      if (activePhotoIndex >= activePhotosList.length - 5) {
-        loadAllPhotos(activeAllTab)
-      }
-    }
-  }, [activePhotoIndex, viewMode, hasMore, loadingMore, activePhotosList.length, loadAllPhotos, activeAllTab])
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (activePhotoIndex === null) return
-      if (e.key === 'Escape') setActivePhotoIndex(null)
-      if (e.key === 'ArrowRight') handleNextPhoto()
-      if (e.key === 'ArrowLeft') handlePrevPhoto()
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activePhotoIndex, handleNextPhoto])
 
 
   useEffect(() => {
@@ -927,6 +883,54 @@ export default function GuestGalleryPhotos({ params }: Props) {
       setLoadingMore(false)
     }
   }, [loadingMore, tabCache, slug, apiUrl, prefetchNextBatch])
+
+  const [pendingNextInLightbox, setPendingNextInLightbox] = useState(false)
+
+  // Lightbox keyboard arrows handler
+  const handlePrevPhoto = () => {
+    if (activePhotoIndex !== null && activePhotoIndex > 0) {
+      setActivePhotoIndex(activePhotoIndex - 1)
+    }
+  }
+
+  const handleNextPhoto = useCallback(() => {
+    if (activePhotoIndex !== null) {
+      if (activePhotoIndex < activePhotosList.length - 1) {
+        setActivePhotoIndex(activePhotoIndex + 1)
+      } else if (viewMode === 'all' && hasMore && !loadingMore) {
+        setPendingNextInLightbox(true)
+        loadAllPhotos(activeAllTab)
+      }
+    }
+  }, [activePhotoIndex, activePhotosList.length, viewMode, hasMore, loadingMore, loadAllPhotos, activeAllTab])
+
+  // Advance lightbox when next batch finishes loading
+  useEffect(() => {
+    if (pendingNextInLightbox && activePhotoIndex !== null && activePhotoIndex < activePhotosList.length - 1) {
+      setPendingNextInLightbox(false)
+      setActivePhotoIndex(prev => (prev !== null ? prev + 1 : null))
+    }
+  }, [pendingNextInLightbox, activePhotoIndex, activePhotosList.length])
+
+  // Pre-fetch next page when lightbox index approaches end of loaded photos
+  useEffect(() => {
+    if (activePhotoIndex !== null && viewMode === 'all' && hasMore && !loadingMore) {
+      if (activePhotoIndex >= activePhotosList.length - 5) {
+        loadAllPhotos(activeAllTab)
+      }
+    }
+  }, [activePhotoIndex, viewMode, hasMore, loadingMore, activePhotosList.length, loadAllPhotos, activeAllTab])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (activePhotoIndex === null) return
+      if (e.key === 'Escape') setActivePhotoIndex(null)
+      if (e.key === 'ArrowRight') handleNextPhoto()
+      if (e.key === 'ArrowLeft') handlePrevPhoto()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [activePhotoIndex, handleNextPhoto])
 
   // IntersectionObserver — fires when sentinel enters the viewport
   useEffect(() => {
