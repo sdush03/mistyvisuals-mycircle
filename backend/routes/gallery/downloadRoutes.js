@@ -174,8 +174,16 @@ module.exports = async function downloadRoutes(fastify, opts) {
     const { url, filename } = req.query;
     if (!url) return reply.code(400).send({ error: 'URL is required' });
     try {
+      const filenameFromUrl = url.split('/').pop() || '';
       const photo = await prisma.photo.findFirst({
-        where: { r2Url: url },
+        where: {
+          OR: [
+            { r2Url: url },
+            { url: url },
+            { filename: filenameFromUrl },
+            { r2Url: { endsWith: filenameFromUrl } }
+          ]
+        },
         include: { galleryEvent: true }
       });
 
@@ -183,9 +191,17 @@ module.exports = async function downloadRoutes(fastify, opts) {
         return reply.code(403).send({ error: 'Downloads are disabled for this gallery' });
       }
 
-      const parsedUrl = new URL(url);
+      let fetchUrl = url;
+      if (url.startsWith('/')) {
+        const host = req.headers.host || 'localhost:5001';
+        const protocol = req.protocol || 'http';
+        fetchUrl = `${protocol}://${host}${url}`;
+      }
+
+      const parsedUrl = new URL(fetchUrl);
       const hostname = parsedUrl.hostname.toLowerCase();
 
+      const isDev = process.env.NODE_ENV === 'development';
       const isLocal = 
         hostname === 'localhost' ||
         hostname === '127.0.0.1' ||
@@ -196,7 +212,7 @@ module.exports = async function downloadRoutes(fastify, opts) {
         hostname.startsWith('169.254.') ||
         /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname);
 
-      if (isLocal) {
+      if (isLocal && !isDev) {
         req.log.warn(`Blocked download-proxy request to local network/loopback target: ${url}`);
         return reply.code(400).send({ error: 'Invalid URL target' });
       }
@@ -205,10 +221,10 @@ module.exports = async function downloadRoutes(fastify, opts) {
         return reply.code(400).send({ error: 'Only HTTP and HTTPS protocols are allowed' });
       }
 
-      const response = await fetch(url);
+      const response = await fetch(fetchUrl);
       if (!response.ok) throw new Error('Failed to fetch file');
 
-      const contentType = response.headers.get('content-type') || 'application/octet-stream';
+      const contentType = response.headers.get('content-type') || 'image/jpeg';
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 

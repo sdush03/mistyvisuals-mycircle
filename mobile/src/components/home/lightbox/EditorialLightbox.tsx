@@ -8,8 +8,14 @@ import {
   FlatList,
   Dimensions,
   Share,
+  Platform,
+  Linking,
   StatusBar,
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as MediaLibrary from 'expo-media-library';
+import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -27,6 +33,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { LightboxImageItem } from './components/LightboxImageItem';
 import { Image as ExpoImage } from 'expo-image';
 import { savesService } from '../../../services/savesService';
+import { API_BASE_URL } from '../../../services/api';
 import {
   FONT_FUTURA_BOLD,
   FONT_MONTSERRAT_REGULAR,
@@ -365,14 +372,73 @@ export function EditorialLightbox({
         return;
       }
 
-      await Share.share({
-        url: targetUri,
-        title: title || 'Misty Visuals',
-        message: `Download photo: ${targetUri}`,
-      });
-    } catch (err) {
-      console.warn('Download share error:', err);
-      showToast('Save unavailable');
+      const filename = currentItem.filename || `photo_${Date.now()}.jpg`;
+      const safeName = filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
+
+      if (Platform.OS === 'web') {
+        try {
+          const response = await fetch(targetUri);
+          if (!response.ok) throw new Error('Fetch failed');
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = safeName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+          showToast('Photo downloaded!');
+        } catch (webErr) {
+          const link = document.createElement('a');
+          link.href = targetUri;
+          link.download = safeName;
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          showToast('Downloading photo...');
+        }
+      } else {
+        // Native Mobile: Save photo directly into device Photos Gallery / Camera Roll
+        showToast('Saving photo to gallery...');
+
+        // 1. Request Photo Library Permission from user
+        const { status, canAskAgain } = await MediaLibrary.requestPermissionsAsync();
+        if (status !== 'granted') {
+          if (!canAskAgain) {
+            showToast('Enable Photos permission in app settings');
+          } else {
+            showToast('Photo Gallery permission required');
+          }
+          return;
+        }
+
+        // 2. Download actual high-res photo to local device storage
+        const localUri = `${FileSystem.cacheDirectory}${safeName}`;
+        const downloadRes = await FileSystem.downloadAsync(targetUri, localUri);
+
+        if (downloadRes && downloadRes.status === 200) {
+          // 3. Save photo asset directly into phone's native Photo Gallery / Camera Roll
+          const asset = await MediaLibrary.createAssetAsync(downloadRes.uri);
+          if (asset) {
+            showToast('Photo saved to Gallery!');
+            return;
+          }
+        }
+
+        // Fallback: If MediaLibrary save fails, share local file URI (file://...) directly so user can tap 'Save Image'
+        if (Sharing && (await Sharing.isAvailableAsync())) {
+          await Sharing.shareAsync(localUri, {
+            mimeType: 'image/jpeg',
+            dialogTitle: 'Save Photo to Gallery',
+          });
+          showToast('Photo ready to save');
+        }
+      }
+    } catch (err: any) {
+      console.warn('Native download error:', err);
+      showToast(err?.message || 'Save failed, please try again');
     } finally {
       setIsDownloading(false);
     }

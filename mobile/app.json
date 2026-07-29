@@ -18,6 +18,8 @@
       "supportsTablet": true,
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Allow Misty Visuals to save photos to your gallery.",
+        "NSPhotoLibraryAddUsageDescription": "Allow Misty Visuals to save photos to your photo gallery.",
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
@@ -44,7 +46,9 @@
       },
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {
@@ -53,6 +57,13 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Misty Visuals to save photos to your gallery.",
+          "savePhotosPermission": "Allow Misty Visuals to save photos to your gallery."
+        }
+      ],
       [
         "expo-splash-screen",
         {

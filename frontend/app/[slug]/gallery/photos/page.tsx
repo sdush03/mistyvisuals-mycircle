@@ -1000,25 +1000,124 @@ export default function GuestGalleryPhotos({ params }: Props) {
       alert('Downloads are disabled for this gallery.');
       return;
     }
+    if (!url) {
+      console.warn('Download url missing');
+      return;
+    }
+    const safeFilename = filename || 'photo.jpg';
+
     try {
+      // 0. Synchronous DOM Canvas Draw (If image is currently rendered in lightbox)
+      const activeImg = document.querySelector('.lightbox-main-img') as HTMLImageElement;
+      if (activeImg && activeImg.complete && (activeImg.naturalWidth > 0 || activeImg.width > 0)) {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = activeImg.naturalWidth || activeImg.width;
+          canvas.height = activeImg.naturalHeight || activeImg.height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(activeImg, 0, 0);
+            const domBlob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/jpeg', 0.95));
+            if (domBlob) {
+              const file = new File([domBlob], safeFilename, { type: 'image/jpeg' });
+              if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                  await navigator.share({
+                    files: [file],
+                    title: safeFilename,
+                  });
+                  return;
+                } catch (sErr) {
+                  if ((sErr as Error).name === 'AbortError') return;
+                }
+              }
+              const blobUrl = URL.createObjectURL(domBlob);
+              const a = document.createElement('a');
+              a.href = blobUrl;
+              a.download = safeFilename;
+              a.style.display = 'none';
+              document.body.appendChild(a);
+              a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+              document.body.removeChild(a);
+              setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+              return;
+            }
+          }
+        } catch (domErr) {
+          console.warn('DOM canvas draw error:', domErr);
+        }
+      }
+
       const token = localStorage.getItem(`mv_gallery_token_${slug}`) || '';
-      // Force native download via backend download-proxy (setting Content-Disposition header)
-      const downloadUrl = `${apiUrl}/api/gallery/public/download-proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}&token=${encodeURIComponent(token)}`
-      const a = document.createElement('a')
-      a.href = downloadUrl
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      const downloadProxyUrl = `${apiUrl}/api/gallery/public/download-proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(safeFilename)}&token=${encodeURIComponent(token)}`;
+
+      // 1. Fetch photo binary data
+      let blob: Blob | null = null;
+      try {
+        const res = await fetch(downloadProxyUrl);
+        if (res.ok) {
+          blob = await res.blob();
+        }
+      } catch (e) {
+        console.warn('Proxy fetch error:', e);
+      }
+
+      if (!blob) {
+        try {
+          const fullUrl = url.startsWith('/') ? `${apiUrl}${url}` : url;
+          const directRes = await fetch(fullUrl, { mode: 'cors' });
+          if (directRes.ok) {
+            blob = await directRes.blob();
+          }
+        } catch (e) {
+          console.warn('Direct fetch error:', e);
+        }
+      }
+
+      // If we acquired the photo binary data
+      if (blob) {
+        const file = new File([blob], safeFilename, { type: blob.type || 'image/jpeg' });
+
+        // A. Web Share API for Mobile Chrome / Safari
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: safeFilename,
+            });
+            return;
+          } catch (shareErr) {
+            if ((shareErr as Error).name === 'AbortError') return;
+            console.warn('Web Share failed, falling back to Blob download:', shareErr);
+          }
+        }
+
+        // B. MouseEvent Blob Download (Desktop / fallback)
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = safeFilename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        const evt = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
+        a.dispatchEvent(evt);
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+        return;
+      }
+
+      // 2. Hidden background iframe download fallback
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = downloadProxyUrl;
+      document.body.appendChild(iframe);
+      setTimeout(() => {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+      }, 30000);
     } catch (err) {
-      console.warn('Proxy download failed, falling back to direct link:', err)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      a.target = '_blank'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      console.warn('Download error:', err);
     }
   }
 
@@ -1661,7 +1760,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                               <div 
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleDownload(p.r2Url, p.filename);
+                                  handleDownload(p.r2Url || p.url || p.file_url || '', p.filename);
                                 }}
                                 className="cursor-pointer select-none opacity-0 group-hover:opacity-100 transition-opacity"
                                 style={{ transition: 'all 0.2s' }}
@@ -1774,7 +1873,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                               <div 
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleDownload(p.r2Url, p.filename);
+                                  handleDownload(p.r2Url || p.url || p.file_url || '', p.filename);
                                 }}
                                 className="cursor-pointer select-none opacity-0 group-hover:opacity-100 transition-opacity"
                                 style={{ transition: 'all 0.2s' }}
@@ -1892,7 +1991,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                                 <div 
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleDownload(p.r2Url, p.filename);
+                                    handleDownload(p.r2Url || p.url || p.file_url || '', p.filename);
                                   }}
                                   className="cursor-pointer select-none opacity-0 group-hover:opacity-100 transition-opacity"
                                   style={{ transition: 'all 0.2s' }}
@@ -2176,11 +2275,12 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 />
                 <img
                   src={activePhotosList[activePhotoIndex].r2Url}
+                  crossOrigin="anonymous"
                   alt=""
                   onLoad={() => setHighResLoaded(true)}
                   onDragStart={(e) => e.preventDefault()}
                   onContextMenu={(e) => e.preventDefault()}
-                  className="pointer-events-none select-none"
+                  className="pointer-events-none select-none lightbox-main-img"
                   style={{
                     maxWidth: '96vw',
                     maxHeight: 'calc(100vh - 148px)', // 100vh - 68px bottom bar - 60px top padding - 20px bottom padding
@@ -2274,7 +2374,13 @@ export default function GuestGalleryPhotos({ params }: Props) {
             {/* Download */}
             {event?.allowDownloads !== false && (
               <button
-                onClick={() => handleDownload(activePhotosList[activePhotoIndex].r2Url, activePhotosList[activePhotoIndex].filename)}
+                onClick={() => {
+                  const currentPhoto = activePhotosList[activePhotoIndex];
+                  if (currentPhoto) {
+                    const photoUrl = currentPhoto.r2Url || currentPhoto.url || currentPhoto.file_url || '';
+                    handleDownload(photoUrl, currentPhoto.filename);
+                  }
+                }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '0.55rem',
                   padding: '0 2.25rem', height: '100%',
