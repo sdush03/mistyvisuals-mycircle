@@ -304,32 +304,30 @@ export default function GuestGalleryPhotos({ params }: Props) {
     return []
   }, [viewMode, photos, allPhotos, favoritesList])
 
-  const hasFavorites = useMemo(() => {
-    return favoritesList.length > 0
-  }, [favoritesList])
+  const getTabCount = useCallback((tabName: string) => {
+    if (!event?.tabCounts) return null
+    const key = tabName.trim().toUpperCase()
+    return event.tabCounts[key] ?? event.tabCounts[tabName] ?? null
+  }, [event?.tabCounts])
 
-  useEffect(() => {
-    if (viewMode === 'favorites') {
-      loadFavoritesList()
-    }
-  }, [viewMode, loadFavoritesList])
-
-  // Preload natural aspects (fallback for legacy photos lacking width/height columns)
-  useEffect(() => {
-    activePhotosList.forEach((photo: any) => {
-      const id = photo.id || photo.r2Url
-      if (photo.width && photo.height) return
-      if (aspects[id]) return
-      const img = new Image()
-      img.src = photo.r2Url
-      img.onload = () => {
-        setAspects(prev => {
-          if (prev[id] === img.naturalWidth / img.naturalHeight) return prev
-          return { ...prev, [id]: img.naturalWidth / img.naturalHeight }
-        })
+  const totalPhotosForActiveView = useMemo(() => {
+    if (viewMode === 'matched') {
+      return photos.length
+    } else if (viewMode === 'favorites') {
+      return favoritesList.length
+    } else if (viewMode === 'all') {
+      if (activeAllTab) {
+        const count = getTabCount(activeAllTab)
+        if (count !== null) return count
+      } else {
+        const allCount = event?.tabCounts?.['ALL'] ?? totalPhotos
+        if (allCount) return allCount
       }
-    })
-  }, [activePhotosList, aspects])
+    }
+    return activePhotosList.length
+  }, [viewMode, photos.length, favoritesList.length, activeAllTab, getTabCount, event?.tabCounts, totalPhotos, activePhotosList.length])
+
+  const [pendingNextInLightbox, setPendingNextInLightbox] = useState(false)
 
   // Lightbox keyboard arrows handler
   const handlePrevPhoto = () => {
@@ -338,11 +336,33 @@ export default function GuestGalleryPhotos({ params }: Props) {
     }
   }
 
-  const handleNextPhoto = () => {
-    if (activePhotoIndex !== null && activePhotoIndex < activePhotosList.length - 1) {
-      setActivePhotoIndex(activePhotoIndex + 1)
+  const handleNextPhoto = useCallback(() => {
+    if (activePhotoIndex !== null) {
+      if (activePhotoIndex < activePhotosList.length - 1) {
+        setActivePhotoIndex(activePhotoIndex + 1)
+      } else if (viewMode === 'all' && hasMore && !loadingMore) {
+        setPendingNextInLightbox(true)
+        loadAllPhotos(activeAllTab)
+      }
     }
-  }
+  }, [activePhotoIndex, activePhotosList.length, viewMode, hasMore, loadingMore, loadAllPhotos, activeAllTab])
+
+  // Advance lightbox when next batch finishes loading
+  useEffect(() => {
+    if (pendingNextInLightbox && activePhotoIndex !== null && activePhotoIndex < activePhotosList.length - 1) {
+      setPendingNextInLightbox(false)
+      setActivePhotoIndex(prev => (prev !== null ? prev + 1 : null))
+    }
+  }, [pendingNextInLightbox, activePhotoIndex, activePhotosList.length])
+
+  // Pre-fetch next page when lightbox index approaches end of loaded photos
+  useEffect(() => {
+    if (activePhotoIndex !== null && viewMode === 'all' && hasMore && !loadingMore) {
+      if (activePhotoIndex >= activePhotosList.length - 5) {
+        loadAllPhotos(activeAllTab)
+      }
+    }
+  }, [activePhotoIndex, viewMode, hasMore, loadingMore, activePhotosList.length, loadAllPhotos, activeAllTab])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -353,7 +373,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activePhotoIndex, activePhotosList])
+  }, [activePhotoIndex, handleNextPhoto])
+
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
@@ -1477,7 +1498,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 flexShrink: 0
               }}
             >
-              All
+              All {event?.tabCounts?.['ALL'] ? `(${event.tabCounts['ALL']})` : (totalPhotos > 0 ? `(${totalPhotos})` : '')}
             </button>
           )}
 
@@ -1498,7 +1519,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
               flexShrink: 0
             }}
           >
-            My Photos
+            My Photos {photos.length > 0 ? `(${photos.length})` : ''}
           </button>
 
           {/* MY FAVOURITES Tab */}
@@ -1519,34 +1540,37 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 flexShrink: 0
               }}
             >
-              My Favourites
+              My Favourites {favoritesList.length > 0 ? `(${favoritesList.length})` : ''}
             </button>
           )}
 
           {/* Dynamic Event Tabs */}
-          {allPhotosTabs.map(tab => (
-            <button
-              key={tab}
-              onClick={() => {
-                setViewMode('all');
-                setActiveAllTab(tab);
-                loadAllPhotos(tab);
-              }}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontFamily: "'Montserrat', system-ui, sans-serif", fontSize: '0.6875rem',
-                letterSpacing: '0.15em', textTransform: 'uppercase',
-                color: (viewMode === 'all' && activeAllTab === tab) ? '#1c1a18' : '#8c867e',
-                paddingBottom: '0.25rem',
-                borderBottom: (viewMode === 'all' && activeAllTab === tab) ? '1px solid #1c1a18' : '1px solid transparent',
-                transition: 'all 0.2s',
-                fontWeight: 400,
-                flexShrink: 0
-              }}
-            >
-              {tab}
-            </button>
-          ))}
+          {allPhotosTabs.map(tab => {
+            const count = getTabCount(tab)
+            return (
+              <button
+                key={tab}
+                onClick={() => {
+                  setViewMode('all');
+                  setActiveAllTab(tab);
+                  loadAllPhotos(tab);
+                }}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontFamily: "'Montserrat', system-ui, sans-serif", fontSize: '0.6875rem',
+                  letterSpacing: '0.15em', textTransform: 'uppercase',
+                  color: (viewMode === 'all' && activeAllTab === tab) ? '#1c1a18' : '#8c867e',
+                  paddingBottom: '0.25rem',
+                  borderBottom: (viewMode === 'all' && activeAllTab === tab) ? '1px solid #1c1a18' : '1px solid transparent',
+                  transition: 'all 0.2s',
+                  fontWeight: 400,
+                  flexShrink: 0
+                }}
+              >
+                {tab} {count !== null ? `(${count})` : ''}
+              </button>
+            )
+          })}
           </div>
           {/* Matched Photos Download Button (only in My Photos tab) */}
           {viewMode === 'matched' && event?.allowDownloads !== false && photos.length > 1 && (
@@ -2189,7 +2213,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
             </div>
 
             {/* Static Next arrow in right corner */}
-            {zoomScale === 1 && activePhotoIndex < activePhotosList.length - 1 && (
+            {zoomScale === 1 && (activePhotoIndex < activePhotosList.length - 1 || (viewMode === 'all' && hasMore)) && (
               <button
                 onClick={e => { e.stopPropagation(); handleNextPhoto() }}
                 onPointerDown={e => e.stopPropagation()}
@@ -2277,7 +2301,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
               fontSize: '0.5rem', letterSpacing: '0.28em', textTransform: 'uppercase', fontWeight: 500,
               whiteSpace: 'nowrap',
             }}>
-              {activePhotoIndex + 1}&nbsp;/&nbsp;{activePhotosList.length}
+              {activePhotoIndex + 1}&nbsp;/&nbsp;{totalPhotosForActiveView}
             </span>
 
             {/* Divider */}
