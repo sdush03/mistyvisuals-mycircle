@@ -40,8 +40,7 @@ module.exports = async function downloadRoutes(fastify, opts) {
         return reply.code(400).send({ error: 'No selfie captured yet' });
       }
 
-      const anchorVector = guestAnchors[guestKey].anchorVector;
-      const extraVectors = guestAnchors[guestKey].extraVectors || [];
+      const extraVectors = guestAnchors[guestKey]?.extraVectors || [];
 
       const validPhotos = await prisma.photo.findMany({
         where: { eventId },
