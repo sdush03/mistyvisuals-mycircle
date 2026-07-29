@@ -4,7 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { prisma } = require('../prisma');
 const qdrant = require('../utils/qdrant');
-const { uploadAsset, deleteAsset, getPresignedUploadUrl } = require('../utils/r2');
+const { uploadAsset, uploadAssetWithRetry, deleteAsset, getPresignedUploadUrl } = require('../utils/r2');
 const faceRecManager = require('../utils/faceRecManager');
 
 const PHOTO_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'photos');
@@ -103,16 +103,21 @@ module.exports = async function galleryRoutes(fastify, opts) {
   // In-memory cache for guest anchor vectors and extra vectors from Option B.
   const guestAnchors = {}; // key: "email_eventId", value: { anchorVector: [...], extraVectors: [[...], ...] }
 
-  const checkGuestSelfie = (guestId) => {
-    const selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `guest_${guestId}.jpg`);
-    return fs.existsSync(selfiePath);
+  // NOTE: checkGuestSelfie (old guest_<id>.jpg) removed — selfies are now keyed by circle_user id only.
+
+  const checkUserSelfie = async (userId) => {
+    if (!userId) return false;
+    try {
+      const user = await prisma.circleUser.findUnique({
+        where: { id: userId },
+        select: { selfieUrl: true }
+      });
+      return !!user?.selfieUrl;
+    } catch (e) {
+      return false;
+    }
   };
 
-  const checkUserSelfie = (userId) => {
-    if (!userId) return false;
-    const selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.jpg`);
-    return fs.existsSync(selfiePath);
-  };
 
   const ensureUserSelfieMigrated = async (userId, email) => {
     if (!userId || !email) return false;
@@ -1966,7 +1971,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
       }
 
       await ensureUserSelfieMigrated(user.id, verifiedEmail);
-      const hasSelfie = checkUserSelfie(user.id);
+      const hasSelfie = await checkUserSelfie(user.id);
 
       // Generate secure guest JWT session
       const sessionToken = fastify.jwt.sign({
@@ -1987,7 +1992,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
           phoneNumber: user.phoneNumber,
           hasFullAccess: guest.hasFullAccess,
           hasSelfie,
-          selfieUrl: user.selfieUrl || guest.selfieUrl || (checkUserSelfie(user.id) ? `/api/gallery/family/selfie/${user.id}` : null)
+          selfieUrl: user.selfieUrl || null
         }
       };
     } catch (err) {
@@ -2095,7 +2100,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
       if (user) {
         await ensureUserSelfieMigrated(user.id, decoded.email);
       }
-      const hasSelfie = user ? checkUserSelfie(user.id) : false;
+      const hasSelfie = user ? await checkUserSelfie(user.id) : false;
 
       // Generate secure guest JWT session
       const sessionToken = fastify.jwt.sign({
@@ -2116,7 +2121,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
           phoneNumber: userPhone,
           hasFullAccess: guest.hasFullAccess,
           hasSelfie,
-          selfieUrl: user?.selfieUrl || guest?.selfieUrl || (user ? (checkUserSelfie(user.id) ? `/api/gallery/family/selfie/${user.id}` : null) : null)
+          selfieUrl: user?.selfieUrl || null
         }
       };
     } catch (err) {
@@ -2171,7 +2176,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
           email: updatedGuest.email,
           phoneNumber: updatedGuest.phoneNumber,
           hasFullAccess: true,
-          hasSelfie: checkUserSelfie(req.guest.userId)
+          hasSelfie: await checkUserSelfie(req.guest.userId)
         }
       };
     } catch (err) {
@@ -2212,83 +2217,56 @@ module.exports = async function galleryRoutes(fastify, opts) {
     }
   });
 
-  // Guest upload and save verification selfie permanently
+  // Guest upload and verify selfie — writes temp file for face extraction, uploads to R2, deletes local file
   fastify.post('/api/gallery/public/events/:slug/selfie', { preHandler: verifyGuestAuth, bodyLimit: 10 * 1024 * 1024 }, async (req, reply) => {
     const eventId = req.guest.eventId;
     const guestKey = `${req.guest.email}_${eventId}`;
     const userId = req.guest.userId;
+
+    const selfiesDir = path.join(__dirname, '..', 'uploads', 'photos', 'selfies');
+    fs.mkdirSync(selfiesDir, { recursive: true });
+    const tempPath = path.join(selfiesDir, `temp_selfie_${userId}_${Date.now()}.jpg`);
 
     try {
       const data = await req.file();
       if (!data) return reply.code(400).send({ error: 'No image uploaded' });
 
       const buffer = await data.toBuffer();
-      
-      const selfiesDir = path.join(__dirname, '..', 'uploads', 'photos', 'selfies');
-      fs.mkdirSync(selfiesDir, { recursive: true });
 
-      const selfiePath = path.join(selfiesDir, `user_${userId}.jpg`);
-      const vectorPath = path.join(selfiesDir, `user_${userId}.json`);
-
-      fs.writeFileSync(selfiePath, buffer);
+      // Write temp file — required for Python face_rec.py (needs a file path, not a buffer)
+      fs.writeFileSync(tempPath, buffer);
 
       // Validate selfie face and extract vector
-      try {
-        const res = await faceRecManager.validateSelfie(selfiePath);
+      const res = await faceRecManager.validateSelfie(tempPath);
 
-        if (res.success && res.vector) {
-          fs.writeFileSync(vectorPath, JSON.stringify(res.vector), 'utf8');
-
-          // Upload selfie image to R2 if configured under universal user path
-          let selfieUrl = null;
-          try {
-            selfieUrl = await uploadAsset(buffer, `user_${userId}.jpg`, `users/selfies`, 'image/jpeg');
-          } catch (r2Err) {
-            req.log.warn('R2 selfie upload failed, using local fallback:', r2Err.message);
-          }
-
-          // Cache in memory
-          guestAnchors[guestKey] = {
-            anchorVector: res.vector,
-            extraVectors: []
-          };
-
-          // Persist vector & R2 URL directly into DB for CircleUser and Guest
-          if (userId) {
-            await prisma.circleUser.update({
-              where: { id: userId },
-              data: {
-                selfieVector: res.vector,
-                ...(selfieUrl ? { selfieUrl } : {})
-              }
-            }).catch(err => req.log.warn('CircleUser selfieVector save failed:', err.message));
-          }
-          if (req.guest?.guestId) {
-            await prisma.guest.update({
-              where: { id: req.guest.guestId },
-              data: {
-                selfieVector: res.vector,
-                ...(selfieUrl ? { selfieUrl } : {})
-              }
-            }).catch(err => req.log.warn('Guest selfieVector save failed:', err.message));
-          }
-
-          return { status: 'success', selfieUrl };
-        } else {
-          // Validation failed (User error: e.g. no face detected), clean up the saved image file
-          if (fs.existsSync(selfiePath)) fs.unlinkSync(selfiePath);
-          return reply.code(400).send({ error: res.error || 'Failed to validate face on selfie' });
-        }
-      } catch (extractErr) {
-        req.log.error('Face validation script execution failed:', extractErr.message);
-        // Do NOT delete the selfie file. Save it for later processing/verification on-the-fly!
-        return { status: 'success', warning: 'processing' };
+      if (!res.success || !res.vector) {
+        return reply.code(400).send({ error: res.error || 'Failed to validate face on selfie' });
       }
+
+      // Upload to R2 with retry — throws if all attempts fail
+      const selfieUrl = await uploadAssetWithRetry(buffer, `user_${userId}.jpg`, `users/selfies`, 'image/jpeg');
+
+      // Cache vector in memory for fast matching
+      guestAnchors[guestKey] = { anchorVector: res.vector, extraVectors: [] };
+
+      // Persist to circle_users — single source of truth, no guest sync needed
+      if (userId) {
+        await prisma.circleUser.update({
+          where: { id: userId },
+          data: { selfieVector: res.vector, selfieUrl }
+        }).catch(err => req.log.warn('CircleUser selfie save failed:', err.message));
+      }
+
+      return { status: 'success', selfieUrl };
     } catch (err) {
-      req.log.error(err);
-      return reply.code(500).send({ error: 'Failed to upload selfie' });
+      req.log.error('Selfie upload failed:', err.message);
+      return reply.code(500).send({ error: err.message || 'Failed to upload selfie' });
+    } finally {
+      // Always clean up temp file
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     }
   });
+
 
   // Get matched photos of the guest using their saved selfie vector
   fastify.get('/api/gallery/public/events/:slug/matched-photos', { preHandler: verifyGuestAuth }, async (req, reply) => {
@@ -2301,53 +2279,23 @@ module.exports = async function galleryRoutes(fastify, opts) {
       const event = req.event || await prisma.galleryEvent.findUnique({ where: { id: eventId } });
       if (!event) return reply.code(404).send({ error: 'Event not found' });
 
-      const selfiePath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.jpg`);
-      const vectorPath = path.join(__dirname, '..', 'uploads', 'photos', 'selfies', `user_${userId}.json`);
-
       let anchorVector = guestAnchors[guestKey]?.anchorVector;
 
       if (!anchorVector) {
-        // 1. Primary Source of Truth: Read selfieVector directly from PostgreSQL
-        const guestRec = await prisma.guest.findUnique({
-          where: { id: guestId },
-          select: { selfieVector: true, circleUser: { select: { selfieVector: true } } }
+        // Read selfieVector from circle_users (single source of truth)
+        const circleUser = await prisma.circleUser.findUnique({
+          where: { id: userId },
+          select: { selfieVector: true }
         });
-        
-        if (guestRec && (guestRec.selfieVector || guestRec.circleUser?.selfieVector)) {
-          anchorVector = guestRec.selfieVector || guestRec.circleUser.selfieVector;
+
+        if (circleUser?.selfieVector) {
+          anchorVector = circleUser.selfieVector;
           guestAnchors[guestKey] = { anchorVector, extraVectors: [] };
         }
       }
 
       if (!anchorVector) {
-        // 2. Secondary Fallback: Read from local disk file if DB column is null
-        if (fs.existsSync(vectorPath)) {
-          try {
-            anchorVector = JSON.parse(fs.readFileSync(vectorPath, 'utf8'));
-            guestAnchors[guestKey] = { anchorVector, extraVectors: [] };
-            if (guestId) {
-              prisma.guest.update({ where: { id: guestId }, data: { selfieVector: anchorVector } }).catch(() => {});
-            }
-          } catch (e) {}
-        } else if (fs.existsSync(selfiePath)) {
-          try {
-            const res = await faceRecManager.validateSelfie(selfiePath);
-            if (res.success && res.vector) {
-              anchorVector = res.vector;
-              guestAnchors[guestKey] = { anchorVector, extraVectors: [] };
-              fs.writeFileSync(vectorPath, JSON.stringify(anchorVector), 'utf8');
-              if (guestId) {
-                prisma.guest.update({ where: { id: guestId }, data: { selfieVector: anchorVector } }).catch(() => {});
-              }
-            }
-          } catch (extractErr) {
-            req.log.error('Fallback face extraction failed:', extractErr.message);
-          }
-        }
-      }
-
-      if (!anchorVector) {
-        return { photos: [] }; // No selfie captured or vector found yet
+        return { photos: [] }; // No selfie uploaded yet
       }
 
       const extraVectors = guestAnchors[guestKey].extraVectors || [];
@@ -2370,9 +2318,8 @@ module.exports = async function galleryRoutes(fastify, opts) {
           }));
 
         if (dbVectors.length > 0) {
-          const { execSync } = require('child_process');
           try {
-            const res = await faceRecManager.matchSelfie(selfiePath, dbVectors, extraVectors);
+            const res = await faceRecManager.matchSelfie(anchorVector, dbVectors, extraVectors);
             if (res.matches) {
               photoIds = res.matches.map(m => m.photoId);
             }
@@ -2960,7 +2907,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
           name: user.name || verifiedName,
           email: user.email,
           phoneNumber: user.phoneNumber,
-          hasSelfie: checkUserSelfie(user.id),
+          hasSelfie: await checkUserSelfie(user.id),
           selfieGuestId: user.id
         }
       };
@@ -3011,7 +2958,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
       }
 
       await ensureUserSelfieMigrated(user.id, email);
-      const hasSelfie = checkUserSelfie(user.id);
+      const hasSelfie = await checkUserSelfie(user.id);
 
       // Generate a global family token containing global userId
       const familyToken = fastify.jwt.sign({
@@ -3030,7 +2977,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
           phoneNumber: user.phoneNumber || guest.phoneNumber,
           hasSelfie,
           selfieGuestId: user.id,
-          selfieUrl: user.selfieUrl || guest.selfieUrl || (checkUserSelfie(user.id) ? `/api/gallery/family/selfie/${user.id}` : null)
+          selfieUrl: user.selfieUrl || null
         }
       };
     } catch (err) {
@@ -3201,14 +3148,14 @@ module.exports = async function galleryRoutes(fastify, opts) {
 
       return {
         events: eventsList,
-        selfieUrl: user.selfieUrl || (checkUserSelfie(user.id) ? `/api/gallery/family/selfie/${user.id}` : null),
+        selfieUrl: user.selfieUrl || null,
         profile: {
           name: user.name,
           email,
           phoneNumber: user.phoneNumber,
-          hasSelfie: !!(user.selfieVector || user.selfieUrl || checkUserSelfie(user.id)),
+          hasSelfie: !!(user.selfieVector || user.selfieUrl),
           selfieGuestId: user.id,
-          selfieUrl: user.selfieUrl || (checkUserSelfie(user.id) ? `/api/gallery/family/selfie/${user.id}` : null)
+          selfieUrl: user.selfieUrl || null
         }
       };
     } catch (err) {
@@ -3269,7 +3216,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
       });
     }
 
-    let hasSelfie = checkUserSelfie(user.id);
+    let hasSelfie = await checkUserSelfie(user.id);
 
     // Handle selfie verification if buffer is provided
     if (selfieBuffer) {
@@ -3283,51 +3230,22 @@ module.exports = async function galleryRoutes(fastify, opts) {
         const res = await faceRecManager.validateSelfie(tempPath);
 
         if (res.success && res.vector) {
-          const selfiePath = path.join(selfiesDir, `user_${user.id}.jpg`);
-          const vectorPath = path.join(selfiesDir, `user_${user.id}.json`);
+          // Upload to R2 with retry — throws if all attempts fail (no silent local fallback)
+          const selfieUrl = await uploadAssetWithRetry(selfieBuffer, `user_${user.id}.jpg`, `users/selfies`, 'image/jpeg');
 
-          fs.writeFileSync(selfiePath, selfieBuffer);
-          fs.writeFileSync(vectorPath, JSON.stringify(res.vector), 'utf8');
-
-          // Upload selfie image to R2 under universal users/selfies path
-          let selfieUrl = null;
-          try {
-            selfieUrl = await uploadAsset(selfieBuffer, `user_${user.id}.jpg`, `users/selfies`, 'image/jpeg');
-          } catch (r2Err) {
-            log.warn('R2 profile selfie upload fallback:', r2Err.message);
-          }
-
-          // Persist vector & selfieUrl directly to CircleUser in PostgreSQL
+          // Persist vector & selfieUrl to circle_users — single source of truth
           await prisma.circleUser.update({
             where: { id: user.id },
-            data: {
-              selfieVector: res.vector,
-              ...(selfieUrl ? { selfieUrl } : {})
-            }
-          }).catch(err => log.warn('CircleUser selfieVector save failed:', err.message));
+            data: { selfieVector: res.vector, selfieUrl }
+          }).catch(err => log.warn('CircleUser selfie save failed:', err.message));
 
-          // Sync vector & selfieUrl to all linked Guest records in PostgreSQL
-          await prisma.guest.updateMany({
-            where: { email },
-            data: {
-              selfieVector: res.vector,
-              ...(selfieUrl ? { selfieUrl } : {})
-            }
-          }).catch(err => log.warn('Guest selfieVector sync failed:', err.message));
-
-          // Cache vectors in memory for matching
-          const guestProfiles = await prisma.guest.findMany({
-            where: { email }
-          });
-
+          // Update in-memory cache for all events this user is in
+          const guestProfiles = await prisma.guest.findMany({ where: { email } });
           for (const g of guestProfiles) {
             const guestKey = `${email}_${g.eventId}`;
-            guestAnchors[guestKey] = {
-              anchorVector: res.vector,
-              extraVectors: []
-            };
+            guestAnchors[guestKey] = { anchorVector: res.vector, extraVectors: [] };
 
-            // Force event dirty state to trigger re-clustering
+            // Force re-clustering since face vector changed
             await prisma.galleryEvent.update({
               where: { id: g.eventId },
               data: { clustersDirty: true }
@@ -3345,6 +3263,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
         if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
       }
     }
+
 
     return {
       name: user.name,
@@ -3435,7 +3354,7 @@ module.exports = async function galleryRoutes(fastify, opts) {
           email: guest.email,
           phoneNumber: user.phoneNumber,
           hasFullAccess: guest.hasFullAccess,
-          hasSelfie: checkUserSelfie(user.id),
+          hasSelfie: await checkUserSelfie(user.id),
           selfieGuestId: user.id
         }
       };

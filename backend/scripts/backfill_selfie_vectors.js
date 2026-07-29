@@ -16,23 +16,28 @@ async function backfillSelfieVectors() {
 
     for (const file of files) {
       if (!file.endsWith('.json') && !file.endsWith('.jpg')) continue;
+      if (file.startsWith('temp_')) continue;
 
       try {
         let userId = null;
-        let guestId = null;
 
         if (file.startsWith('user_')) {
           const parts = file.replace('user_', '').split('.');
           userId = parseInt(parts[0], 10);
         } else if (file.startsWith('guest_')) {
+          // Resolve to userId via guest -> circle_user
           const parts = file.replace('guest_', '').split('.');
-          guestId = parseInt(parts[0], 10);
+          const guestId = parseInt(parts[0], 10);
+          if (!isNaN(guestId)) {
+            const guest = await prisma.guest.findUnique({ where: { id: guestId }, select: { email: true } });
+            if (guest?.email) {
+              const user = await prisma.circleUser.findUnique({ where: { email: guest.email }, select: { id: true } });
+              if (user) userId = user.id;
+            }
+          }
         }
 
-        if (isNaN(userId)) userId = null;
-        if (isNaN(guestId)) guestId = null;
-
-        if (!userId && !guestId) continue;
+        if (!userId || isNaN(userId)) continue;
 
         let vector = null;
         const filePath = path.join(selfiesDir, file);
@@ -56,49 +61,39 @@ async function backfillSelfieVectors() {
 
         if (!vector) continue;
 
-        if (userId) {
-          await prisma.circleUser.update({
-            where: { id: userId },
-            data: { selfieVector: vector }
-          }).catch(err => console.warn(`[Backfill] CircleUser ${userId} update failed:`, err.message));
-        }
+        // Update circle_users only — single source of truth
+        await prisma.circleUser.update({
+          where: { id: userId },
+          data: { selfieVector: vector }
+        }).catch(err => console.warn(`[Backfill] CircleUser ${userId} update failed:`, err.message));
 
-        if (guestId) {
-          await prisma.guest.update({
-            where: { id: guestId },
-            data: { selfieVector: vector }
-          }).catch(err => console.warn(`[Backfill] Guest ${guestId} update failed:`, err.message));
-        }
-
-        // If circleUser was updated, sync vector to all guest records sharing user's email
-        if (userId) {
-          const user = await prisma.circleUser.findUnique({ where: { id: userId }, select: { email: true } });
-          if (user && user.email) {
-            await prisma.guest.updateMany({
-              where: { email: user.email },
-              data: { selfieVector: vector }
-            }).catch(() => {});
-          }
-        }
+        console.log(`[Backfill] ✓ Updated circle_users selfieVector for userId ${userId}`);
       } catch (err) {
         console.error(`[Backfill] Error processing ${file}:`, err.message);
       }
     }
   }
 
-  // Phase 2: Recalculate uncapped matchCount for all Guests with selfieVector in DB
-  console.log('[Backfill] Recalculating uncapped matchCount in DB...');
-  const guestsWithVector = await prisma.guest.findMany({
+  // Phase 2: Recalculate matchCount for all guests by reading vector from circle_users
+  console.log('[Backfill] Recalculating matchCount via circle_users.selfie_vector...');
+  const usersWithVector = await prisma.circleUser.findMany({
     where: { selfieVector: { not: null } },
-    select: { id: true, eventId: true, selfieVector: true, matchCount: true }
+    select: { id: true, email: true, selfieVector: true }
   });
 
-  console.log(`[Backfill] Found ${guestsWithVector.length} guests with selfie vectors in DB.`);
+  console.log(`[Backfill] Found ${usersWithVector.length} circle_users with selfie vectors.`);
 
-  for (const g of guestsWithVector) {
-    try {
-      const vector = g.selfieVector;
-      if (Array.isArray(vector) && vector.length > 0) {
+  for (const user of usersWithVector) {
+    const vector = user.selfieVector;
+    if (!Array.isArray(vector) || vector.length === 0) continue;
+
+    const guestProfiles = await prisma.guest.findMany({
+      where: { email: user.email },
+      select: { id: true, eventId: true, matchCount: true }
+    });
+
+    for (const g of guestProfiles) {
+      try {
         const matches = await qdrant.searchVectors(g.eventId, vector, 100000, 0.35);
         const uniquePhotoCount = new Set(matches.map(m => m.photo_id)).size;
 
@@ -107,11 +102,11 @@ async function backfillSelfieVectors() {
             where: { id: g.id },
             data: { matchCount: uniquePhotoCount }
           });
-          console.log(`[Backfill] Guest ${g.id} (Event ${g.eventId}) updated matchCount: ${g.matchCount} -> ${uniquePhotoCount}`);
+          console.log(`[Backfill] Guest ${g.id} (Event ${g.eventId}) matchCount: ${g.matchCount} -> ${uniquePhotoCount}`);
         }
+      } catch (err) {
+        console.error(`[Backfill] Failed matchCount sync for guest ${g.id}:`, err.message);
       }
-    } catch (err) {
-      console.error(`[Backfill] Failed matchCount sync for guest ${g.id}:`, err.message);
     }
   }
 

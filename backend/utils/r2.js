@@ -67,7 +67,35 @@ async function uploadAsset(buffer, filename, subfolder, contentType = 'image/jpe
 }
 
 /**
+ * Uploads a file buffer to Cloudflare R2 with exponential backoff retry.
+ * Unlike uploadAsset, this throws on all failures — no silent local fallback.
+ * @param {Buffer} buffer - File data buffer
+ * @param {string} filename - Target filename
+ * @param {string} subfolder - Organized subdirectory path
+ * @param {string} contentType - Mime type of the file
+ * @param {number} maxRetries - Maximum number of attempts (default: 3)
+ * @returns {Promise<string>} The public URL of the uploaded asset
+ */
+async function uploadAssetWithRetry(buffer, filename, subfolder, contentType = 'image/jpeg', maxRetries = 3) {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await uploadAsset(buffer, filename, subfolder, contentType);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < maxRetries) {
+        const delayMs = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+        console.warn(`[R2 Upload] Attempt ${attempt}/${maxRetries} failed for ${subfolder}/${filename}. Retrying in ${delayMs}ms...`, err.message);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  throw new Error(`[R2 Upload] All ${maxRetries} attempts failed for ${subfolder}/${filename}: ${lastErr?.message}`);
+}
+
+/**
  * Deletes an asset from Cloudflare R2, or removes it from local disk in development mode.
+
  * @param {string} fileUrl - Public URL or local routing path
  * @returns {Promise<void>}
  */
@@ -150,6 +178,7 @@ async function getObjectStream(key) {
 module.exports = {
   isR2Enabled,
   uploadAsset,
+  uploadAssetWithRetry,
   deleteAsset,
   getPresignedUploadUrl,
   getObjectStream
