@@ -12,7 +12,7 @@ module.exports = async function familyRoutes(fastify, opts) {
 
   // Verify OAuth (Google/Apple/Facebook/Phone) token globally for Family Dashboard
   fastify.post('/api/gallery/family/auth', async (req, reply) => {
-    const { token, provider = 'google', email: inputEmail, name: inputName, phoneNumber } = req.body;
+    const { token, provider = 'google', email: inputEmail, name: inputName, phoneNumber, appleUserId } = req.body;
     if (!token && !phoneNumber) return reply.code(400).send({ error: 'Token or Phone Number is required' });
 
     try {
@@ -43,8 +43,12 @@ module.exports = async function familyRoutes(fastify, opts) {
           }
         }
       } else if (provider === 'apple') {
-        verifiedEmail = inputEmail || `apple_${Date.now()}@privaterelay.appleid.com`;
+        // Use stable Apple user ID for consistent account lookup across sign-ins
+        // Apple only sends email on FIRST sign-in — subsequent logins have email=null
+        const stableId = appleUserId || null;
+        verifiedEmail = inputEmail || (stableId ? `apple_${stableId}@privaterelay.appleid.com` : `apple_${Date.now()}@privaterelay.appleid.com`);
         verifiedName = inputName || 'Apple User';
+        providerId = stableId || verifiedEmail;
       } else if (provider === 'facebook') {
         verifiedEmail = inputEmail || `fb_${Date.now()}@facebook.com`;
         verifiedName = inputName || 'Facebook User';
@@ -55,9 +59,28 @@ module.exports = async function familyRoutes(fastify, opts) {
       }
 
       let user = null;
-      if (verifiedEmail) {
-        user = await prisma.circleUser.findUnique({ where: { email: verifiedEmail } });
+
+      // Step 1: For Apple sign-in, look up by stable Apple user ID first.
+      // This handles returning users whose email is null on 2nd+ logins.
+      if (provider === 'apple' && appleUserId) {
+        user = await prisma.circleUser.findFirst({ where: { providerId: appleUserId } });
       }
+
+      // Step 2: Fall back to email lookup
+      if (!user && verifiedEmail) {
+        user = await prisma.circleUser.findUnique({ where: { email: verifiedEmail } });
+
+        // If found by email but Apple user ID not yet stored, save it now
+        // so future logins (when email is null) can find this user by providerId
+        if (user && provider === 'apple' && appleUserId && user.providerId !== appleUserId) {
+          await prisma.circleUser.update({
+            where: { id: user.id },
+            data: { providerId: appleUserId }
+          });
+        }
+      }
+
+      // Step 3: Fall back to phone number lookup
       if (!user && phoneNumber) {
         user = await prisma.circleUser.findFirst({ where: { phoneNumber } });
       }
