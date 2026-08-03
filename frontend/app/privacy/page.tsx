@@ -8,7 +8,7 @@ export default function PrivacyPage() {
       <div className="max-w-3xl mx-auto px-6 py-20 md:py-32">
         <header className="mb-16">
           <h1 className="text-3xl md:text-5xl font-light tracking-tight mb-4">Privacy Policy</h1>
-          <p className="text-neutral-500 italic">Last updated: April 09, 2026</p>
+          <p className="text-neutral-500 italic">Last updated: August 03, 2026</p>
         </header>
 
         <section className="space-y-12 text-[15px] leading-relaxed text-neutral-700">
@@ -26,6 +26,7 @@ export default function PrivacyPage() {
             <ul className="list-disc pl-5 space-y-2">
               <li><strong>Profile Details:</strong> Name, email address, and phone number to authenticate your identity.</li>
               <li><strong>Facial Recognition Data (Selfies):</strong> A close-up selfie that you capture using your device's camera. This image is processed locally on our server to extract a unique, mathematical face representation (vector) for image recognition.</li>
+              <li><strong>Device Media Storage:</strong> When you choose to download or save high-resolution photos from event galleries to your device, our app requests permission to write images to your local photo library. We do not scan, read, or upload any private photos from your device's photo gallery.</li>
               <li><strong>Usage logs:</strong> Technical information including IP addresses, login timestamps, and event interactions for security and system improvements.</li>
             </ul>
           </div>
