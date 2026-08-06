@@ -270,6 +270,33 @@ module.exports = async function familyRoutes(fastify, opts) {
           req.log.warn(`totalPhotoCount failed for event ${event.id}:`, e.message);
         }
 
+        const eventDate = new Date(event.date);
+        const today = new Date();
+        const isSameDay = eventDate.getUTCFullYear() === today.getUTCFullYear() &&
+          eventDate.getUTCMonth() === today.getUTCMonth() &&
+          eventDate.getUTCDate() === today.getUTCDate();
+
+        let stage = event.stage;
+
+        const hasHighlightsPhotos = highlightsPhotoCount > 0;
+        if (stage === 'HIGHLIGHTS' && !hasHighlightsPhotos) {
+          stage = null;
+        }
+
+        if (!stage) {
+          if ((event.highlightsReady || event.isHighlights) && hasHighlightsPhotos) {
+            stage = 'HIGHLIGHTS';
+          } else if (eventDate > today && !isSameDay) {
+            stage = 'UPCOMING';
+          } else if (isSameDay) {
+            stage = 'LIVE';
+          } else if (matchedCount > 0) {
+            stage = 'READY';
+          } else {
+            stage = 'CURATING';
+          }
+        }
+
         let resolvedDisplayRole = (g.displayRole || '').toString().trim().toUpperCase() || null;
         if (!resolvedDisplayRole || resolvedDisplayRole === 'GUEST') {
           const cleanEmail = (g.email || '').trim().toLowerCase();
