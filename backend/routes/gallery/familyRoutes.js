@@ -445,7 +445,8 @@ module.exports = async function familyRoutes(fastify, opts) {
         const res = await faceRecManager.validateSelfie(tempPath);
 
         if (res.success && res.vector) {
-          const selfieUrl = await uploadAssetWithRetry(selfieBuffer, `user_${user.id}.jpg`, `users/selfies`, 'image/jpeg');
+          const selfieFilename = `user_${user.id}_${Date.now()}.jpg`;
+          const selfieUrl = await uploadAssetWithRetry(selfieBuffer, selfieFilename, `users/selfies`, 'image/jpeg');
 
           await prisma.circleUser.update({
             where: { id: user.id },

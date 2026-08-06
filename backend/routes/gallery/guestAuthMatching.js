@@ -404,15 +404,25 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         return reply.code(400).send({ error: res.error || 'Failed to validate face on selfie' });
       }
 
-      const selfieUrl = await uploadAssetWithRetry(buffer, `user_${userId}.jpg`, `users/selfies`, 'image/jpeg');
-
-      guestAnchors[guestKey] = { anchorVector: res.vector, extraVectors: [] };
+      const selfieFilename = `user_${userId}_${Date.now()}.jpg`;
+      const selfieUrl = await uploadAssetWithRetry(buffer, selfieFilename, `users/selfies`, 'image/jpeg');
 
       if (userId) {
         await prisma.circleUser.update({
           where: { id: userId },
           data: { selfieVector: res.vector, selfieUrl }
         }).catch(err => req.log.warn('CircleUser selfie save failed:', err.message));
+
+        const userRecord = await prisma.circleUser.findUnique({ where: { id: userId }, select: { email: true } });
+        if (userRecord?.email) {
+          const guestProfiles = await prisma.guest.findMany({ where: { email: userRecord.email } });
+          for (const g of guestProfiles) {
+            const key = `${userRecord.email}_${g.eventId}`;
+            guestAnchors[key] = { anchorVector: res.vector, extraVectors: [] };
+          }
+        }
+      } else {
+        guestAnchors[guestKey] = { anchorVector: res.vector, extraVectors: [] };
       }
 
       return { status: 'success', selfieUrl };
