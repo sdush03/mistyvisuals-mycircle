@@ -306,6 +306,42 @@ module.exports = async function familyRoutes(fastify, opts) {
           }
         }
 
+        let resolvedDisplayRole = (g.displayRole || '').toString().trim().toUpperCase() || null;
+        if (!resolvedDisplayRole || resolvedDisplayRole === 'GUEST') {
+          const cleanEmail = (g.email || '').trim().toLowerCase();
+          const cleanPhone = (g.phoneNumber || '').replace(/\D/g, '');
+          const cleanName = (g.name || '').trim().toLowerCase();
+
+          try {
+            const found = guestProfiles.find(p => {
+              const roleUpper = (p.displayRole || '').trim().toUpperCase();
+              if (!['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) return false;
+
+              const cgEmail = (p.email || '').trim().toLowerCase();
+              const cgPhone = (p.phoneNumber || '').replace(/\D/g, '');
+              const cgName = (p.name || '').trim().toLowerCase();
+
+              if (cleanEmail && cgEmail && cgEmail === cleanEmail) return true;
+              if (cleanPhone && cgPhone && (cleanPhone.endsWith(cgPhone) || cgPhone.endsWith(cleanPhone))) return true;
+              if (cleanName && cgName && cgName.length > 2 && (cleanName.includes(cgName) || cgName.includes(cleanName))) return true;
+              return false;
+            });
+            if (found) {
+              resolvedDisplayRole = found.displayRole.trim().toUpperCase();
+            }
+          } catch (_) {}
+        }
+
+        const eventToken = fastify.jwt.sign({
+          guestId: g.id,
+          userId: user.id,
+          eventId: event.id,
+          email: g.email,
+          role: 'guest',
+          displayRole: resolvedDisplayRole,
+          hasFullAccess: g.hasFullAccess
+        }, { expiresIn: '7d' });
+
         eventsList.push({
           id: event.id,
           title: event.title,
@@ -326,6 +362,7 @@ module.exports = async function familyRoutes(fastify, opts) {
             email: g.email,
             phoneNumber: user.phoneNumber,
             hasFullAccess: g.hasFullAccess,
+            displayRole: resolvedDisplayRole,
             hasSelfie: !!anchorVector
           }
         });

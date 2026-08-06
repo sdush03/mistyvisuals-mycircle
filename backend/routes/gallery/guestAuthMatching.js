@@ -234,12 +234,47 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
       }
       const hasSelfie = user ? await checkUserSelfie(user.id) : false;
 
+      let resolvedDisplayRole = (guest.displayRole || '').toString().trim().toUpperCase() || null;
+
+      if (!resolvedDisplayRole || resolvedDisplayRole === 'GUEST') {
+        const cleanEmail = (guest.email || decoded.email || '').trim().toLowerCase();
+        const cleanPhone = (userPhone || guest.phoneNumber || '').replace(/\D/g, '');
+        const cleanName = (userName || guest.name || '').trim().toLowerCase();
+
+        try {
+          const candidateGuests = await prisma.guest.findMany({
+            where: {
+              displayRole: { not: null }
+            }
+          });
+
+          const found = candidateGuests.find(g => {
+            const roleUpper = (g.displayRole || '').trim().toUpperCase();
+            if (!['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) return false;
+
+            const cgEmail = (g.email || '').trim().toLowerCase();
+            const cgPhone = (g.phoneNumber || '').replace(/\D/g, '');
+            const cgName = (g.name || '').trim().toLowerCase();
+
+            if (cleanEmail && cgEmail && cgEmail === cleanEmail) return true;
+            if (cleanPhone && cgPhone && (cleanPhone.endsWith(cgPhone) || cgPhone.endsWith(cleanPhone))) return true;
+            if (cleanName && cgName && cgName.length > 2 && (cleanName.includes(cgName) || cgName.includes(cleanName))) return true;
+            return false;
+          });
+
+          if (found) {
+            resolvedDisplayRole = found.displayRole.trim().toUpperCase();
+          }
+        } catch (_) {}
+      }
+
       const sessionToken = fastify.jwt.sign({
         guestId: guest.id,
         userId: userId,
         eventId: event.id,
         email: guest.email,
         role: 'guest',
+        displayRole: resolvedDisplayRole,
         hasFullAccess: guest.hasFullAccess
       }, { expiresIn: '7d' });
 
@@ -251,6 +286,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
           email: guest.email,
           phoneNumber: userPhone,
           hasFullAccess: guest.hasFullAccess,
+          displayRole: resolvedDisplayRole,
           hasSelfie,
           selfieUrl: user?.selfieUrl || null
         }
