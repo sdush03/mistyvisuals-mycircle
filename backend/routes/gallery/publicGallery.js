@@ -472,6 +472,76 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
     }
   });
 
+  // Delete photo (Bride or Groom only)
+  fastify.delete('/api/gallery/public/events/:slug/photos/:photoId', { preHandler: verifyGuestAuth }, async (req, reply) => {
+    const slug = req.params.slug.toLowerCase().trim();
+    const photoId = parseInt(req.params.photoId, 10);
+    if (isNaN(photoId)) {
+      return reply.code(400).send({ error: 'Invalid photo ID' });
+    }
+
+    try {
+      const event = await prisma.galleryEvent.findUnique({ where: { slug } });
+      if (!event) return reply.code(404).send({ error: 'Event not found' });
+
+      // Check if authenticated guest is Bride, Groom, or Couple
+      const guestId = req.guest.guestId;
+      const guest = await prisma.guest.findUnique({ where: { id: guestId } });
+
+      let roleUpper = (guest?.displayRole || req.guest.displayRole || '').toString().trim().toUpperCase();
+
+      if (!['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) {
+        // Fallback candidate search
+        const cleanEmail = (guest?.email || req.guest.email || '').trim().toLowerCase();
+        const cleanPhone = (guest?.phoneNumber || '').replace(/\D/g, '');
+        const cleanName = (guest?.name || '').trim().toLowerCase();
+
+        const candidateGuests = await prisma.guest.findMany({
+          where: { eventId: event.id, displayRole: { not: null } }
+        });
+
+        const found = candidateGuests.find(g => {
+          const rUpper = (g.displayRole || '').trim().toUpperCase();
+          if (!['BRIDE', 'GROOM', 'COUPLE'].includes(rUpper)) return false;
+
+          const cgEmail = (g.email || '').trim().toLowerCase();
+          const cgPhone = (g.phoneNumber || '').replace(/\D/g, '');
+          const cgName = (g.name || '').trim().toLowerCase();
+
+          if (cleanEmail && cgEmail && cgEmail === cleanEmail) return true;
+          if (cleanPhone && cgPhone && (cleanPhone.endsWith(cgPhone) || cgPhone.endsWith(cleanPhone))) return true;
+          if (cleanName && cgName && cgName.length > 2 && (cleanName.includes(cgName) || cgName.includes(cleanName))) return true;
+          return false;
+        });
+
+        if (found) {
+          roleUpper = found.displayRole.trim().toUpperCase();
+        }
+      }
+
+      if (!['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) {
+        return reply.code(403).send({ error: 'Only Bride or Groom can delete photos' });
+      }
+
+      const photo = await prisma.photo.findUnique({ where: { id: photoId } });
+      if (!photo || photo.eventId !== event.id) {
+        return reply.code(404).send({ error: 'Photo not found in this event' });
+      }
+
+      await prisma.photo.delete({ where: { id: photoId } });
+
+      const { deletePhotosAssets } = require('./galleryHelpers');
+      deletePhotosAssets([photo], slug, req.log).catch(err => {
+        req.log.error(`[deletePhotosAssets] Cleanup error for photo ${photoId}:`, err);
+      });
+
+      return { success: true, message: 'Photo deleted successfully' };
+    } catch (err) {
+      req.log.error('Delete photo failed:', err);
+      return reply.code(500).send({ error: 'Failed to delete photo' });
+    }
+  });
+
   // Get clustered people from the event photos — ADMIN ONLY
   fastify.get('/api/gallery/public/events/:slug/people', async (req, reply) => {
     const auth = requireAdmin(req, reply);
