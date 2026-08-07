@@ -637,6 +637,15 @@ export default function GuestGalleryPhotos({ params }: Props) {
             fetchAuthenticatedSelfie(data.profile.selfieGuestId)
           }
 
+          // Strictly enforce incomplete profile redirect (must have both phone and selfie)
+          if (!data.profile.phoneNumber || !data.profile.hasSelfie) {
+            console.warn('Guest profile incomplete (missing phone or selfie), redirecting to gallery splash')
+            localStorage.removeItem(`mv_gallery_token_${slug}`)
+            localStorage.removeItem(`mv_gallery_guest_${slug}`)
+            router.push(`/${slug}/gallery`)
+            return
+          }
+
           if (parsedGuest.hasFullAccess !== data.profile.hasFullAccess) {
             setViewMode(data.profile.hasFullAccess ? 'all' : 'matched')
           }

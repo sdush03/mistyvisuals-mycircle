@@ -96,6 +96,9 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                   // Keep loading: true so the spinner stays visible during Next.js router.push navigation
                   router.push(`/${slug}/gallery/photos`)
                   return
+                } else {
+                  // Incomplete profile: force open login modal to prompt mobile/selfie completion
+                  setShowLoginModal(true)
                 }
               }
             }
@@ -137,6 +140,9 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                     setGuest(localGuest)
                     router.push(`/${slug}/gallery/photos`)
                     return
+                  } else {
+                    // Incomplete profile: force open login modal to prompt mobile/selfie completion
+                    setShowLoginModal(true)
                   }
                 }
               }
