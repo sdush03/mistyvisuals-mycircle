@@ -709,19 +709,20 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       if (phone) orConditions.push({ phoneNumber: phone });
 
       if (orConditions.length > 0) {
-        await prisma.guest.updateMany({
+        const updateResult = await prisma.guest.updateMany({
           where: {
             eventId: event.id,
             OR: orConditions
           },
           data: { status: 'LEFT', updatedAt: new Date() }
-        }).catch(() => {});
+        });
+        req.log.info(`Leave event ${event.id}: updated ${updateResult.count} guest record(s) to LEFT`);
       }
 
       return { success: true, status: 'LEFT' };
     } catch (err) {
       req.log.error('Leave celebration error: ' + err.message);
-      return { success: true, status: 'LEFT' };
+      return reply.code(500).send({ error: 'Failed to leave celebration', details: err.message });
     }
   });
 };
