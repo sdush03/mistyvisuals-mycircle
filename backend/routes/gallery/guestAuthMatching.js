@@ -107,6 +107,8 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
             data: { hasFullAccess: true }
           });
         }
+        // Reset LEFT → ACTIVE if guest re-joins (raw SQL bypasses stale Prisma client)
+        await prisma.$executeRaw`UPDATE guests SET status = 'ACTIVE', updated_at = NOW() WHERE id = ${guest.id} AND status = 'LEFT'`;
       }
 
       await ensureUserSelfieMigrated(fastify, user.id, verifiedEmail);
@@ -227,6 +229,8 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
             data: { hasFullAccess: true }
           });
         }
+        // Reset LEFT → ACTIVE if guest re-joins (raw SQL bypasses stale Prisma client)
+        await prisma.$executeRaw`UPDATE guests SET status = 'ACTIVE', updated_at = NOW() WHERE id = ${guest.id} AND status = 'LEFT'`;
       }
 
       if (user) {
