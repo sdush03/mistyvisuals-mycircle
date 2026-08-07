@@ -686,32 +686,36 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         return reply.code(404).send({ error: 'Gallery not found' });
       }
 
-      const authHeader = req.headers.authorization;
+      let email = req.body?.email;
+      let phone = req.body?.phoneNumber || req.body?.phone;
       let guestId = null;
 
+      const authHeader = req.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {
         const rawToken = authHeader.split(' ')[1];
         try {
           const decoded = fastify.jwt.verify(rawToken);
-          if (decoded && decoded.guestId) {
-            guestId = decoded.guestId;
+          if (decoded) {
+            if (decoded.guestId) guestId = decoded.guestId;
+            if (decoded.email) email = decoded.email;
+            if (decoded.phone || decoded.phoneNumber) phone = decoded.phone || decoded.phoneNumber;
           }
         } catch (_e) {}
       }
 
-      if (guestId) {
+      const orConditions = [];
+      if (guestId) orConditions.push({ id: guestId });
+      if (email) orConditions.push({ email: email.toLowerCase().trim() });
+      if (phone) orConditions.push({ phoneNumber: phone });
+
+      if (orConditions.length > 0) {
         await prisma.guest.updateMany({
-          where: { id: guestId, eventId: event.id },
+          where: {
+            eventId: event.id,
+            OR: orConditions
+          },
           data: { status: 'LEFT', updatedAt: new Date() }
         }).catch(() => {});
-      } else {
-        const phone = req.body?.phoneNumber || req.body?.phone;
-        if (phone) {
-          await prisma.guest.updateMany({
-            where: { phoneNumber: phone, eventId: event.id },
-            data: { status: 'LEFT', updatedAt: new Date() }
-          }).catch(() => {});
-        }
       }
 
       return { success: true, status: 'LEFT' };
