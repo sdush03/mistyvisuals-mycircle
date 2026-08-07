@@ -703,23 +703,31 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         } catch (_e) {}
       }
 
-      const orConditions = [];
-      if (guestId) orConditions.push({ id: guestId });
-      if (email) orConditions.push({ email: email.toLowerCase().trim() });
-      if (phone) orConditions.push({ phoneNumber: phone });
-
-      if (orConditions.length > 0) {
-        const updateResult = await prisma.guest.updateMany({
-          where: {
-            eventId: event.id,
-            OR: orConditions
-          },
-          data: { status: 'LEFT', updatedAt: new Date() }
-        });
-        req.log.info(`Leave event ${event.id}: updated ${updateResult.count} guest record(s) to LEFT`);
+      let totalUpdated = 0;
+      if (email) {
+        const r = await prisma.$executeRaw`
+          UPDATE guests SET status = 'LEFT', updated_at = NOW()
+          WHERE event_id = ${event.id} AND LOWER(email) = LOWER(${email})
+        `;
+        totalUpdated += r;
+      }
+      if (phone) {
+        const r = await prisma.$executeRaw`
+          UPDATE guests SET status = 'LEFT', updated_at = NOW()
+          WHERE event_id = ${event.id} AND phone_number = ${phone}
+        `;
+        totalUpdated += r;
+      }
+      if (guestId) {
+        const r = await prisma.$executeRaw`
+          UPDATE guests SET status = 'LEFT', updated_at = NOW()
+          WHERE event_id = ${event.id} AND id = ${guestId}
+        `;
+        totalUpdated += r;
       }
 
-      return { success: true, status: 'LEFT' };
+      req.log.info(`Leave event ${event.id}: updated ${totalUpdated} guest record(s) to LEFT (email=${email}, phone=${phone}, guestId=${guestId})`);
+      return { success: true, status: 'LEFT', updated: totalUpdated };
     } catch (err) {
       req.log.error('Leave celebration error: ' + err.message);
       return reply.code(500).send({ error: 'Failed to leave celebration', details: err.message });

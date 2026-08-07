@@ -201,6 +201,12 @@ module.exports = async function familyRoutes(fastify, opts) {
         include: { galleryEvent: true }
       });
 
+      // Fetch LEFT status separately via raw SQL (Prisma client may not have status yet)
+      const leftRows = await prisma.$queryRaw`
+        SELECT id FROM guests WHERE email = ${email} AND status = 'LEFT'
+      `;
+      const leftIds = new Set(leftRows.map((r) => r.id));
+
       const eventsList = [];
       const selfiesDir = path.join(__dirname, '..', '..', 'uploads', 'photos', 'selfies');
       const selfiePath = path.join(selfiesDir, `user_${user.id}.jpg`);
@@ -216,7 +222,7 @@ module.exports = async function familyRoutes(fastify, opts) {
       }
 
       for (const g of guestProfiles) {
-        if (g.status === 'LEFT') continue;
+        if (leftIds.has(g.id) || g.status === 'LEFT') continue;
         const event = g.galleryEvent;
         if (!event || !event.active || event.slug === 'system-directory') continue;
 
