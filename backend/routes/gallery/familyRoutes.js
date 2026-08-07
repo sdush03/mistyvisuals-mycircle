@@ -216,6 +216,7 @@ module.exports = async function familyRoutes(fastify, opts) {
       }
 
       for (const g of guestProfiles) {
+        if (g.status === 'LEFT') continue;
         const event = g.galleryEvent;
         if (!event || !event.active || event.slug === 'system-directory') continue;
 
