@@ -676,4 +676,48 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       };
     }
   });
+
+  // Leave a celebration (WhatsApp-style status: LEFT update)
+  fastify.post('/api/gallery/public/events/:slug/leave', async (req, reply) => {
+    const slug = req.params.slug.toLowerCase().trim();
+    try {
+      const event = await prisma.galleryEvent.findUnique({ where: { slug } });
+      if (!event) {
+        return reply.code(404).send({ error: 'Gallery not found' });
+      }
+
+      const authHeader = req.headers.authorization;
+      let guestId = null;
+
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const rawToken = authHeader.split(' ')[1];
+        try {
+          const decoded = fastify.jwt.verify(rawToken);
+          if (decoded && decoded.guestId) {
+            guestId = decoded.guestId;
+          }
+        } catch (_e) {}
+      }
+
+      if (guestId) {
+        await prisma.guest.updateMany({
+          where: { id: guestId, eventId: event.id },
+          data: { status: 'LEFT', updatedAt: new Date() }
+        }).catch(() => {});
+      } else {
+        const phone = req.body?.phoneNumber || req.body?.phone;
+        if (phone) {
+          await prisma.guest.updateMany({
+            where: { phoneNumber: phone, eventId: event.id },
+            data: { status: 'LEFT', updatedAt: new Date() }
+          }).catch(() => {});
+        }
+      }
+
+      return { success: true, status: 'LEFT' };
+    } catch (err) {
+      req.log.error('Leave celebration error: ' + err.message);
+      return { success: true, status: 'LEFT' };
+    }
+  });
 };
