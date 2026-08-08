@@ -196,6 +196,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
 
       let guestId = null;
       let hasFullAccess = !!isPreview;
+      let isBrideOrGroom = false;
       const authHeader = req.headers.authorization;
       let isTokenValid = false;
 
@@ -237,6 +238,8 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
               return reply.code(403).send({ error: 'Access denied: Participant is blocked' });
             }
             hasFullAccess = dbGuest.hasFullAccess;
+            const guestRole = (dbGuest.displayRole || '').toString().trim().toUpperCase();
+            isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(guestRole);
           } else if (decoded.role === 'family' && decoded.email) {
             let familyGuest = await prisma.guest.findFirst({
               where: { eventId: event.id, email: decoded.email }
@@ -268,6 +271,12 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       const tabFilter = (req.query.tab || '').trim();
 
       const whereClause = { eventId: event.id };
+
+      // Non-couple users never see private photos — enforced server-side
+      if (!isBrideOrGroom) {
+        whereClause.isPrivate = false;
+      }
+
       if (!hasFullAccess) {
         whereClause.tabName = 'Highlights';
       } else {
@@ -301,6 +310,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         capturedAt: true,
         width: true,
         height: true,
+        isPrivate: true,
         _count: {
           select: {
             likes: true
@@ -340,7 +350,8 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         width: p.width,
         height: p.height,
         likeCount: p._count?.likes || 0,
-        isLiked: guestId ? (p.likes && p.likes.length > 0) : false
+        isLiked: guestId ? (p.likes && p.likes.length > 0) : false,
+        isPrivate: isBrideOrGroom ? (p.isPrivate || false) : undefined
       }));
 
       reply.header('Cache-Control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=300');
@@ -539,6 +550,74 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
     } catch (err) {
       req.log.error('Delete photo failed:', err);
       return reply.code(500).send({ error: 'Failed to delete photo' });
+    }
+  });
+
+  // Toggle photo privacy — Bride & Groom only
+  fastify.patch('/api/gallery/public/events/:slug/photos/:photoId/privacy', { preHandler: verifyGuestAuth }, async (req, reply) => {
+    const slug = req.params.slug.toLowerCase().trim();
+    const photoId = parseInt(req.params.photoId, 10);
+    if (isNaN(photoId)) {
+      return reply.code(400).send({ error: 'Invalid photo ID' });
+    }
+
+    const { isPrivate } = req.body;
+    if (typeof isPrivate !== 'boolean') {
+      return reply.code(400).send({ error: 'isPrivate (boolean) is required in the request body' });
+    }
+
+    try {
+      const event = await prisma.galleryEvent.findUnique({ where: { slug } });
+      if (!event) return reply.code(404).send({ error: 'Event not found' });
+
+      // Resolve Bride/Groom role (same robust pattern as delete endpoint)
+      const guestId = req.guest.guestId;
+      const guest = await prisma.guest.findUnique({ where: { id: guestId } });
+
+      let roleUpper = (guest?.displayRole || req.guest.displayRole || '').toString().trim().toUpperCase();
+
+      if (!['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) {
+        const cleanEmail = (guest?.email || req.guest.email || '').trim().toLowerCase();
+        const cleanPhone = (guest?.phoneNumber || '').replace(/\D/g, '');
+        const cleanName = (guest?.name || '').trim().toLowerCase();
+
+        const candidateGuests = await prisma.guest.findMany({
+          where: { eventId: event.id, displayRole: { not: null } }
+        });
+
+        const found = candidateGuests.find(g => {
+          const rUpper = (g.displayRole || '').trim().toUpperCase();
+          if (!['BRIDE', 'GROOM', 'COUPLE'].includes(rUpper)) return false;
+          const cgEmail = (g.email || '').trim().toLowerCase();
+          const cgPhone = (g.phoneNumber || '').replace(/\D/g, '');
+          const cgName = (g.name || '').trim().toLowerCase();
+          if (cleanEmail && cgEmail && cgEmail === cleanEmail) return true;
+          if (cleanPhone && cgPhone && (cleanPhone.endsWith(cgPhone) || cgPhone.endsWith(cleanPhone))) return true;
+          if (cleanName && cgName && cgName.length > 2 && (cleanName.includes(cgName) || cgName.includes(cleanName))) return true;
+          return false;
+        });
+
+        if (found) roleUpper = found.displayRole.trim().toUpperCase();
+      }
+
+      if (!['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) {
+        return reply.code(403).send({ error: 'Only Bride or Groom can lock/unlock photos' });
+      }
+
+      const photo = await prisma.photo.findUnique({ where: { id: photoId } });
+      if (!photo || photo.eventId !== event.id) {
+        return reply.code(404).send({ error: 'Photo not found in this event' });
+      }
+
+      await prisma.photo.update({
+        where: { id: photoId },
+        data: { isPrivate }
+      });
+
+      return { success: true, photoId, isPrivate };
+    } catch (err) {
+      req.log.error('Toggle photo privacy failed:', err);
+      return reply.code(500).send({ error: 'Failed to update photo privacy' });
     }
   });
 
