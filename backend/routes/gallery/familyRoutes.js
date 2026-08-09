@@ -285,6 +285,7 @@ module.exports = async function familyRoutes(fastify, opts) {
 
         // Derive stage from actual photo counts — event.stage / highlightsReady / isHighlights
         // do NOT exist on GalleryEvent in the schema, so counts are the only reliable signal.
+        const hasHighlightsPhotos = highlightsPhotoCount > 0;
         let stage;
         if (isSameDay) {
           stage = 'LIVE';
