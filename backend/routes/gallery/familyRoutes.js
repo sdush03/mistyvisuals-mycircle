@@ -283,40 +283,19 @@ module.exports = async function familyRoutes(fastify, opts) {
           eventDate.getUTCMonth() === today.getUTCMonth() &&
           eventDate.getUTCDate() === today.getUTCDate();
 
-        let stage = event.stage;
-
-        const hasHighlightsPhotos = highlightsPhotoCount > 0;
-
-        // Degrade HIGHLIGHTS if no highlight photos exist yet
-        if (stage === 'HIGHLIGHTS' && !hasHighlightsPhotos) {
-          stage = null;
-        }
-
-        // Upgrade stale CURATING: DB stage was set when event ended but never updated
-        // when photos/highlights were subsequently published
-        if (stage === 'CURATING') {
-          if (hasHighlightsPhotos) {
-            stage = 'HIGHLIGHTS';
-          } else if (totalPhotoCount > 0) {
-            stage = 'READY';
-          }
-          // else stay CURATING — no photos uploaded yet
-        }
-
-        // Fallback: derive stage from date/counts when DB stage is absent
-        // Lifecycle order: LIVE > UPCOMING > CURATING > READY > HIGHLIGHTS
-        if (!stage) {
-          if (isSameDay) {
-            stage = 'LIVE';
-          } else if (eventDate > today) {
-            stage = 'UPCOMING';
-          } else if ((event.highlightsReady || event.isHighlights) && hasHighlightsPhotos) {
-            stage = 'HIGHLIGHTS';
-          } else if (totalPhotoCount > 0) {
-            stage = 'READY';
-          } else {
-            stage = 'CURATING';
-          }
+        // Derive stage from actual photo counts — event.stage / highlightsReady / isHighlights
+        // do NOT exist on GalleryEvent in the schema, so counts are the only reliable signal.
+        let stage;
+        if (isSameDay) {
+          stage = 'LIVE';
+        } else if (eventDate > today) {
+          stage = 'UPCOMING';
+        } else if (hasHighlightsPhotos) {
+          stage = 'HIGHLIGHTS';
+        } else if (totalPhotoCount > 0) {
+          stage = 'READY';
+        } else {
+          stage = 'CURATING';
         }
 
         let resolvedDisplayRole = (g.displayRole || '').toString().trim().toUpperCase() || null;
