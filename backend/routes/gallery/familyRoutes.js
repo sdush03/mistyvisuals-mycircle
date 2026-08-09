@@ -286,18 +286,33 @@ module.exports = async function familyRoutes(fastify, opts) {
         let stage = event.stage;
 
         const hasHighlightsPhotos = highlightsPhotoCount > 0;
+
+        // Degrade HIGHLIGHTS if no highlight photos exist yet
         if (stage === 'HIGHLIGHTS' && !hasHighlightsPhotos) {
           stage = null;
         }
 
-        if (!stage) {
-          if ((event.highlightsReady || event.isHighlights) && hasHighlightsPhotos) {
+        // Upgrade stale CURATING: DB stage was set when event ended but never updated
+        // when photos/highlights were subsequently published
+        if (stage === 'CURATING') {
+          if (hasHighlightsPhotos) {
             stage = 'HIGHLIGHTS';
-          } else if (eventDate > today && !isSameDay) {
-            stage = 'UPCOMING';
-          } else if (isSameDay) {
+          } else if (totalPhotoCount > 0) {
+            stage = 'READY';
+          }
+          // else stay CURATING — no photos uploaded yet
+        }
+
+        // Fallback: derive stage from date/counts when DB stage is absent
+        // Lifecycle order: LIVE > UPCOMING > CURATING > READY > HIGHLIGHTS
+        if (!stage) {
+          if (isSameDay) {
             stage = 'LIVE';
-          } else if (matchedCount > 0) {
+          } else if (eventDate > today) {
+            stage = 'UPCOMING';
+          } else if ((event.highlightsReady || event.isHighlights) && hasHighlightsPhotos) {
+            stage = 'HIGHLIGHTS';
+          } else if (totalPhotoCount > 0) {
             stage = 'READY';
           } else {
             stage = 'CURATING';
