@@ -5,13 +5,29 @@ const { prisma } = require('../../prisma');
 const qdrant = require('../../utils/qdrant');
 const faceRecManager = require('../../utils/faceRecManager');
 const { uploadAssetWithRetry } = require('../../utils/r2');
-const { guestAnchors, checkUserSelfie, ensureUserSelfieMigrated, verifyFamilyAuth, verifyGuestAuth } = require('./galleryCommon');
+const { verifyAppleToken } = require('../../utils/appleAuth');
+const { createRateLimiter, getClientIp } = require('../../utils/rateLimiter');
+const {
+  checkUserSelfie,
+  ensureUserSelfieMigrated,
+  guestAnchors,
+  verifyGuestAuth,
+  verifyFamilyAuth,
+} = require('./galleryCommon');
+
+const familyAuthRateLimiter = createRateLimiter({
+  name: 'family_auth',
+  timeWindowMs: 15 * 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => `${getClientIp(req)}:${req.body?.email || req.body?.phoneNumber || ''}`,
+  errorMessage: 'Too many login attempts. Please wait 15 minutes.'
+});
 
 module.exports = async function familyRoutes(fastify, opts) {
   const { requireAdmin } = opts;
 
   // Verify OAuth (Google/Apple/Facebook/Phone) token globally for Family Dashboard
-  fastify.post('/api/gallery/family/auth', async (req, reply) => {
+  fastify.post('/api/gallery/family/auth', { preHandler: familyAuthRateLimiter }, async (req, reply) => {
     const { token, provider = 'google', email: inputEmail, name: inputName, phoneNumber, appleUserId } = req.body;
     if (!token && !phoneNumber) return reply.code(400).send({ error: 'Token or Phone Number is required' });
 
@@ -21,34 +37,36 @@ module.exports = async function familyRoutes(fastify, opts) {
       let providerId = token || phoneNumber;
 
       if (provider === 'google') {
-        if (token && token.startsWith('google_auth_')) {
+        const isDev = process.env.NODE_ENV === 'development';
+        if (isDev && token && token.startsWith('google_auth_')) {
           verifiedEmail = inputEmail || token.replace('google_auth_', '');
           verifiedName = inputName || 'Google User';
           providerId = verifiedEmail;
         } else {
           const verifyResponse = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${token}`);
           if (!verifyResponse.ok) {
-            if (inputEmail) {
-              verifiedEmail = inputEmail;
-              verifiedName = inputName || 'Google User';
-              providerId = inputEmail;
-            } else {
-              return reply.code(400).send({ error: 'Invalid Google token' });
-            }
-          } else {
-            const ticket = await verifyResponse.json();
-            verifiedEmail = ticket.email;
-            verifiedName = ticket.name || ticket.given_name || verifiedName;
-            providerId = ticket.sub;
+            return reply.code(400).send({ error: 'Invalid Google token' });
           }
+          const ticket = await verifyResponse.json();
+          verifiedEmail = ticket.email;
+          verifiedName = ticket.name || ticket.given_name || verifiedName;
+          providerId = ticket.sub;
         }
       } else if (provider === 'apple') {
-        // Use stable Apple user ID for consistent account lookup across sign-ins
-        // Apple only sends email on FIRST sign-in — subsequent logins have email=null
-        const stableId = appleUserId || null;
-        verifiedEmail = inputEmail || (stableId ? `apple_${stableId}@privaterelay.appleid.com` : `apple_${Date.now()}@privaterelay.appleid.com`);
+        const appleClaims = await verifyAppleToken(token);
+
+        if (!appleClaims) {
+          return reply.code(400).send({ error: 'Invalid Apple identity token' });
+        }
+
+        const stableId = appleClaims.sub;
+        if (appleUserId && appleUserId !== stableId) {
+          return reply.code(400).send({ error: 'Apple user ID mismatch' });
+        }
+
+        verifiedEmail = appleClaims.email || inputEmail || `apple_${stableId}@privaterelay.appleid.com`;
         verifiedName = inputName || 'Apple User';
-        providerId = stableId || verifiedEmail;
+        providerId = stableId;
       } else if (provider === 'facebook') {
         verifiedEmail = inputEmail || `fb_${Date.now()}@facebook.com`;
         verifiedName = inputName || 'Facebook User';
@@ -307,16 +325,15 @@ module.exports = async function familyRoutes(fastify, opts) {
 
           try {
             const found = guestProfiles.find(p => {
+              if (p.eventId !== g.eventId) return false;
               const roleUpper = (p.displayRole || '').trim().toUpperCase();
               if (!['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) return false;
 
               const cgEmail = (p.email || '').trim().toLowerCase();
               const cgPhone = (p.phoneNumber || '').replace(/\D/g, '');
-              const cgName = (g.name || '').trim().toLowerCase();
 
-              if (cleanEmail && cgEmail && cgEmail === cleanEmail) return true;
-              if (cleanPhone && cgPhone && (cleanPhone.endsWith(cgPhone) || cgPhone.endsWith(cleanPhone))) return true;
-              if (cleanName && cgName && cgName.length > 2 && (cleanName.includes(cgName) || cgName.includes(cleanName))) return true;
+              if (cleanEmail && cgEmail && cleanEmail === cgEmail) return true;
+              if (cleanPhone && cgPhone && cleanPhone.length >= 10 && cgPhone.length >= 10 && cleanPhone === cgPhone) return true;
               return false;
             });
             if (found) {
@@ -441,9 +458,9 @@ module.exports = async function familyRoutes(fastify, opts) {
       fs.mkdirSync(selfiesDir, { recursive: true });
 
       const tempPath = path.join(selfiesDir, `temp_profile_verify_${Date.now()}.jpg`);
-      fs.writeFileSync(tempPath, selfieBuffer);
 
       try {
+        fs.writeFileSync(tempPath, selfieBuffer);
         const res = await faceRecManager.validateSelfie(tempPath);
 
         if (res.success && res.vector) {
@@ -474,7 +491,9 @@ module.exports = async function familyRoutes(fastify, opts) {
         log.error('Face validation failed: ' + err.message);
         throw new Error(err.message || 'Failed to run facial verification');
       } finally {
-        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        if (tempPath && fs.existsSync(tempPath)) {
+          try { fs.unlinkSync(tempPath); } catch (_) {}
+        }
       }
     }
 

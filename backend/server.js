@@ -29,24 +29,47 @@ const authRoutes = require('./routes/auth')
 const { pool } = require('./db.js')
 
 
-/* ===================== CORS ===================== */
+/* ===================== CORS & SECURITY HEADERS ===================== */
 
 const PROD_ORIGIN = process.env.APP_ORIGIN
 const DEV_ORIGINS = (process.env.DEV_ORIGINS || '')
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean)
-const ALLOWED_ORIGINS = [PROD_ORIGIN, ...DEV_ORIGINS].filter(Boolean)
+
+const DEFAULT_ORIGINS = [
+  'https://mycircle.mistyvisuals.com',
+  'https://www.mistyvisuals.com',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:8081',
+  'http://127.0.0.1:3000',
+]
+
+const ALLOWED_ORIGINS = Array.from(new Set([
+  PROD_ORIGIN,
+  ...DEV_ORIGINS,
+  ...DEFAULT_ORIGINS
+])).filter(Boolean)
 
 fastify.register(cors, {
   origin: (origin, callback) => {
+    // Allow non-browser clients (Mobile apps, Postman, Electron desktop uploader) with no Origin header
     if (!origin) return callback(null, true)
-    if (!ALLOWED_ORIGINS.length) return callback(null, true)
     if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
-    return callback(new Error('Origin not allowed'), false)
+    return callback(null, false)
   },
-  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'x-preview-token'],
   credentials: true,
+})
+
+// Essential Security Headers
+fastify.addHook('onSend', async (request, reply) => {
+  reply.header('X-Content-Type-Options', 'nosniff')
+  reply.header('X-Frame-Options', 'SAMEORIGIN')
+  reply.header('Referrer-Policy', 'strict-origin-when-cross-origin')
+  reply.header('Cross-Origin-Resource-Policy', 'cross-origin')
 })
 
 const AUTH_COOKIE = 'mv_auth'
@@ -174,34 +197,58 @@ const PUBLIC_WEBSITE_PREFIXES = [
   '/media/website/',
 ]
 
-fastify.addHook('onRequest', (req, reply, done) => {
+const { createRateLimiter, getClientIp } = require('./utils/rateLimiter');
+
+const globalPublicRateLimiter = createRateLimiter({
+  name: 'global_public',
+  timeWindowMs: 60 * 1000,
+  max: 300,
+  keyGenerator: (req) => {
+    const ip = getClientIp(req);
+    const match = (req.url || '').match(/\/events\/([^\/\?]+)/);
+    const slug = match ? match[1].toLowerCase() : 'global';
+    let tokenSnippet = '';
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      tokenSnippet = req.headers.authorization.split(' ')[1].substring(0, 20);
+    }
+    return `${ip}:${slug}${tokenSnippet ? ':' + tokenSnippet : ''}`;
+  },
+  errorMessage: 'Server busy. Please slow down your requests.'
+});
+
+fastify.addHook('onRequest', async (req, reply) => {
   const url = req.raw?.url || req.url || ''
-  if (req.method === 'OPTIONS') return done()
+  if (req.method === 'OPTIONS') return
   const path = url.split('?')[0]
-  if (PUBLIC_API_PATHS.has(path)) return done()
-  if (PUBLIC_WEBSITE_PREFIXES.some(p => path.startsWith(p))) return done()
+
+  // Apply high-capacity global rate limit to public gallery endpoints
+  if (path.startsWith('/api/gallery/public/') || path.startsWith('/gallery/public/')) {
+    await globalPublicRateLimiter(req, reply);
+    if (reply.sent) return;
+    return;
+  }
+
+  if (PUBLIC_API_PATHS.has(path)) return
+  if (PUBLIC_WEBSITE_PREFIXES.some(p => path.startsWith(p))) return
   // Proposal endpoints are public — accessed by unauthenticated clients
-  if (path.startsWith('/api/proposals/') || path.startsWith('/proposals/')) return done()
+  if (path.startsWith('/api/proposals/') || path.startsWith('/proposals/')) return
   // Proforma invoice — public client-facing payment schedule
-  if (path.startsWith('/api/proforma/') || path.startsWith('/proforma/')) return done()
+  if (path.startsWith('/api/proforma/') || path.startsWith('/proforma/')) return
   // Client portal — public client-facing project timeline
-  if (path.startsWith('/api/client-portal/') || path.startsWith('/client-portal/')) return done()
-  // Guest gallery portal — public client-facing wedding photo matching
-  if (path.startsWith('/api/gallery/public/') || path.startsWith('/gallery/public/')) return done()
+  if (path.startsWith('/api/client-portal/') || path.startsWith('/client-portal/')) return
   // Circle portal public auth endpoints
-  if (path === '/api/gallery/family/auth' || path === '/api/gallery/family/auth-from-event') return done()
+  if (path === '/api/gallery/family/auth' || path === '/api/gallery/family/auth-from-event') return
   // Public catalog endpoints for proposal viewers
-  if (path === '/api/catalog/addons/public' || path === '/catalog/addons/public') return done()
-  if (path.endsWith('/events') && (path.startsWith('/api/proposals/') || path.startsWith('/proposals/'))) return done()
-  if (path.startsWith('/api/photos/file/') || path.startsWith('/photos/file/')) return done()
-  if (path.startsWith('/api/videos/file/') || path.startsWith('/videos/file/')) return done()
+  if (path === '/api/catalog/addons/public' || path === '/catalog/addons/public') return
+  if (path.endsWith('/events') && (path.startsWith('/api/proposals/') || path.startsWith('/proposals/'))) return
+  if (path.startsWith('/api/photos/file/') || path.startsWith('/photos/file/')) return
+  if (path.startsWith('/api/videos/file/') || path.startsWith('/videos/file/')) return
   const auth = getAuthFromRequest(req)
   if (auth) req.auth = auth
   if (!auth) {
     reply.code(401).send({ error: 'Not authenticated' })
     return
   }
-  done()
 })
 
 fastify.addHook('preHandler', async (req, reply) => {

@@ -72,7 +72,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       return reply.code(400).send({ error: err.message || 'Failed to run facial verification' });
     } finally {
       if (tempPath && fs.existsSync(tempPath)) {
-        fs.unlinkSync(tempPath);
+        try { fs.unlinkSync(tempPath); } catch (_) {}
       }
     }
   });
@@ -508,20 +508,15 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         const cleanName = (guest?.name || '').trim().toLowerCase();
 
         const candidateGuests = await prisma.guest.findMany({
-          where: { eventId: event.id, displayRole: { not: null } }
+          where: { eventId: event.id, displayRole: { in: ['BRIDE', 'GROOM', 'COUPLE'] } }
         });
 
         const found = candidateGuests.find(g => {
-          const rUpper = (g.displayRole || '').trim().toUpperCase();
-          if (!['BRIDE', 'GROOM', 'COUPLE'].includes(rUpper)) return false;
-
           const cgEmail = (g.email || '').trim().toLowerCase();
           const cgPhone = (g.phoneNumber || '').replace(/\D/g, '');
-          const cgName = (g.name || '').trim().toLowerCase();
 
-          if (cleanEmail && cgEmail && cgEmail === cleanEmail) return true;
-          if (cleanPhone && cgPhone && (cleanPhone.endsWith(cgPhone) || cgPhone.endsWith(cleanPhone))) return true;
-          if (cleanName && cgName && cgName.length > 2 && (cleanName.includes(cgName) || cgName.includes(cleanName))) return true;
+          if (cleanEmail && cgEmail && cleanEmail === cgEmail) return true;
+          if (cleanPhone && cgPhone && cleanPhone.length >= 10 && cgPhone.length >= 10 && cleanPhone === cgPhone) return true;
           return false;
         });
 
@@ -582,18 +577,15 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         const cleanName = (guest?.name || '').trim().toLowerCase();
 
         const candidateGuests = await prisma.guest.findMany({
-          where: { eventId: event.id, displayRole: { not: null } }
+          where: { eventId: event.id, displayRole: { in: ['BRIDE', 'GROOM', 'COUPLE'] } }
         });
 
         const found = candidateGuests.find(g => {
-          const rUpper = (g.displayRole || '').trim().toUpperCase();
-          if (!['BRIDE', 'GROOM', 'COUPLE'].includes(rUpper)) return false;
           const cgEmail = (g.email || '').trim().toLowerCase();
           const cgPhone = (g.phoneNumber || '').replace(/\D/g, '');
-          const cgName = (g.name || '').trim().toLowerCase();
-          if (cleanEmail && cgEmail && cgEmail === cleanEmail) return true;
-          if (cleanPhone && cgPhone && (cleanPhone.endsWith(cgPhone) || cgPhone.endsWith(cleanPhone))) return true;
-          if (cleanName && cgName && cgName.length > 2 && (cleanName.includes(cgName) || cgName.includes(cleanName))) return true;
+
+          if (cleanEmail && cgEmail && cleanEmail === cgEmail) return true;
+          if (cleanPhone && cgPhone && cleanPhone.length >= 10 && cgPhone.length >= 10 && cleanPhone === cgPhone) return true;
           return false;
         });
 
@@ -716,45 +708,6 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
     }
   });
 
-  // Temporary debug endpoint to inspect deploy logs and database status
-  fastify.get('/api/gallery/public/debug-deploy', async (req, reply) => {
-    try {
-      const dbStatus = await prisma.galleryEvent.findMany({
-        select: {
-          id: true,
-          slug: true,
-          title: true,
-          fullCode: true,
-          partialCode: true
-        }
-      });
-
-      let logs = [];
-      const homedir = require('os').homedir();
-      const logDir = path.join(homedir, 'deploy-logs', 'mistyvisuals-mycircle');
-      if (fs.existsSync(logDir)) {
-        const files = fs.readdirSync(logDir).filter(f => f.startsWith('deploy_') && f.endsWith('.log'));
-        files.sort().reverse();
-        for (const file of files.slice(0, 3)) {
-          const content = fs.readFileSync(path.join(logDir, file), 'utf8');
-          logs.push({
-            filename: file,
-            content: content.slice(-5000)
-          });
-        }
-      }
-
-      return {
-        dbStatus,
-        logs
-      };
-    } catch (err) {
-      return {
-        error: err.message,
-        stack: err.stack
-      };
-    }
-  });
 
   // Leave a celebration (WhatsApp-style status: LEFT update)
   fastify.post('/api/gallery/public/events/:slug/leave', async (req, reply) => {
@@ -765,51 +718,65 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         return reply.code(404).send({ error: 'Gallery not found' });
       }
 
-      let email = req.body?.email;
-      let phone = req.body?.phoneNumber || req.body?.phone;
-      let guestId = null;
-
       const authHeader = req.headers.authorization;
-      if (authHeader && authHeader.startsWith('Bearer ')) {
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return reply.code(401).send({ error: 'Authentication required to leave celebration' });
+      }
+
+      let decoded = null;
+      try {
         const rawToken = authHeader.split(' ')[1];
-        try {
-          const decoded = fastify.jwt.verify(rawToken);
-          if (decoded) {
-            if (decoded.guestId) guestId = decoded.guestId;
-            if (decoded.email) email = decoded.email;
-            if (decoded.phone || decoded.phoneNumber) phone = decoded.phone || decoded.phoneNumber;
-          }
-        } catch (_e) {}
+        decoded = fastify.jwt.verify(rawToken);
+      } catch (_e) {
+        return reply.code(401).send({ error: 'Invalid or expired session token' });
       }
 
-      let totalUpdated = 0;
-      if (email) {
-        const r = await prisma.$executeRaw`
-          UPDATE guests SET status = 'LEFT', updated_at = NOW()
-          WHERE event_id = ${event.id} AND LOWER(email) = LOWER(${email})
-        `;
-        totalUpdated += r;
-      }
-      if (phone) {
-        const r = await prisma.$executeRaw`
-          UPDATE guests SET status = 'LEFT', updated_at = NOW()
-          WHERE event_id = ${event.id} AND phone_number = ${phone}
-        `;
-        totalUpdated += r;
-      }
-      if (guestId) {
-        const r = await prisma.$executeRaw`
-          UPDATE guests SET status = 'LEFT', updated_at = NOW()
-          WHERE event_id = ${event.id} AND id = ${guestId}
-        `;
-        totalUpdated += r;
+      if (!decoded || (!decoded.email && !decoded.guestId && !decoded.userId)) {
+        return reply.code(403).send({ error: 'Access denied: Invalid session identity' });
       }
 
-      req.log.info(`Leave event ${event.id}: updated ${totalUpdated} guest record(s) to LEFT (email=${email}, phone=${phone}, guestId=${guestId})`);
-      return { success: true, status: 'LEFT', updated: totalUpdated };
+      if (decoded.role === 'guest' && decoded.eventId && Number(decoded.eventId) !== event.id) {
+        return reply.code(403).send({ error: 'Token does not match this celebration' });
+      }
+
+      const verifiedEmail = decoded.email ? decoded.email.trim().toLowerCase() : null;
+      const verifiedPhone = (decoded.phone || decoded.phoneNumber) ? String(decoded.phone || decoded.phoneNumber) : null;
+      const verifiedGuestId = decoded.guestId || null;
+
+      let targetGuest = null;
+
+      if (verifiedGuestId) {
+        targetGuest = await prisma.guest.findFirst({
+          where: { id: verifiedGuestId, eventId: event.id }
+        });
+      }
+
+      if (!targetGuest && verifiedEmail) {
+        targetGuest = await prisma.guest.findFirst({
+          where: { eventId: event.id, email: verifiedEmail }
+        });
+      }
+
+      if (!targetGuest && verifiedPhone) {
+        targetGuest = await prisma.guest.findFirst({
+          where: { eventId: event.id, phoneNumber: verifiedPhone }
+        });
+      }
+
+      if (!targetGuest) {
+        return reply.code(404).send({ error: 'Participant record not found in this celebration' });
+      }
+
+      const updatedCount = await prisma.$executeRaw`
+        UPDATE guests SET status = 'LEFT', updated_at = NOW()
+        WHERE event_id = ${event.id} AND id = ${targetGuest.id}
+      `;
+
+      req.log.info(`Leave event ${event.id}: updated guest record ${targetGuest.id} to LEFT for user (email=${verifiedEmail})`);
+      return { success: true, status: 'LEFT', updated: updatedCount };
     } catch (err) {
       req.log.error('Leave celebration error: ' + err.message);
-      return reply.code(500).send({ error: 'Failed to leave celebration', details: err.message });
+      return reply.code(500).send({ error: 'Failed to leave celebration' });
     }
   });
 };

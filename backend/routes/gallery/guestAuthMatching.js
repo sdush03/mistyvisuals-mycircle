@@ -4,12 +4,35 @@ const { prisma } = require('../../prisma');
 const qdrant = require('../../utils/qdrant');
 const faceRecManager = require('../../utils/faceRecManager');
 const { uploadAssetWithRetry } = require('../../utils/r2');
-const { guestAnchors, checkUserSelfie, ensureUserSelfieMigrated, getDerivedThumbnail, verifyGuestAuth } = require('./galleryCommon');
+const { verifyAppleToken } = require('../../utils/appleAuth');
+const {
+  guestAnchors,
+  checkUserSelfie,
+  ensureUserSelfieMigrated,
+  getDerivedThumbnail,
+  verifyGuestAuth,
+} = require('./galleryCommon');
+
+const passcodeRateLimiter = createRateLimiter({
+  name: 'guest_auth',
+  timeWindowMs: 15 * 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => `${getClientIp(req)}:${req.params.slug || ''}`,
+  errorMessage: 'Too many authentication attempts. Please wait 15 minutes.'
+});
+
+const aiSelfieRateLimiter = createRateLimiter({
+  name: 'ai_selfie',
+  timeWindowMs: 10 * 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => `${getClientIp(req)}:${req.params.slug || 'validate'}`,
+  errorMessage: 'Selfie processing limit reached. Please wait 10 minutes before retrying.'
+});
 
 module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
 
   // Verify OAuth tokens (Google/Apple) and register guest
-  fastify.post('/api/gallery/public/events/:slug/auth', async (req, reply) => {
+  fastify.post('/api/gallery/public/events/:slug/auth', { preHandler: passcodeRateLimiter }, async (req, reply) => {
     const slug = req.params.slug.toLowerCase().trim();
     const { provider, token, name, email, code } = req.body;
 
@@ -35,12 +58,16 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         verifiedName = ticket.name || ticket.given_name;
         providerId = ticket.sub;
       } else if (provider === 'apple') {
-        verifiedEmail = email;
-        verifiedName = name;
-        providerId = token;
-        if (!verifiedEmail) {
-          return reply.code(400).send({ error: 'Apple Auth requires email for first-time login' });
+        const appleClaims = await verifyAppleToken(token);
+
+        if (!appleClaims) {
+          return reply.code(400).send({ error: 'Invalid Apple identity token' });
         }
+
+        const stableId = appleClaims.sub;
+        verifiedEmail = appleClaims.email || email || `apple_${stableId}@privaterelay.appleid.com`;
+        verifiedName = name || 'Apple User';
+        providerId = stableId;
       } else {
         return reply.code(400).send({ error: 'Unsupported authentication provider' });
       }
@@ -248,21 +275,17 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         try {
           const candidateGuests = await prisma.guest.findMany({
             where: {
-              displayRole: { not: null }
+              eventId: event.id,
+              displayRole: { in: ['BRIDE', 'GROOM', 'COUPLE'] }
             }
           });
 
           const found = candidateGuests.find(g => {
-            const roleUpper = (g.displayRole || '').trim().toUpperCase();
-            if (!['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) return false;
-
             const cgEmail = (g.email || '').trim().toLowerCase();
             const cgPhone = (g.phoneNumber || '').replace(/\D/g, '');
-            const cgName = (g.name || '').trim().toLowerCase();
 
-            if (cleanEmail && cgEmail && cgEmail === cleanEmail) return true;
-            if (cleanPhone && cgPhone && (cleanPhone.endsWith(cgPhone) || cgPhone.endsWith(cleanPhone))) return true;
-            if (cleanName && cgName && cgName.length > 2 && (cleanName.includes(cgName) || cgName.includes(cleanName))) return true;
+            if (cleanEmail && cgEmail && cleanEmail === cgEmail) return true;
+            if (cleanPhone && cgPhone && cleanPhone.length >= 10 && cgPhone.length >= 10 && cleanPhone === cgPhone) return true;
             return false;
           });
 
@@ -302,7 +325,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
   });
 
   // Upgrade guest session to Full Access by providing a valid passcode
-  fastify.post('/api/gallery/public/events/:slug/upgrade', { preHandler: verifyGuestAuth }, async (req, reply) => {
+  fastify.post('/api/gallery/public/events/:slug/upgrade', { preHandler: [verifyGuestAuth, passcodeRateLimiter] }, async (req, reply) => {
     const slug = req.params.slug.toLowerCase().trim();
     const { code } = req.body;
 
@@ -385,7 +408,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
   });
 
   // Guest upload and verify selfie
-  fastify.post('/api/gallery/public/events/:slug/selfie', { preHandler: verifyGuestAuth, bodyLimit: 10 * 1024 * 1024 }, async (req, reply) => {
+  fastify.post('/api/gallery/public/events/:slug/selfie', { preHandler: [verifyGuestAuth, aiSelfieRateLimiter], bodyLimit: 10 * 1024 * 1024 }, async (req, reply) => {
     const eventId = req.guest.eventId;
     const guestKey = `${req.guest.email}_${eventId}`;
     const userId = req.guest.userId;
@@ -434,7 +457,9 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
       req.log.error('Selfie upload failed:', err.message);
       return reply.code(500).send({ error: err.message || 'Failed to upload selfie' });
     } finally {
-      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      if (tempPath && fs.existsSync(tempPath)) {
+        try { fs.unlinkSync(tempPath); } catch (_) {}
+      }
     }
   });
 
@@ -691,7 +716,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
       return reply.code(500).send({ error: 'Search failed' });
     } finally {
       if (tempPath && fs.existsSync(tempPath)) {
-        fs.unlinkSync(tempPath);
+        try { fs.unlinkSync(tempPath); } catch (_) {}
       }
     }
   });

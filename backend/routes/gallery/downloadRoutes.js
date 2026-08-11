@@ -3,12 +3,33 @@ const path = require('path');
 const { prisma } = require('../../prisma');
 const qdrant = require('../../utils/qdrant');
 const faceRecManager = require('../../utils/faceRecManager');
-const { guestAnchors, getArchiver, verifyGuestAuth } = require('./galleryCommon');
+const { createRateLimiter, getClientIp } = require('../../utils/rateLimiter');
+const {
+  guestAnchors,
+  getArchiver,
+  verifyGuestAuth,
+} = require('./galleryCommon');
+
+const zipDownloadRateLimiter = createRateLimiter({
+  name: 'zip_download',
+  timeWindowMs: 15 * 60 * 1000,
+  max: 5,
+  keyGenerator: (req) => `${getClientIp(req)}:${req.params.slug || ''}`,
+  errorMessage: 'Too many ZIP archive download requests. Please wait 15 minutes before requesting another.'
+});
+
+const bulkPinRateLimiter = createRateLimiter({
+  name: 'bulk_pin',
+  timeWindowMs: 15 * 60 * 1000,
+  max: 5,
+  keyGenerator: (req) => `${getClientIp(req)}:${req.params.slug || ''}`,
+  errorMessage: 'Too many bulk PIN attempts. Please wait 15 minutes.'
+});
 
 module.exports = async function downloadRoutes(fastify, opts) {
 
   // Stream matched photos of the guest as a ZIP file
-  fastify.get('/api/gallery/public/events/:slug/download-my-photos', { preHandler: verifyGuestAuth }, async (req, reply) => {
+  fastify.get('/api/gallery/public/events/:slug/download-my-photos', { preHandler: [verifyGuestAuth, zipDownloadRateLimiter] }, async (req, reply) => {
     const eventId = req.guest.eventId;
     const guestKey = `${req.guest.email}_${eventId}`;
     const userId = req.guest.userId;
@@ -182,26 +203,47 @@ module.exports = async function downloadRoutes(fastify, opts) {
         targetImageUrl = `${protocol}://${host}${targetImageUrl}`;
       }
 
+      // --- SSRF Protection: Domain Allowlist (not blocklist) ---
+      // Only allow fetching from our configured R2 CDN domain or localhost in dev mode.
+      // This prevents SSRF to internal networks, cloud metadata, DNS rebinding, 
+      // IPv6 bypasses, decimal/octal/hex IP encoding, and redirect-chain attacks.
       const parsedUrl = new URL(targetImageUrl);
       const hostname = parsedUrl.hostname.toLowerCase();
+      const protocol = parsedUrl.protocol;
+
+      // Only allow http: and https: protocols
+      if (protocol !== 'http:' && protocol !== 'https:') {
+        req.log.warn(`Blocked download-proxy request with disallowed protocol: ${protocol}`);
+        return reply.code(400).send({ error: 'Invalid URL protocol' });
+      }
+
+      // Build the set of allowed hostnames
+      const allowedHosts = new Set();
+      if (process.env.R2_PUBLIC_DOMAIN_URL) {
+        let r2Domain = process.env.R2_PUBLIC_DOMAIN_URL.trim();
+        if (r2Domain.startsWith('http://')) r2Domain = r2Domain.substring(7);
+        if (r2Domain.startsWith('https://')) r2Domain = r2Domain.substring(8);
+        // Remove any trailing slashes or paths
+        r2Domain = r2Domain.split('/')[0].toLowerCase();
+        allowedHosts.add(r2Domain);
+      }
 
       const isDev = process.env.NODE_ENV === 'development';
-      const isLocal = 
-        hostname === 'localhost' ||
-        hostname === '127.0.0.1' ||
-        hostname === '0.0.0.0' ||
-        hostname === '[::1]' ||
-        hostname.startsWith('10.') ||
-        hostname.startsWith('192.168.') ||
-        hostname.startsWith('169.254.') ||
-        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname);
+      if (isDev) {
+        allowedHosts.add('localhost');
+        allowedHosts.add('127.0.0.1');
+        allowedHosts.add('0.0.0.0');
+        allowedHosts.add('::1');
+      }
 
-      if (isLocal && !isDev) {
-        req.log.warn(`Blocked download-proxy request to local network/loopback target: ${targetImageUrl}`);
+      if (!allowedHosts.has(hostname)) {
+        req.log.warn(`Blocked download-proxy request to disallowed host: ${hostname} (target: ${targetImageUrl})`);
         return reply.code(400).send({ error: 'Invalid URL target' });
       }
 
+      // Fetch with redirect disabled to prevent redirect-chain SSRF bypasses
       const response = await fetch(targetImageUrl, {
+        redirect: 'error',
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
@@ -238,15 +280,12 @@ module.exports = async function downloadRoutes(fastify, opts) {
       return reply.send(buffer);
     } catch (err) {
       req.log.error(`[Download Proxy Error] ${err.message}`, err);
-      if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-        return reply.redirect(302, url);
-      }
       return reply.code(500).send({ error: 'Failed to download file' });
     }
   });
 
   // Verify bulk download PIN route
-  fastify.post('/api/gallery/public/events/:slug/verify-bulk-pin', async (req, reply) => {
+  fastify.post('/api/gallery/public/events/:slug/verify-bulk-pin', { preHandler: bulkPinRateLimiter }, async (req, reply) => {
     const slug = req.params.slug.toLowerCase().trim();
     const { pin } = req.body || {};
 
@@ -280,7 +319,7 @@ module.exports = async function downloadRoutes(fastify, opts) {
   });
 
   // Bulk download streaming ZIP endpoint
-  fastify.get('/api/gallery/public/events/:slug/bulk-download', async (req, reply) => {
+  fastify.get('/api/gallery/public/events/:slug/bulk-download', { preHandler: zipDownloadRateLimiter }, async (req, reply) => {
     const slug = req.params.slug.toLowerCase().trim();
     const { pin } = req.query;
 

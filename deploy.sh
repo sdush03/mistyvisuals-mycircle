@@ -16,17 +16,8 @@ rm -f "$LOCKFILE"
 echo $$ > "$LOCKFILE"
 
 cleanup_lock() {
-  echo "[deploy] Uploading logs..."
   if [[ -f "${LOG_FILE:-}" ]]; then
-    UPLOAD_RES=$(curl -s -F "file=@$LOG_FILE" https://file.io || true)
-    LOG_URL=$(echo "$UPLOAD_RES" | grep -oE 'https://file.io/[a-zA-Z0-9]+' || true)
-    if [[ -n "$LOG_URL" ]]; then
-      curl -s -d "Deploy log (MyCircle): $LOG_URL" https://ntfy.sh/mistyvisuals-deploy-debug || true
-    else
-      TAIL_LOG=$(tail -n 100 "$LOG_FILE" || true)
-      curl -s -d "Deploy failed (MyCircle) - last lines:
-$TAIL_LOG" https://ntfy.sh/mistyvisuals-deploy-debug || true
-    fi
+    echo "[deploy] Log saved locally to $LOG_FILE"
   fi
   rm -f "$LOCKFILE"
 }
