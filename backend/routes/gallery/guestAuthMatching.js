@@ -5,6 +5,7 @@ const qdrant = require('../../utils/qdrant');
 const faceRecManager = require('../../utils/faceRecManager');
 const { uploadAssetWithRetry } = require('../../utils/r2');
 const { verifyAppleToken } = require('../../utils/appleAuth');
+const { createRateLimiter, getClientIp } = require('../../utils/rateLimiter');
 const {
   guestAnchors,
   checkUserSelfie,
