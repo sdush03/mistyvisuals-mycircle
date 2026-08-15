@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "cleanup:thumbnails": "node scripts/cleanup_thumbnails.js",
+    "cleanup:thumbnails:dry": "node scripts/cleanup_thumbnails.js --dry-run"
   },
   "keywords": [],
   "author": "",
