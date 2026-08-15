@@ -578,35 +578,7 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
       }
 
       const r2Url = await uploadAsset(buffer, filename, subfolder, 'image/jpeg');
-
-      let thumbnailUrl = null;
-      if (!filename.startsWith('face-') && !filename.startsWith('temp_') && !filename.startsWith('verify_') && !filename.startsWith('guest_')) {
-        const thumbFilename = `thumb_${filename}`;
-        const thumbSubfolder = `events/${slug}/thumbnails`;
-        
-        let thumbBuffer = null;
-        if (req.body.thumbnailContent) {
-          thumbBuffer = Buffer.from(req.body.thumbnailContent, 'base64');
-        } else {
-          try {
-            const sharp = require('sharp');
-            thumbBuffer = await sharp(buffer)
-              .rotate()
-              .resize(720, 720, { fit: 'inside', withoutEnlargement: true })
-              .sharpen()
-              .jpeg({ quality: 85, progressive: true, mozjpeg: true })
-              .toBuffer();
-          } catch (thumbErr) {
-            req.log.error(`Thumbnail generation failed for ${filename}: ${thumbErr.message}`);
-          }
-        }
-
-        if (thumbBuffer) {
-          thumbnailUrl = await uploadAsset(thumbBuffer, thumbFilename, thumbSubfolder, 'image/jpeg');
-        }
-      }
-
-      return { r2Url, thumbnailUrl };
+      return { r2Url, thumbnailUrl: null };
     } catch (err) {
       req.log.error(err);
       if (err.message && err.message.includes('R2 storage')) {
