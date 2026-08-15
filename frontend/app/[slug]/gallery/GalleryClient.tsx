@@ -145,6 +145,11 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                     setShowLoginModal(true)
                   }
                 }
+              } else if (exchangeRes.status === 401 || exchangeRes.status === 403) {
+                // Stale / expired global Circle token - clear it so guest login falls back to social auth
+                localStorage.removeItem('mv_circle_token')
+                localStorage.removeItem('mv_circle_profile')
+                setCircleToken(undefined)
               }
             } catch (exchangeErr) {
               console.error('Failed to auto-authenticate using Circle token:', exchangeErr)

@@ -223,6 +223,10 @@ export function GuestLoginFlow({
 
     const data = await res.json()
     if (!res.ok) {
+      if (isCircle && (res.status === 401 || res.status === 403)) {
+        localStorage.removeItem('mv_circle_token')
+        localStorage.removeItem('mv_circle_profile')
+      }
       throw new Error(data.error || 'Authentication failed')
     }
     
@@ -269,7 +273,14 @@ export function GuestLoginFlow({
       setSubmittingPasscode(true)
       await authenticateAndContinue(pendingOauthToken, pendingOauthProvider, passcodeInput.trim())
     } catch (err: any) {
-      setPasscodeError(err.message || 'Invalid passcode')
+      if (pendingOauthProvider === 'circle' && (err.message?.includes('session') || err.message?.includes('token') || err.message?.includes('Unauthorized') || err.message?.includes('Access denied'))) {
+        setPendingOauthToken(null)
+        setPendingOauthProvider(null)
+        setShowPasscodeScreenAfterAuth(false)
+        setPasscodeError('')
+      } else {
+        setPasscodeError(err.message || 'Invalid passcode')
+      }
     } finally {
       setSubmittingPasscode(false)
     }
