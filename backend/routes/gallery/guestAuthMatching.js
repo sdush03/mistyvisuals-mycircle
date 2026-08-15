@@ -350,6 +350,9 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         data: { hasFullAccess: true }
       });
 
+      // Automatically reset status from LEFT to ACTIVE when guest upgrades / enters passcode
+      await prisma.$executeRaw`UPDATE guests SET status = 'ACTIVE', updated_at = NOW() WHERE id = ${guestId} AND status = 'LEFT'`.catch(() => {});
+
       const sessionToken = fastify.jwt.sign({
         guestId: updatedGuest.id,
         userId: req.guest.userId,

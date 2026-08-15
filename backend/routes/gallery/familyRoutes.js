@@ -161,6 +161,9 @@ module.exports = async function familyRoutes(fastify, opts) {
       const guest = await prisma.guest.findUnique({ where: { id: guestId } });
       if (!guest) return reply.code(404).send({ error: 'Guest not found' });
 
+      // Automatically reset status from LEFT to ACTIVE when guest returns
+      await prisma.$executeRaw`UPDATE guests SET status = 'ACTIVE', updated_at = NOW() WHERE id = ${guest.id} AND status = 'LEFT'`.catch(() => {});
+
       let user = await prisma.circleUser.findUnique({
         where: { email }
       });
@@ -560,6 +563,9 @@ module.exports = async function familyRoutes(fastify, opts) {
         where: { id: req.guest.guestId }
       });
       if (!guest) return reply.code(404).send({ error: 'Guest not found' });
+
+      // Automatically reset status from LEFT to ACTIVE when guest re-enters
+      await prisma.$executeRaw`UPDATE guests SET status = 'ACTIVE', updated_at = NOW() WHERE id = ${guest.id} AND status = 'LEFT'`.catch(() => {});
 
       let user = await prisma.circleUser.findUnique({
         where: { email: guest.email }
