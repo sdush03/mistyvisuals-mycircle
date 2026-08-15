@@ -243,6 +243,7 @@ fastify.addHook('onRequest', async (req, reply) => {
   if (path.endsWith('/events') && (path.startsWith('/api/proposals/') || path.startsWith('/proposals/'))) return
   if (path.startsWith('/api/photos/file/') || path.startsWith('/photos/file/')) return
   if (path.startsWith('/api/videos/file/') || path.startsWith('/videos/file/')) return
+  if (path === '/api/gallery/resize') return
   const auth = getAuthFromRequest(req)
   if (auth) req.auth = auth
   if (!auth) {

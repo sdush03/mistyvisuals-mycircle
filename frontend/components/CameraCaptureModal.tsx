@@ -129,7 +129,7 @@ export function CameraCaptureModal({
   }, [isOpen, status])
 
   useEffect(() => {
-    if (isOpen && !showIntro) {
+    if (isOpen && !showIntro && status === 'idle') {
       const timer = setTimeout(() => {
         startCamera()
       }, 100)
@@ -137,10 +137,10 @@ export function CameraCaptureModal({
         clearTimeout(timer)
         stopCamera()
       }
-    } else {
+    } else if (!isOpen) {
       stopCamera()
     }
-  }, [isOpen, showIntro])
+  }, [isOpen, showIntro, status])
 
   // If status is reset to idle by parent, reset local preview too
   useEffect(() => {
