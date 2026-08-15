@@ -61,6 +61,17 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const [activePhoto, setActivePhoto] = useState<any | null>(null)
   const [loadingMatched, setLoadingMatched] = useState(false)
 
+  // Dynamically resolve on-the-fly resized image URL for gallery grid
+  const getThumbnailUrl = useCallback((photo: any, width = 600) => {
+    if (!photo) return ''
+    if (photo.thumbnailUrl && photo.thumbnailUrl.startsWith('/api/gallery/resize')) {
+      return photo.thumbnailUrl
+    }
+    const source = photo.r2Url || photo.thumbnailUrl || photo.url || photo.file_url || ''
+    if (!source) return ''
+    return `/api/gallery/resize?url=${encodeURIComponent(source)}&w=${width}&q=75`
+  }, [])
+
   // Profile states
   const [showProfileModal, setShowProfileModal] = useState(false)
   const [editName, setEditName] = useState('')
@@ -1669,7 +1680,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                           className="gallery-item group observed-photo"
                           data-photo-id={p.id}
                         >
-                          <img src={p.thumbnailUrl || p.r2Url} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
+                          <img src={getThumbnailUrl(p, 600)} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
                           {/* Bottom-Right Controls (Download & Heart/Like) */}
                           <div 
                             className="absolute bottom-3 right-3 z-10 flex items-center gap-3"
@@ -1782,7 +1793,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                           className="gallery-item group observed-photo"
                           data-photo-id={p.id}
                         >
-                          <img src={p.thumbnailUrl || p.r2Url} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
+                          <img src={getThumbnailUrl(p, 600)} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
                           {/* Bottom-Right Controls (Download & Heart/Like) */}
                           <div 
                             className="absolute bottom-3 right-3 z-10 flex items-center gap-3"
@@ -1900,7 +1911,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                             className="gallery-item group observed-photo"
                             data-photo-id={p.id}
                           >
-                            <img src={p.thumbnailUrl || p.r2Url} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
+                            <img src={getThumbnailUrl(p, 600)} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
                             {/* Bottom-Right Controls (Download & Heart/Like) */}
                             <div 
                               className="absolute bottom-3 right-3 z-10 flex items-center gap-3"
@@ -2135,7 +2146,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
               {/* Blurred thumbnail placeholder visible while high-res loads */}
               {!highResLoaded && (
                 <img
-                  src={activePhotosList[activePhotoIndex].thumbnailUrl || activePhotosList[activePhotoIndex].r2Url}
+                  src={getThumbnailUrl(activePhotosList[activePhotoIndex], 600)}
                   alt=""
                   onDragStart={(e) => e.preventDefault()}
                   className="pointer-events-none select-none"

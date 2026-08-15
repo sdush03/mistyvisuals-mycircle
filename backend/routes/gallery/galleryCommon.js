@@ -22,16 +22,9 @@ function getImageContentType(filename) {
 }
 
 function getDerivedThumbnail(thumbnailUrl, r2Url) {
-  if (thumbnailUrl) return thumbnailUrl;
-  if (r2Url && r2Url.startsWith('/api/photos/file/')) {
-    const prefix = '/api/photos/file/events/';
-    if (r2Url.startsWith(prefix)) {
-      const remaining = r2Url.substring(prefix.length);
-      const replaced = remaining.replace('/photos/', '/thumbnails/thumb_');
-      return prefix + replaced;
-    }
-  }
-  return null;
+  const source = r2Url || thumbnailUrl;
+  if (!source) return null;
+  return `/api/gallery/resize?url=${encodeURIComponent(source)}&w=600&q=75`;
 }
 
 function getArchiver() {
