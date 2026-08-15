@@ -31,34 +31,51 @@ module.exports = async function galleryRoutes(fastify, opts) {
         const parsed = new URL(imageUrl);
         key = decodeURIComponent(parsed.pathname.replace(/^\/+/, ''));
       } catch (e) {
-        key = imageUrl;
+        key = decodeURIComponent(imageUrl.replace(/^\/+/, ''));
       }
     } else {
       key = decodeURIComponent(imageUrl.replace(/^\/?api\/photos\/file\//, '').replace(/^\/+/, ''));
     }
 
     try {
-      // 1. Try reading directly from local disk or R2
+      // 1. Try reading directly from Cloudflare R2 or local disk using key
       if (key) {
         try {
-          const localPath = path.normalize(path.join(PHOTO_UPLOAD_DIR, key));
-          if (fs.existsSync(localPath) && localPath.startsWith(PHOTO_UPLOAD_DIR)) {
-            inputStream = fs.createReadStream(localPath);
-          } else if (isR2Enabled) {
-            // response.Body is a Web ReadableStream — must convert to Node.js stream for .pipe()
+          if (isR2Enabled) {
             const r2Body = await getObjectStream(key);
-            inputStream = r2Body ? Readable.fromWeb(r2Body) : null;
+            if (r2Body) {
+              if (typeof r2Body.pipe === 'function') {
+                inputStream = r2Body;
+              } else if (typeof Readable.fromWeb === 'function' && typeof r2Body.getReader === 'function') {
+                inputStream = Readable.fromWeb(r2Body);
+              } else if (Buffer.isBuffer(r2Body) || r2Body instanceof Uint8Array) {
+                inputStream = Readable.from(r2Body);
+              }
+            }
+          } else {
+            const localPath = path.normalize(path.join(PHOTO_UPLOAD_DIR, key));
+            if (fs.existsSync(localPath) && localPath.startsWith(PHOTO_UPLOAD_DIR)) {
+              inputStream = fs.createReadStream(localPath);
+            }
           }
         } catch (r2Err) {
-          fastify.log.debug(`[Resize] Direct stream lookup for "${key}" missed: ${r2Err.message}`);
+          fastify.log.warn(`[Resize] Direct R2/disk lookup failed for key "${key}": ${r2Err.message}`);
         }
       }
 
-      // 2. If direct key stream wasn't found, fetch over HTTP if full URL
+      // 2. If direct key stream wasn't found, fetch over HTTP as fallback
       if (!inputStream && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
-        const fetchRes = await fetch(imageUrl);
-        if (fetchRes.ok && fetchRes.body) {
-          inputStream = Readable.fromWeb(fetchRes.body);
+        try {
+          const fetchRes = await fetch(imageUrl);
+          if (fetchRes.ok && fetchRes.body) {
+            if (typeof fetchRes.body.pipe === 'function') {
+              inputStream = fetchRes.body;
+            } else if (typeof Readable.fromWeb === 'function' && typeof fetchRes.body.getReader === 'function') {
+              inputStream = Readable.fromWeb(fetchRes.body);
+            }
+          }
+        } catch (fetchErr) {
+          fastify.log.warn(`[Resize] HTTP fetch fallback failed for "${imageUrl}": ${fetchErr.message}`);
         }
       }
 
@@ -74,13 +91,17 @@ module.exports = async function galleryRoutes(fastify, opts) {
         })
         .jpeg({
           quality,
-          mozjpeg: true,
         });
 
       reply.type('image/jpeg');
       reply.header('Cache-Control', 'public, max-age=31536000, s-maxage=31536000, immutable');
 
-      return reply.send(inputStream.pipe(transformer));
+      const outputStream = inputStream.pipe(transformer);
+      outputStream.on('error', (err) => {
+        fastify.log.warn(`[Resize Transform Error] ${err.message}`);
+      });
+
+      return reply.send(outputStream);
     } catch (err) {
       fastify.log.warn(`[Resize Error] Failed to resize ${imageUrl}: ${err.message}`);
       if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
