@@ -7,18 +7,21 @@ const { isR2Enabled } = require('../utils/r2');
 const { PHOTO_UPLOAD_DIR } = require('../config/constants');
 
 const isDryRun = process.argv.includes('--dry-run');
+const includeFaces = process.argv.includes('--include-faces') || process.argv.includes('--all') || true; // enabled by default
 
-async function cleanupThumbnails() {
+async function cleanupThumbnailsAndFaces() {
   console.log('====================================================');
-  console.log(`[Thumbnail Cleanup] Starting ${isDryRun ? 'DRY RUN' : 'CLEANUP'}...`);
+  console.log(`[R2 Asset Cleanup] Starting ${isDryRun ? 'DRY RUN' : 'CLEANUP'} (Thumbnails + Cropped Faces)...`);
   console.log('====================================================');
 
-  let r2DeletedCount = 0;
+  let r2ThumbnailsCount = 0;
+  let r2FacesCount = 0;
+  let r2DeletedTotal = 0;
   let localDeletedCount = 0;
 
   // 1. Cloudflare R2 Bucket Cleanup
   if (isR2Enabled) {
-    console.log('\n[1/3] Scanning Cloudflare R2 bucket for thumbnail objects...');
+    console.log('\n[1/3] Scanning Cloudflare R2 bucket for thumbnail & face crop objects under events/...');
     const r2Client = new S3Client({
       endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
       credentials: {
@@ -30,7 +33,7 @@ async function cleanupThumbnails() {
 
     let continuationToken = undefined;
     let totalScanned = 0;
-    const thumbnailKeys = [];
+    const keysToDelete = [];
 
     do {
       const listCmd = new ListObjectsV2Command({
@@ -45,27 +48,35 @@ async function cleanupThumbnails() {
 
       for (const obj of objects) {
         if (!obj.Key) continue;
-        // Match thumbnail objects: inside /thumbnails/ or starting with thumb_
-        if (obj.Key.includes('/thumbnails/') || path.basename(obj.Key).startsWith('thumb_')) {
-          thumbnailKeys.push({ Key: obj.Key });
+        const key = obj.Key;
+
+        // Check for thumbnails
+        if (key.includes('/thumbnails/') || path.basename(key).startsWith('thumb_')) {
+          keysToDelete.push({ Key: key });
+          r2ThumbnailsCount++;
+        }
+        // Check for face crops (under events/{slug}/faces/*) — NEVER touch users/selfies/
+        else if (includeFaces && key.includes('/faces/')) {
+          keysToDelete.push({ Key: key });
+          r2FacesCount++;
         }
       }
 
       continuationToken = listRes.IsTruncated ? listRes.NextContinuationToken : undefined;
-      process.stdout.write(`\r  Scanned ${totalScanned} objects, found ${thumbnailKeys.length} thumbnails...`);
+      process.stdout.write(`\r  Scanned ${totalScanned} objects (found ${r2ThumbnailsCount} thumbnails, ${r2FacesCount} face crops)...`);
     } while (continuationToken);
 
-    console.log(`\n  Total thumbnail objects identified in R2: ${thumbnailKeys.length}`);
+    console.log(`\n  Total R2 objects identified to delete: ${keysToDelete.length} (${r2ThumbnailsCount} thumbnails, ${r2FacesCount} face crops)`);
 
-    if (thumbnailKeys.length > 0) {
+    if (keysToDelete.length > 0) {
       if (isDryRun) {
-        console.log(`  [DRY RUN] Would delete ${thumbnailKeys.length} objects from R2.`);
-        r2DeletedCount = thumbnailKeys.length;
+        console.log(`  [DRY RUN] Would delete ${keysToDelete.length} objects from Cloudflare R2.`);
+        r2DeletedTotal = keysToDelete.length;
       } else {
-        console.log(`  Deleting ${thumbnailKeys.length} thumbnail objects from R2 in batches of 1000...`);
+        console.log(`  Deleting ${keysToDelete.length} objects from R2 in batches of 1000...`);
         const BATCH_SIZE = 1000;
-        for (let i = 0; i < thumbnailKeys.length; i += BATCH_SIZE) {
-          const batch = thumbnailKeys.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < keysToDelete.length; i += BATCH_SIZE) {
+          const batch = keysToDelete.slice(i, i + BATCH_SIZE);
           const delCmd = new DeleteObjectsCommand({
             Bucket: process.env.R2_BUCKET_NAME,
             Delete: {
@@ -78,25 +89,26 @@ async function cleanupThumbnails() {
           if (errors.length > 0) {
             console.warn(`  Warning: ${errors.length} objects failed to delete in batch ${Math.floor(i / BATCH_SIZE) + 1}`);
           }
-          r2DeletedCount += batch.length - errors.length;
-          process.stdout.write(`\r  Deleted ${r2DeletedCount}/${thumbnailKeys.length} objects from R2...`);
+          r2DeletedTotal += batch.length - errors.length;
+          process.stdout.write(`\r  Deleted ${r2DeletedTotal}/${keysToDelete.length} objects from R2...`);
         }
-        console.log(`\n  Successfully deleted ${r2DeletedCount} thumbnail objects from R2.`);
+        console.log(`\n  Successfully deleted ${r2DeletedTotal} objects from R2.`);
       }
     } else {
-      console.log('  No thumbnail objects found in R2.');
+      console.log('  No thumbnail or face crop objects found in R2.');
     }
   } else {
     console.log('\n[1/3] R2 is not enabled in this environment. Skipping R2 bucket scan.');
   }
 
-  // 2. Local Disk Cleanup (if any local thumbnails exist)
-  console.log('\n[2/3] Checking for local disk thumbnail folders...');
+  // 2. Local Disk Cleanup (thumbnails & faces folders under events/)
+  console.log('\n[2/3] Checking for local disk thumbnail & faces folders...');
   try {
     const eventsDir = path.join(PHOTO_UPLOAD_DIR, 'events');
     if (fs.existsSync(eventsDir)) {
       const eventFolders = fs.readdirSync(eventsDir);
       for (const eventFolder of eventFolders) {
+        // Thumbnails folder
         const thumbDir = path.join(eventsDir, eventFolder, 'thumbnails');
         if (fs.existsSync(thumbDir)) {
           const files = fs.readdirSync(thumbDir);
@@ -106,6 +118,20 @@ async function cleanupThumbnails() {
           } else {
             fs.rmSync(thumbDir, { recursive: true, force: true });
             console.log(`  Deleted local folder: ${thumbDir} (${files.length} files)`);
+            localDeletedCount += files.length;
+          }
+        }
+
+        // Faces folder
+        const facesDir = path.join(eventsDir, eventFolder, 'faces');
+        if (fs.existsSync(facesDir)) {
+          const files = fs.readdirSync(facesDir);
+          if (isDryRun) {
+            console.log(`  [DRY RUN] Would delete local folder: ${facesDir} (${files.length} files)`);
+            localDeletedCount += files.length;
+          } else {
+            fs.rmSync(facesDir, { recursive: true, force: true });
+            console.log(`  Deleted local folder: ${facesDir} (${files.length} files)`);
             localDeletedCount += files.length;
           }
         }
@@ -149,14 +175,16 @@ async function cleanupThumbnails() {
   }
 
   console.log('\n====================================================');
-  console.log('[Thumbnail Cleanup] Summary:');
-  console.log(`  - R2 objects deleted:     ${r2DeletedCount}`);
+  console.log('[R2 Asset Cleanup] Summary:');
+  console.log(`  - Thumbnails identified: ${r2ThumbnailsCount}`);
+  console.log(`  - Face crops identified: ${r2FacesCount}`);
+  console.log(`  - Total R2 deleted:      ${r2DeletedTotal}`);
   console.log(`  - Local files deleted:   ${localDeletedCount}`);
   console.log(`  - Status:                ${isDryRun ? 'DRY RUN COMPLETE' : 'COMPLETED SUCCESSFULLY'}`);
   console.log('====================================================\n');
 }
 
-cleanupThumbnails()
+cleanupThumbnailsAndFaces()
   .catch(err => {
     console.error('Fatal error during cleanup:', err);
     process.exit(1);
