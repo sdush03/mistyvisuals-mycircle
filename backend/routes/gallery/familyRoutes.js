@@ -181,8 +181,9 @@ module.exports = async function familyRoutes(fastify, opts) {
 
       await ensureUserSelfieMigrated(fastify, user.id, email);
       const hasSelfie = await checkUserSelfie(user.id);
-      // If account was closed, force re-onboarding even if data still exists
-      const isDeactivated = !!(user.deletedAt);
+      // Fetch deleted_at via raw SQL — column not in Prisma schema
+      const [deletionRow] = await prisma.$queryRaw`SELECT deleted_at FROM circle_users WHERE id = ${user.id}`;
+      const isDeactivated = !!(deletionRow?.deleted_at);
 
       const familyToken = fastify.jwt.sign({
         email,
@@ -389,8 +390,9 @@ module.exports = async function familyRoutes(fastify, opts) {
         return timeB - timeA;
       });
 
-      // If account was closed, force re-onboarding even if data still exists
-      const isDeactivated = !!(user.deletedAt);
+      // Fetch deleted_at via raw SQL — column not in Prisma schema
+      const [deletionRow] = await prisma.$queryRaw`SELECT deleted_at FROM circle_users WHERE id = ${user.id}`;
+      const isDeactivated = !!(deletionRow?.deleted_at);
 
       return {
         events: eventsList,
