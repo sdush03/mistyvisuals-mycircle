@@ -23,7 +23,6 @@ module.exports = async function galleryRoutes(fastify, opts) {
       return reply.code(400).send({ error: 'Missing url parameter' });
     }
 
-    let inputStream = null;
     let key = '';
 
     if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
@@ -38,24 +37,31 @@ module.exports = async function galleryRoutes(fastify, opts) {
     }
 
     try {
+      let inputBuffer = null;
+
       // 1. Try reading directly from Cloudflare R2 or local disk using key
       if (key) {
         try {
           if (isR2Enabled) {
             const r2Body = await getObjectStream(key);
             if (r2Body) {
-              if (typeof r2Body.pipe === 'function') {
-                inputStream = r2Body;
-              } else if (typeof Readable.fromWeb === 'function' && typeof r2Body.getReader === 'function') {
-                inputStream = Readable.fromWeb(r2Body);
+              if (typeof r2Body.transformToByteArray === 'function') {
+                const bytes = await r2Body.transformToByteArray();
+                inputBuffer = Buffer.from(bytes);
+              } else if (typeof r2Body.pipe === 'function') {
+                const chunks = [];
+                for await (const chunk of r2Body) {
+                  chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+                }
+                inputBuffer = Buffer.concat(chunks);
               } else if (Buffer.isBuffer(r2Body) || r2Body instanceof Uint8Array) {
-                inputStream = Readable.from(r2Body);
+                inputBuffer = Buffer.from(r2Body);
               }
             }
           } else {
             const localPath = path.normalize(path.join(PHOTO_UPLOAD_DIR, key));
             if (fs.existsSync(localPath) && localPath.startsWith(PHOTO_UPLOAD_DIR)) {
-              inputStream = fs.createReadStream(localPath);
+              inputBuffer = await fs.promises.readFile(localPath);
             }
           }
         } catch (r2Err) {
@@ -63,27 +69,27 @@ module.exports = async function galleryRoutes(fastify, opts) {
         }
       }
 
-      // 2. If direct key stream wasn't found, fetch over HTTP as fallback
-      if (!inputStream && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
+      // 2. If direct key lookup didn't succeed, fetch over HTTP as fallback
+      if (!inputBuffer && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
         try {
-          const fetchRes = await fetch(imageUrl);
-          if (fetchRes.ok && fetchRes.body) {
-            if (typeof fetchRes.body.pipe === 'function') {
-              inputStream = fetchRes.body;
-            } else if (typeof Readable.fromWeb === 'function' && typeof fetchRes.body.getReader === 'function') {
-              inputStream = Readable.fromWeb(fetchRes.body);
-            }
+          const fetchRes = await fetch(encodeURI(imageUrl));
+          if (fetchRes.ok) {
+            const arrayBuf = await fetchRes.arrayBuffer();
+            inputBuffer = Buffer.from(arrayBuf);
           }
         } catch (fetchErr) {
           fastify.log.warn(`[Resize] HTTP fetch fallback failed for "${imageUrl}": ${fetchErr.message}`);
         }
       }
 
-      if (!inputStream) {
+      if (!inputBuffer || inputBuffer.length === 0) {
+        if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+          return reply.redirect(encodeURI(imageUrl));
+        }
         return reply.code(404).send({ error: 'Image source not found' });
       }
 
-      const transformer = sharp()
+      const outputBuffer = await sharp(inputBuffer)
         .rotate()
         .resize({
           width,
@@ -91,21 +97,16 @@ module.exports = async function galleryRoutes(fastify, opts) {
         })
         .jpeg({
           quality,
-        });
+        })
+        .toBuffer();
 
       reply.type('image/jpeg');
       reply.header('Cache-Control', 'public, max-age=31536000, s-maxage=31536000, immutable');
-
-      const outputStream = inputStream.pipe(transformer);
-      outputStream.on('error', (err) => {
-        fastify.log.warn(`[Resize Transform Error] ${err.message}`);
-      });
-
-      return reply.send(outputStream);
+      return reply.send(outputBuffer);
     } catch (err) {
       fastify.log.warn(`[Resize Error] Failed to resize ${imageUrl}: ${err.message}`);
       if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-        return reply.redirect(imageUrl);
+        return reply.redirect(encodeURI(imageUrl));
       }
       return reply.code(500).send({ error: 'Image resize processing failed' });
     }

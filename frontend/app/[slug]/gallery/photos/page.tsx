@@ -64,11 +64,11 @@ export default function GuestGalleryPhotos({ params }: Props) {
   // Dynamically resolve on-the-fly resized image URL for gallery grid
   const getThumbnailUrl = useCallback((photo: any, width = 600) => {
     if (!photo) return ''
-    if (photo.thumbnailUrl && photo.thumbnailUrl.startsWith('/api/gallery/resize')) {
-      return photo.thumbnailUrl
-    }
-    const source = photo.r2Url || photo.thumbnailUrl || photo.url || photo.file_url || ''
+    const source = photo.r2Url || photo.url || photo.file_url || photo.thumbnailUrl || ''
     if (!source) return ''
+    if (source.startsWith('/api/gallery/resize')) {
+      return source
+    }
     return `/api/gallery/resize?url=${encodeURIComponent(source)}&w=${width}&q=75`
   }, [])
 
@@ -1680,7 +1680,24 @@ export default function GuestGalleryPhotos({ params }: Props) {
                           className="gallery-item group observed-photo"
                           data-photo-id={p.id}
                         >
-                          <img src={getThumbnailUrl(p, 600)} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
+                          <img
+                            src={getThumbnailUrl(p, 600)}
+                            alt=""
+                            loading="lazy"
+                            onLoad={(e) => e.currentTarget.classList.add('loaded')}
+                            onError={(e) => {
+                              const target = e.currentTarget
+                              const fallback = p.r2Url || p.url || p.file_url
+                              if (fallback && target.src !== fallback) {
+                                target.src = fallback
+                              } else {
+                                target.classList.add('loaded')
+                              }
+                            }}
+                            onDragStart={(e) => e.preventDefault()}
+                            className="pointer-events-none select-none"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }}
+                          />
                           {/* Bottom-Right Controls (Download & Heart/Like) */}
                           <div 
                             className="absolute bottom-3 right-3 z-10 flex items-center gap-3"
@@ -1793,7 +1810,24 @@ export default function GuestGalleryPhotos({ params }: Props) {
                           className="gallery-item group observed-photo"
                           data-photo-id={p.id}
                         >
-                          <img src={getThumbnailUrl(p, 600)} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
+                          <img
+                            src={getThumbnailUrl(p, 600)}
+                            alt=""
+                            loading="lazy"
+                            onLoad={(e) => e.currentTarget.classList.add('loaded')}
+                            onError={(e) => {
+                              const target = e.currentTarget
+                              const fallback = p.r2Url || p.url || p.file_url
+                              if (fallback && target.src !== fallback) {
+                                target.src = fallback
+                              } else {
+                                target.classList.add('loaded')
+                              }
+                            }}
+                            onDragStart={(e) => e.preventDefault()}
+                            className="pointer-events-none select-none"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }}
+                          />
                           {/* Bottom-Right Controls (Download & Heart/Like) */}
                           <div 
                             className="absolute bottom-3 right-3 z-10 flex items-center gap-3"
@@ -1911,7 +1945,24 @@ export default function GuestGalleryPhotos({ params }: Props) {
                             className="gallery-item group observed-photo"
                             data-photo-id={p.id}
                           >
-                            <img src={getThumbnailUrl(p, 600)} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onDragStart={(e) => e.preventDefault()} className="pointer-events-none select-none" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }} />
+                            <img
+                              src={getThumbnailUrl(p, 600)}
+                              alt=""
+                              loading="lazy"
+                              onLoad={(e) => e.currentTarget.classList.add('loaded')}
+                              onError={(e) => {
+                                const target = e.currentTarget
+                                const fallback = p.r2Url || p.url || p.file_url
+                                if (fallback && target.src !== fallback) {
+                                  target.src = fallback
+                                } else {
+                                  target.classList.add('loaded')
+                                }
+                              }}
+                              onDragStart={(e) => e.preventDefault()}
+                              className="pointer-events-none select-none"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }}
+                            />
                             {/* Bottom-Right Controls (Download & Heart/Like) */}
                             <div 
                               className="absolute bottom-3 right-3 z-10 flex items-center gap-3"
@@ -2148,6 +2199,14 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 <img
                   src={getThumbnailUrl(activePhotosList[activePhotoIndex], 600)}
                   alt=""
+                  onError={(e) => {
+                    const target = e.currentTarget
+                    const current = activePhotosList[activePhotoIndex]
+                    const fallback = current?.r2Url || current?.url || current?.file_url
+                    if (fallback && target.src !== fallback) {
+                      target.src = fallback
+                    }
+                  }}
                   onDragStart={(e) => e.preventDefault()}
                   className="pointer-events-none select-none"
                   style={{
