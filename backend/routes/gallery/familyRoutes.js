@@ -181,6 +181,8 @@ module.exports = async function familyRoutes(fastify, opts) {
 
       await ensureUserSelfieMigrated(fastify, user.id, email);
       const hasSelfie = await checkUserSelfie(user.id);
+      // If account was closed, force re-onboarding even if data still exists
+      const isDeactivated = !!(user.deletedAt);
 
       const familyToken = fastify.jwt.sign({
         email,
@@ -196,9 +198,9 @@ module.exports = async function familyRoutes(fastify, opts) {
           name: user.name || guest.name,
           email,
           phoneNumber: user.phoneNumber || guest.phoneNumber,
-          hasSelfie,
+          hasSelfie: isDeactivated ? false : hasSelfie,
           selfieGuestId: user.id,
-          selfieUrl: user.selfieUrl || null
+          selfieUrl: isDeactivated ? null : (user.selfieUrl || null)
         }
       };
     } catch (err) {
@@ -387,16 +389,19 @@ module.exports = async function familyRoutes(fastify, opts) {
         return timeB - timeA;
       });
 
+      // If account was closed, force re-onboarding even if data still exists
+      const isDeactivated = !!(user.deletedAt);
+
       return {
         events: eventsList,
-        selfieUrl: user.selfieUrl || null,
+        selfieUrl: isDeactivated ? null : (user.selfieUrl || null),
         profile: {
           name: user.name,
           email,
           phoneNumber: user.phoneNumber,
-          hasSelfie: !!(user.selfieVector || user.selfieUrl),
+          hasSelfie: isDeactivated ? false : !!(user.selfieVector || user.selfieUrl),
           selfieGuestId: user.id,
-          selfieUrl: user.selfieUrl || null
+          selfieUrl: isDeactivated ? null : (user.selfieUrl || null)
         }
       };
     } catch (err) {
@@ -470,15 +475,14 @@ module.exports = async function familyRoutes(fastify, opts) {
           const selfieFilename = `user_${user.id}_${Date.now()}.jpg`;
           const selfieUrl = await uploadAssetWithRetry(selfieBuffer, selfieFilename, `users/selfies`, 'image/jpeg');
 
-          await prisma.circleUser.update({
-            where: { id: user.id },
-            data: {
-              selfieVector: res.vector,
-              selfieUrl,
-              deletedAt: null,
-              deletionReason: null,
-            }
-          }).catch(err => log.warn('CircleUser selfie save failed:', err.message));
+          await prisma.$executeRaw`
+            UPDATE circle_users
+            SET selfie_vector   = ${JSON.stringify(res.vector)},
+                selfie_url      = ${selfieUrl},
+                deleted_at      = NULL,
+                deletion_reason = NULL
+            WHERE id = ${user.id}
+          `.catch(err => log.warn('CircleUser selfie save failed:', err.message));
 
           const guestProfiles = await prisma.guest.findMany({ where: { email } });
           for (const g of guestProfiles) {
@@ -739,33 +743,19 @@ module.exports = async function familyRoutes(fastify, opts) {
       const { reason } = req.body || {};
       req.log.info(`[DELETE ACCOUNT 🗑️] Processing deactivation for: ${email}. Reason: ${reason || 'user_requested'}`);
 
-      // 1. Soft-delete CircleUser by clearing active onboarding markers (selfieUrl, selfieVector, phoneNumber)
-      // while keeping their user record, ID, and email intact.
+      // 1. Soft-delete: stamp deleted_at ONLY. All user data (phone, selfie, face vector) is preserved.
       const user = await prisma.circleUser.findUnique({ where: { email } });
       if (user) {
         await prisma.$executeRaw`
           UPDATE circle_users
-          SET selfie_url      = NULL,
-              selfie_vector   = NULL,
-              phone_number    = NULL,
-              deleted_at      = NOW(),
+          SET deleted_at      = NOW(),
               deletion_reason = ${reason || 'user_requested'}
           WHERE id = ${user.id}
         `;
       }
 
-      // 2. Mark all joined guest entries for this email as LEFT (clearing active event sessions)
+      // 2. Mark all joined guest entries for this email as LEFT (clears active event sessions)
       await prisma.$executeRaw`UPDATE guests SET status = 'LEFT', updated_at = NOW() WHERE email = ${email}`.catch(() => {});
-
-      // 3. Clean up physical selfie cache files for this user
-      if (user) {
-        const userSelfieJpg = path.join(__dirname, '..', '..', 'uploads', 'photos', 'selfies', `user_${user.id}.jpg`);
-        const userSelfieJson = path.join(__dirname, '..', '..', 'uploads', 'photos', 'selfies', `user_${user.id}.json`);
-        try {
-          if (fs.existsSync(userSelfieJpg)) fs.unlinkSync(userSelfieJpg);
-          if (fs.existsSync(userSelfieJson)) fs.unlinkSync(userSelfieJson);
-        } catch (_fsErr) {}
-      }
 
       req.log.info(`[DELETE ACCOUNT ✅] Successfully deactivated account and reset onboarding state for: ${email}`);
 
