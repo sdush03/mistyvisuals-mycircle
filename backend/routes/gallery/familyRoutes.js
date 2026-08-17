@@ -472,7 +472,12 @@ module.exports = async function familyRoutes(fastify, opts) {
 
           await prisma.circleUser.update({
             where: { id: user.id },
-            data: { selfieVector: res.vector, selfieUrl }
+            data: {
+              selfieVector: res.vector,
+              selfieUrl,
+              deletedAt: null,
+              deletionReason: null,
+            }
           }).catch(err => log.warn('CircleUser selfie save failed:', err.message));
 
           const guestProfiles = await prisma.guest.findMany({ where: { email } });
@@ -738,14 +743,15 @@ module.exports = async function familyRoutes(fastify, opts) {
       // while keeping their user record, ID, and email intact.
       const user = await prisma.circleUser.findUnique({ where: { email } });
       if (user) {
-        await prisma.circleUser.update({
-          where: { id: user.id },
-          data: {
-            selfieUrl: null,
-            selfieVector: null,
-            phoneNumber: null,
-          }
-        });
+        await prisma.$executeRaw`
+          UPDATE circle_users
+          SET selfie_url      = NULL,
+              selfie_vector   = NULL,
+              phone_number    = NULL,
+              deleted_at      = NOW(),
+              deletion_reason = ${reason || 'user_requested'}
+          WHERE id = ${user.id}
+        `;
       }
 
       // 2. Mark all joined guest entries for this email as LEFT (clearing active event sessions)
