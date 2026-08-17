@@ -722,4 +722,55 @@ module.exports = async function familyRoutes(fastify, opts) {
     reply.type('image/jpeg');
     return reply.send(fs.createReadStream(selfiePath));
   });
+
+  // Soft-Delete / Deactivate Account endpoint
+  fastify.post('/api/gallery/family/delete-account', { preHandler: verifyFamilyAuth }, async (req, reply) => {
+    try {
+      const email = req.family?.email || req.body?.email;
+      if (!email) {
+        return reply.code(400).send({ error: 'User email is required' });
+      }
+
+      const { reason } = req.body || {};
+      req.log.info(`[DELETE ACCOUNT 🗑️] Processing deactivation for: ${email}. Reason: ${reason || 'user_requested'}`);
+
+      // 1. Soft-delete CircleUser by clearing active onboarding markers (selfieUrl, selfieVector, phoneNumber)
+      // while keeping their user record, ID, and email intact.
+      const user = await prisma.circleUser.findUnique({ where: { email } });
+      if (user) {
+        await prisma.circleUser.update({
+          where: { id: user.id },
+          data: {
+            selfieUrl: null,
+            selfieVector: null,
+            phoneNumber: null,
+          }
+        });
+      }
+
+      // 2. Mark all joined guest entries for this email as LEFT (clearing active event sessions)
+      await prisma.$executeRaw`UPDATE guests SET status = 'LEFT', updated_at = NOW() WHERE email = ${email}`.catch(() => {});
+
+      // 3. Clean up physical selfie cache files for this user
+      if (user) {
+        const userSelfieJpg = path.join(__dirname, '..', '..', 'uploads', 'photos', 'selfies', `user_${user.id}.jpg`);
+        const userSelfieJson = path.join(__dirname, '..', '..', 'uploads', 'photos', 'selfies', `user_${user.id}.json`);
+        try {
+          if (fs.existsSync(userSelfieJpg)) fs.unlinkSync(userSelfieJpg);
+          if (fs.existsSync(userSelfieJson)) fs.unlinkSync(userSelfieJson);
+        } catch (_fsErr) {}
+      }
+
+      req.log.info(`[DELETE ACCOUNT ✅] Successfully deactivated account and reset onboarding state for: ${email}`);
+
+      return {
+        success: true,
+        message: 'Account deactivated successfully. Onboarding state has been reset.',
+      };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to process account deactivation' });
+    }
+  });
 };
+
