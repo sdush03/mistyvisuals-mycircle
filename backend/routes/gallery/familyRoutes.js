@@ -198,7 +198,7 @@ module.exports = async function familyRoutes(fastify, opts) {
           id: user.id,
           name: user.name || guest.name,
           email,
-          phoneNumber: user.phoneNumber || guest.phoneNumber,
+          phoneNumber: isDeactivated ? null : (user.phoneNumber || guest.phoneNumber),
           hasSelfie: isDeactivated ? false : hasSelfie,
           selfieGuestId: user.id,
           selfieUrl: isDeactivated ? null : (user.selfieUrl || null)
@@ -400,7 +400,7 @@ module.exports = async function familyRoutes(fastify, opts) {
         profile: {
           name: user.name,
           email,
-          phoneNumber: user.phoneNumber,
+          phoneNumber: isDeactivated ? null : user.phoneNumber,
           hasSelfie: isDeactivated ? false : !!(user.selfieVector || user.selfieUrl),
           selfieGuestId: user.id,
           selfieUrl: isDeactivated ? null : (user.selfieUrl || null)
@@ -477,14 +477,16 @@ module.exports = async function familyRoutes(fastify, opts) {
           const selfieFilename = `user_${user.id}_${Date.now()}.jpg`;
           const selfieUrl = await uploadAssetWithRetry(selfieBuffer, selfieFilename, `users/selfies`, 'image/jpeg');
 
+          // Save selfie via Prisma (handles vector type correctly)
+          await prisma.circleUser.update({
+            where: { id: user.id },
+            data: { selfieVector: res.vector, selfieUrl }
+          }).catch(err => log.warn('CircleUser selfie save failed:', err.message));
+
+          // Clear deactivation flag separately so it always runs even if selfie save fails
           await prisma.$executeRaw`
-            UPDATE circle_users
-            SET selfie_vector   = ${JSON.stringify(res.vector)},
-                selfie_url      = ${selfieUrl},
-                deleted_at      = NULL,
-                deletion_reason = NULL
-            WHERE id = ${user.id}
-          `.catch(err => log.warn('CircleUser selfie save failed:', err.message));
+            UPDATE circle_users SET deleted_at = NULL, deletion_reason = NULL WHERE id = ${user.id}
+          `.catch(err => log.warn('Clear deleted_at failed:', err.message));
 
           const guestProfiles = await prisma.guest.findMany({ where: { email } });
           for (const g of guestProfiles) {
