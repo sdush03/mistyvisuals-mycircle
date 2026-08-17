@@ -231,8 +231,19 @@ module.exports = async function familyRoutes(fastify, opts) {
       `;
       const leftIds = new Set(leftRows.map((r) => r.id));
 
-      // Use face vector directly from DB — no local file needed
-      const anchorVector = user.selfieVector || null;
+      const eventsList = [];
+      const selfiesDir = path.join(__dirname, '..', '..', 'uploads', 'photos', 'selfies');
+      const selfiePath = path.join(selfiesDir, `user_${user.id}.jpg`);
+      const vectorPath = path.join(selfiesDir, `user_${user.id}.json`);
+      let anchorVector = null;
+
+      if (fs.existsSync(selfiePath) && fs.existsSync(vectorPath)) {
+        try {
+          anchorVector = JSON.parse(fs.readFileSync(vectorPath, 'utf8'));
+        } catch (e) {
+          req.log.error('Failed to parse anchor vector:', e);
+        }
+      }
 
       for (const g of guestProfiles) {
         if (leftIds.has(g.id) || g.status === 'LEFT') continue;
@@ -368,7 +379,7 @@ module.exports = async function familyRoutes(fastify, opts) {
             phoneNumber: user.phoneNumber,
             hasFullAccess: g.hasFullAccess,
             displayRole: resolvedDisplayRole,
-            hasSelfie: !!(user.selfieVector || user.selfieUrl)
+            hasSelfie: !!anchorVector
           }
         });
       }
