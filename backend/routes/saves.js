@@ -58,17 +58,20 @@ async function resolveUserContext(pool, req) {
     } catch (err) {}
   }
 
-  // 4. Auto-backfill event_id for orphaned saved_photos if eventId is resolved
-  if (eventId && userId) {
+  const normalizedRole = (displayRole || '').toString().toUpperCase();
+  const isCouple = normalizedRole === 'BRIDE' || normalizedRole === 'GROOM';
+
+  // 4. Auto-backfill event_id for orphaned saved_photos if eventId is resolved and user is Bride/Groom
+  if (eventId && userId && isCouple) {
     try {
       await pool.query(
-        `UPDATE saved_photos SET event_id = $1 WHERE user_id = $2 AND event_id IS NULL`,
-        [eventId, userId]
+        `UPDATE saved_photos SET event_id = $1, display_role = $2 WHERE user_id = $3 AND event_id IS NULL`,
+        [eventId, normalizedRole, userId]
       );
     } catch (err) {}
   }
 
-  return { userId, email, eventId, displayRole: displayRole || 'GUEST' };
+  return { userId, email, eventId, displayRole: isCouple ? normalizedRole : 'GUEST', isCouple };
 }
 
 module.exports = async function savesRoutes(fastify, opts) {
@@ -86,11 +89,12 @@ module.exports = async function savesRoutes(fastify, opts) {
       return reply.code(400).send({ error: 'photoUrl is required' });
     }
 
-    const { userId, eventId, displayRole } = await resolveUserContext(pool, req);
+    const { userId, eventId, displayRole, isCouple } = await resolveUserContext(pool, req);
 
     try {
       let result;
-      if (eventId) {
+      // Only Bride and Groom attach photos to the shared event collection
+      if (eventId && isCouple) {
         result = await pool.query(
           `INSERT INTO saved_photos (event_id, user_id, display_role, photo_url, story_id, source_type)
            VALUES ($1, $2, $3, $4, $5, $6)
@@ -100,11 +104,12 @@ module.exports = async function savesRoutes(fastify, opts) {
           [eventId, userId, displayRole, photoUrl, storyId || null, sourceType]
         );
       } else {
+        // Regular guests save to their own private collection
         result = await pool.query(
           `INSERT INTO saved_photos (event_id, user_id, display_role, photo_url, story_id, source_type)
-           VALUES (NULL, $1, $2, $3, $4, $5)
+           VALUES (NULL, $1, 'GUEST', $2, $3, $4)
            RETURNING *`,
-          [userId, displayRole, photoUrl, storyId || null, sourceType]
+          [userId, photoUrl, storyId || null, sourceType]
         );
       }
 
@@ -126,19 +131,33 @@ module.exports = async function savesRoutes(fastify, opts) {
     }
 
     const { photoUrl, id } = req.query || {};
-    const { userId, eventId } = await resolveUserContext(pool, req);
+    const { userId, eventId, isCouple } = await resolveUserContext(pool, req);
 
     try {
       if (id) {
-        await pool.query(
-          `DELETE FROM saved_photos WHERE id = $1 AND (user_id = $2 OR (event_id = $3 AND $3 IS NOT NULL))`,
-          [Number(id), userId, eventId]
-        );
+        if (eventId && isCouple) {
+          await pool.query(
+            `DELETE FROM saved_photos WHERE id = $1 AND (user_id = $2 OR (event_id = $3 AND display_role IN ('BRIDE', 'GROOM')))`,
+            [Number(id), userId, eventId]
+          );
+        } else {
+          await pool.query(
+            `DELETE FROM saved_photos WHERE id = $1 AND user_id = $2`,
+            [Number(id), userId]
+          );
+        }
       } else if (photoUrl) {
-        await pool.query(
-          `DELETE FROM saved_photos WHERE photo_url = $1 AND (user_id = $2 OR (event_id = $3 AND $3 IS NOT NULL))`,
-          [photoUrl, userId, eventId]
-        );
+        if (eventId && isCouple) {
+          await pool.query(
+            `DELETE FROM saved_photos WHERE photo_url = $1 AND (user_id = $2 OR (event_id = $3 AND display_role IN ('BRIDE', 'GROOM')))`,
+            [photoUrl, userId, eventId]
+          );
+        } else {
+          await pool.query(
+            `DELETE FROM saved_photos WHERE photo_url = $1 AND user_id = $2`,
+            [photoUrl, userId]
+          );
+        }
       } else {
         return reply.code(400).send({ error: 'id or photoUrl is required' });
       }
@@ -150,37 +169,21 @@ module.exports = async function savesRoutes(fastify, opts) {
     }
   });
 
-  // GET /api/saves - Get all saved photos for couple's event
+  // GET /api/saves - Get all saved photos for couple's event or user's private saves
   fastify.get('/api/saves', async (req, reply) => {
     const auth = req.auth;
     if (!auth) {
       return reply.code(401).send({ error: 'Not authenticated' });
     }
 
-    const { userId, eventId } = await resolveUserContext(pool, req);
+    const { userId, eventId, isCouple } = await resolveUserContext(pool, req);
 
     try {
-      // Proactively backfill any orphaned saves for users matching guests in an event
-      if (eventId) {
-        try {
-          await pool.query(
-            `UPDATE saved_photos sp
-             SET event_id = $1
-             WHERE sp.event_id IS NULL
-               AND sp.user_id IN (
-                 SELECT cu.id FROM circle_users cu
-                 JOIN guests g ON LOWER(g.email) = LOWER(cu.email)
-                 WHERE g.event_id = $1
-               )`,
-            [eventId]
-          );
-        } catch (_healErr) {}
-      }
-
       let query;
       let params;
 
-      if (eventId) {
+      // BRIDE & GROOM: Return shared couple moodboard
+      if (eventId && isCouple) {
         query = `
           SELECT 
             sp.id,
@@ -195,11 +198,13 @@ module.exports = async function savesRoutes(fastify, opts) {
             cu.email as saved_by_email
           FROM saved_photos sp
           LEFT JOIN circle_users cu ON sp.user_id = cu.id
-          WHERE (sp.event_id = $1 AND $1 IS NOT NULL) OR (sp.user_id = $2)
+          WHERE (sp.event_id = $1 AND sp.display_role IN ('BRIDE', 'GROOM'))
+             OR (sp.user_id = $2)
           ORDER BY sp.created_at DESC
         `;
         params = [eventId, userId];
       } else {
+        // REGULAR GUESTS: Strictly return only the user's private saves
         query = `
           SELECT 
             sp.id,
@@ -257,15 +262,25 @@ module.exports = async function savesRoutes(fastify, opts) {
       return reply.code(400).send({ error: 'photoUrl query parameter is required' });
     }
 
-    const { userId, eventId } = await resolveUserContext(pool, req);
+    const { userId, eventId, isCouple } = await resolveUserContext(pool, req);
 
     try {
-      const result = await pool.query(
-        `SELECT id, user_id, display_role FROM saved_photos 
-         WHERE photo_url = $1 AND (user_id = $2 OR (event_id = $3 AND $3 IS NOT NULL))
-         LIMIT 1`,
-        [photoUrl, userId, eventId]
-      );
+      let result;
+      if (eventId && isCouple) {
+        result = await pool.query(
+          `SELECT id, user_id, display_role FROM saved_photos 
+           WHERE photo_url = $1 AND (user_id = $2 OR (event_id = $3 AND display_role IN ('BRIDE', 'GROOM')))
+           LIMIT 1`,
+          [photoUrl, userId, eventId]
+        );
+      } else {
+        result = await pool.query(
+          `SELECT id, user_id, display_role FROM saved_photos 
+           WHERE photo_url = $1 AND user_id = $2
+           LIMIT 1`,
+          [photoUrl, userId]
+        );
+      }
 
       const isSaved = result.rows.length > 0;
       return reply.send({
