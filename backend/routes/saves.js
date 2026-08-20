@@ -1,5 +1,76 @@
 const { prisma } = require('../prisma');
 
+/**
+ * Helper to resolve user context (userId, email, eventId, displayRole)
+ * Automatically looks up event_id from guests table or previous saved_photos if not explicitly present in auth token
+ */
+async function resolveUserContext(pool, req) {
+  const auth = req.auth || {};
+  let userId = auth.sub || auth.id || auth.userId || null;
+  let email = auth.email || req.query?.email || req.body?.email || null;
+  let eventSlug = req.query?.eventSlug || req.body?.eventSlug || null;
+  let eventId = req.query?.eventId || req.body?.eventId || auth.eventId || auth.event_id || null;
+  let displayRole = req.query?.displayRole || req.body?.displayRole || auth.displayRole || null;
+
+  // 1. Resolve eventId from eventSlug if passed
+  if (!eventId && eventSlug) {
+    try {
+      const evRes = await pool.query(`SELECT id FROM gallery_events WHERE slug = $1 LIMIT 1`, [eventSlug]);
+      if (evRes.rows.length > 0) {
+        eventId = evRes.rows[0].id;
+      }
+    } catch (err) {}
+  }
+
+  // 2. If email is available, look up guest record in guests table
+  if (email) {
+    try {
+      const guestRes = await pool.query(
+        `SELECT event_id, display_role FROM guests WHERE LOWER(email) = LOWER($1) AND status != 'LEFT' ORDER BY id DESC LIMIT 1`,
+        [email]
+      );
+      if (guestRes.rows.length > 0) {
+        if (!eventId) eventId = guestRes.rows[0].event_id;
+        if (!displayRole || displayRole === 'GUEST' || displayRole === 'family' || displayRole === 'guest') {
+          if (guestRes.rows[0].display_role) {
+            displayRole = guestRes.rows[0].display_role;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[saves] guest lookup error:', err?.message);
+    }
+  }
+
+  // 3. If userId is available and eventId is still null, check previously saved photos with an event_id
+  if (!eventId && userId) {
+    try {
+      const saveRes = await pool.query(
+        `SELECT event_id, display_role FROM saved_photos WHERE user_id = $1 AND event_id IS NOT NULL ORDER BY id DESC LIMIT 1`,
+        [userId]
+      );
+      if (saveRes.rows.length > 0) {
+        eventId = saveRes.rows[0].event_id;
+        if (!displayRole || displayRole === 'GUEST') {
+          displayRole = saveRes.rows[0].display_role;
+        }
+      }
+    } catch (err) {}
+  }
+
+  // 4. Auto-backfill event_id for orphaned saved_photos if eventId is resolved
+  if (eventId && userId) {
+    try {
+      await pool.query(
+        `UPDATE saved_photos SET event_id = $1 WHERE user_id = $2 AND event_id IS NULL`,
+        [eventId, userId]
+      );
+    } catch (err) {}
+  }
+
+  return { userId, email, eventId, displayRole: displayRole || 'GUEST' };
+}
+
 module.exports = async function savesRoutes(fastify, opts) {
   const { pool, requireAuth } = opts;
 
@@ -10,40 +81,32 @@ module.exports = async function savesRoutes(fastify, opts) {
       return reply.code(401).send({ error: 'Not authenticated' });
     }
 
-    const { photoUrl, storyId, sourceType = 'FEATURED_STORY', displayRole } = req.body || {};
+    const { photoUrl, storyId, sourceType = 'FEATURED_STORY' } = req.body || {};
     if (!photoUrl) {
       return reply.code(400).send({ error: 'photoUrl is required' });
     }
 
-    const userId = auth.sub || auth.id || auth.userId;
-    const eventId = auth.eventId || auth.event_id || null;
-    let roleToStore = displayRole || auth.displayRole || auth.role || null;
-
-    if (!roleToStore && eventId && auth.email) {
-      try {
-        const guestRes = await pool.query(
-          `SELECT display_role FROM guests WHERE event_id = $1 AND LOWER(email) = LOWER($2)`,
-          [eventId, auth.email]
-        );
-        if (guestRes.rows.length && guestRes.rows[0].display_role) {
-          roleToStore = guestRes.rows[0].display_role;
-        }
-      } catch (err) {
-        console.warn('[saves] Could not lookup guest display_role:', err?.message);
-      }
-    }
-    if (!roleToStore) roleToStore = 'GUEST';
+    const { userId, eventId, displayRole } = await resolveUserContext(pool, req);
 
     try {
-      // Upsert/Insert into saved_photos using pool
-      const result = await pool.query(
-        `INSERT INTO saved_photos (event_id, user_id, display_role, photo_url, story_id, source_type)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (event_id, photo_url, user_id)
-         DO UPDATE SET display_role = EXCLUDED.display_role, created_at = NOW()
-         RETURNING *`,
-        [eventId, userId, roleToStore, photoUrl, storyId || null, sourceType]
-      );
+      let result;
+      if (eventId) {
+        result = await pool.query(
+          `INSERT INTO saved_photos (event_id, user_id, display_role, photo_url, story_id, source_type)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (event_id, photo_url, user_id)
+           DO UPDATE SET display_role = EXCLUDED.display_role, created_at = NOW()
+           RETURNING *`,
+          [eventId, userId, displayRole, photoUrl, storyId || null, sourceType]
+        );
+      } else {
+        result = await pool.query(
+          `INSERT INTO saved_photos (event_id, user_id, display_role, photo_url, story_id, source_type)
+           VALUES (NULL, $1, $2, $3, $4, $5)
+           RETURNING *`,
+          [userId, displayRole, photoUrl, storyId || null, sourceType]
+        );
+      }
 
       return reply.send({
         success: true,
@@ -63,18 +126,17 @@ module.exports = async function savesRoutes(fastify, opts) {
     }
 
     const { photoUrl, id } = req.query || {};
-    const userId = auth.sub || auth.id || auth.userId;
-    const eventId = auth.eventId || auth.event_id || null;
+    const { userId, eventId } = await resolveUserContext(pool, req);
 
     try {
       if (id) {
         await pool.query(
-          `DELETE FROM saved_photos WHERE id = $1 AND (user_id = $2 OR event_id = $3)`,
+          `DELETE FROM saved_photos WHERE id = $1 AND (user_id = $2 OR (event_id = $3 AND $3 IS NOT NULL))`,
           [Number(id), userId, eventId]
         );
       } else if (photoUrl) {
         await pool.query(
-          `DELETE FROM saved_photos WHERE photo_url = $1 AND (user_id = $2 OR event_id = $3)`,
+          `DELETE FROM saved_photos WHERE photo_url = $1 AND (user_id = $2 OR (event_id = $3 AND $3 IS NOT NULL))`,
           [photoUrl, userId, eventId]
         );
       } else {
@@ -95,11 +157,26 @@ module.exports = async function savesRoutes(fastify, opts) {
       return reply.code(401).send({ error: 'Not authenticated' });
     }
 
-    const userId = auth.sub || auth.id || auth.userId;
-    const eventId = auth.eventId || auth.event_id || null;
+    const { userId, eventId } = await resolveUserContext(pool, req);
 
     try {
-      // Query saved photos for this event or user, joining circle_users for profile info
+      // Proactively backfill any orphaned saves for users matching guests in an event
+      if (eventId) {
+        try {
+          await pool.query(
+            `UPDATE saved_photos sp
+             SET event_id = $1
+             WHERE sp.event_id IS NULL
+               AND sp.user_id IN (
+                 SELECT cu.id FROM circle_users cu
+                 JOIN guests g ON LOWER(g.email) = LOWER(cu.email)
+                 WHERE g.event_id = $1
+               )`,
+            [eventId]
+          );
+        } catch (_healErr) {}
+      }
+
       let query;
       let params;
 
@@ -118,10 +195,10 @@ module.exports = async function savesRoutes(fastify, opts) {
             cu.email as saved_by_email
           FROM saved_photos sp
           LEFT JOIN circle_users cu ON sp.user_id = cu.id
-          WHERE sp.event_id = $1
+          WHERE (sp.event_id = $1 AND $1 IS NOT NULL) OR (sp.user_id = $2)
           ORDER BY sp.created_at DESC
         `;
-        params = [eventId];
+        params = [eventId, userId];
       } else {
         query = `
           SELECT 
@@ -180,13 +257,12 @@ module.exports = async function savesRoutes(fastify, opts) {
       return reply.code(400).send({ error: 'photoUrl query parameter is required' });
     }
 
-    const userId = auth.sub || auth.id || auth.userId;
-    const eventId = auth.eventId || auth.event_id || null;
+    const { userId, eventId } = await resolveUserContext(pool, req);
 
     try {
       const result = await pool.query(
         `SELECT id, user_id, display_role FROM saved_photos 
-         WHERE photo_url = $1 AND (user_id = $2 OR event_id = $3)
+         WHERE photo_url = $1 AND (user_id = $2 OR (event_id = $3 AND $3 IS NOT NULL))
          LIMIT 1`,
         [photoUrl, userId, eventId]
       );
