@@ -1,8 +1,8 @@
 const { prisma } = require('../prisma');
 
 /**
- * Helper to resolve user context (userId, email, eventId, displayRole)
- * Automatically looks up event_id from guests table or previous saved_photos if not explicitly present in auth token
+ * Helper to resolve user context (userId, email, eventId, displayRole, isCouple)
+ * Robust resolution checking JWT auth, circle_users, and guests tables.
  */
 async function resolveUserContext(pool, req) {
   const auth = req.auth || {};
@@ -12,7 +12,17 @@ async function resolveUserContext(pool, req) {
   let eventId = req.query?.eventId || req.body?.eventId || auth.eventId || auth.event_id || null;
   let displayRole = req.query?.displayRole || req.body?.displayRole || auth.displayRole || null;
 
-  // 1. Resolve eventId from eventSlug if passed
+  // 1. If email is missing, lookup from circle_users by userId
+  if (!email && userId) {
+    try {
+      const uRes = await pool.query(`SELECT email FROM circle_users WHERE id = $1 LIMIT 1`, [userId]);
+      if (uRes.rows.length > 0 && uRes.rows[0].email) {
+        email = uRes.rows[0].email;
+      }
+    } catch (err) {}
+  }
+
+  // 2. Resolve eventId from eventSlug if passed
   if (!eventId && eventSlug) {
     try {
       const evRes = await pool.query(`SELECT id FROM gallery_events WHERE slug = $1 LIMIT 1`, [eventSlug]);
@@ -22,19 +32,30 @@ async function resolveUserContext(pool, req) {
     } catch (err) {}
   }
 
-  // 2. If email is available, look up guest record in guests table
+  // 3. Lookup guest record in guests table (prioritize BRIDE or GROOM role)
   if (email) {
     try {
-      const guestRes = await pool.query(
-        `SELECT event_id, display_role FROM guests WHERE LOWER(email) = LOWER($1) AND status != 'LEFT' ORDER BY id DESC LIMIT 1`,
-        [email]
-      );
+      let query;
+      let params;
+      if (eventId) {
+        query = `SELECT event_id, display_role FROM guests 
+                 WHERE LOWER(email) = LOWER($1) AND event_id = $2 AND status != 'LEFT' 
+                 ORDER BY CASE WHEN display_role IN ('BRIDE', 'GROOM') THEN 1 ELSE 2 END, id DESC LIMIT 1`;
+        params = [email, eventId];
+      } else {
+        query = `SELECT event_id, display_role FROM guests 
+                 WHERE LOWER(email) = LOWER($1) AND status != 'LEFT' 
+                 ORDER BY CASE WHEN display_role IN ('BRIDE', 'GROOM') THEN 1 ELSE 2 END, id DESC LIMIT 1`;
+        params = [email];
+      }
+      const guestRes = await pool.query(query, params);
       if (guestRes.rows.length > 0) {
         if (!eventId) eventId = guestRes.rows[0].event_id;
-        if (!displayRole || displayRole === 'GUEST' || displayRole === 'family' || displayRole === 'guest') {
-          if (guestRes.rows[0].display_role) {
-            displayRole = guestRes.rows[0].display_role;
-          }
+        const gRole = (guestRes.rows[0].display_role || '').toString().toUpperCase();
+        if (['BRIDE', 'GROOM'].includes(gRole)) {
+          displayRole = gRole;
+        } else if (!displayRole || ['GUEST', 'FAMILY'].includes(displayRole.toUpperCase())) {
+          displayRole = gRole || 'GUEST';
         }
       }
     } catch (err) {
@@ -42,7 +63,7 @@ async function resolveUserContext(pool, req) {
     }
   }
 
-  // 3. If userId is available and eventId is still null, check previously saved photos with an event_id
+  // 4. Fallback lookup from previously saved photos
   if (!eventId && userId) {
     try {
       const saveRes = await pool.query(
@@ -60,16 +81,6 @@ async function resolveUserContext(pool, req) {
 
   const normalizedRole = (displayRole || '').toString().toUpperCase();
   const isCouple = normalizedRole === 'BRIDE' || normalizedRole === 'GROOM';
-
-  // 4. Auto-backfill event_id for orphaned saved_photos if eventId is resolved and user is Bride/Groom
-  if (eventId && userId && isCouple) {
-    try {
-      await pool.query(
-        `UPDATE saved_photos SET event_id = $1, display_role = $2 WHERE user_id = $3 AND event_id IS NULL`,
-        [eventId, normalizedRole, userId]
-      );
-    } catch (err) {}
-  }
 
   return { userId, email, eventId, displayRole: isCouple ? normalizedRole : 'GUEST', isCouple };
 }
@@ -93,7 +104,7 @@ module.exports = async function savesRoutes(fastify, opts) {
 
     try {
       let result;
-      // Only Bride and Groom attach photos to the shared event collection
+      // Couple (Bride/Groom): Save to shared wedding collection
       if (eventId && isCouple) {
         result = await pool.query(
           `INSERT INTO saved_photos (event_id, user_id, display_role, photo_url, story_id, source_type)
@@ -104,7 +115,7 @@ module.exports = async function savesRoutes(fastify, opts) {
           [eventId, userId, displayRole, photoUrl, storyId || null, sourceType]
         );
       } else {
-        // Regular guests save to their own private collection
+        // Regular guests: Save to personal private collection
         result = await pool.query(
           `INSERT INTO saved_photos (event_id, user_id, display_role, photo_url, story_id, source_type)
            VALUES (NULL, $1, 'GUEST', $2, $3, $4)
@@ -137,7 +148,7 @@ module.exports = async function savesRoutes(fastify, opts) {
       if (id) {
         if (eventId && isCouple) {
           await pool.query(
-            `DELETE FROM saved_photos WHERE id = $1 AND (user_id = $2 OR (event_id = $3 AND display_role IN ('BRIDE', 'GROOM')))`,
+            `DELETE FROM saved_photos WHERE id = $1 AND (user_id = $2 OR event_id = $3)`,
             [Number(id), userId, eventId]
           );
         } else {
@@ -149,7 +160,7 @@ module.exports = async function savesRoutes(fastify, opts) {
       } else if (photoUrl) {
         if (eventId && isCouple) {
           await pool.query(
-            `DELETE FROM saved_photos WHERE photo_url = $1 AND (user_id = $2 OR (event_id = $3 AND display_role IN ('BRIDE', 'GROOM')))`,
+            `DELETE FROM saved_photos WHERE photo_url = $1 AND (user_id = $2 OR event_id = $3)`,
             [photoUrl, userId, eventId]
           );
         } else {
@@ -179,32 +190,60 @@ module.exports = async function savesRoutes(fastify, opts) {
     const { userId, eventId, isCouple } = await resolveUserContext(pool, req);
 
     try {
+      // 1. Proactively auto-heal any past couple saves in database
+      if (eventId && isCouple) {
+        try {
+          await pool.query(
+            `UPDATE saved_photos sp
+             SET event_id = g.event_id,
+                 display_role = g.display_role
+             FROM circle_users cu
+             JOIN guests g ON LOWER(g.email) = LOWER(cu.email)
+             WHERE sp.user_id = cu.id
+               AND g.event_id = $1
+               AND g.display_role IN ('BRIDE', 'GROOM')
+               AND (sp.event_id IS NULL OR sp.display_role NOT IN ('BRIDE', 'GROOM'))`,
+            [eventId]
+          );
+        } catch (_healErr) {}
+      }
+
       let query;
       let params;
 
-      // BRIDE & GROOM: Return shared couple moodboard
+      // BRIDE & GROOM: Query the shared couple collection
       if (eventId && isCouple) {
         query = `
           SELECT 
             sp.id,
             sp.event_id,
             sp.user_id,
-            sp.display_role,
+            COALESCE(
+              NULLIF(g.display_role, ''),
+              NULLIF(sp.display_role, ''),
+              'GUEST'
+            ) as display_role,
             sp.photo_url,
             sp.story_id,
             sp.source_type,
             sp.created_at,
-            cu.name as saved_by_name,
-            cu.email as saved_by_email
+            COALESCE(cu.name, g.name, 'Partner') as saved_by_name,
+            COALESCE(cu.email, g.email) as saved_by_email
           FROM saved_photos sp
           LEFT JOIN circle_users cu ON sp.user_id = cu.id
-          WHERE (sp.event_id = $1 AND sp.display_role IN ('BRIDE', 'GROOM'))
-             OR (sp.user_id = $2)
+          LEFT JOIN guests g ON (LOWER(g.email) = LOWER(cu.email) AND g.event_id = $1)
+          WHERE sp.event_id = $1
+             OR sp.user_id = $2
+             OR sp.user_id IN (
+               SELECT cu2.id FROM circle_users cu2
+               JOIN guests g2 ON LOWER(g2.email) = LOWER(cu2.email)
+               WHERE g2.event_id = $1 AND g2.display_role IN ('BRIDE', 'GROOM')
+             )
           ORDER BY sp.created_at DESC
         `;
         params = [eventId, userId];
       } else {
-        // REGULAR GUESTS: Strictly return only the user's private saves
+        // REGULAR GUESTS: Query strictly their own private bookmarks
         query = `
           SELECT 
             sp.id,
@@ -227,21 +266,24 @@ module.exports = async function savesRoutes(fastify, opts) {
 
       const result = await pool.query(query, params);
 
-      const items = result.rows.map(row => ({
-        id: row.id,
-        eventId: row.event_id,
-        userId: row.user_id,
-        photoUrl: row.photo_url,
-        storyId: row.story_id,
-        sourceType: row.source_type,
-        createdAt: row.created_at,
-        savedBy: {
+      const items = result.rows.map(row => {
+        const dRole = (row.display_role || 'GUEST').toString().toUpperCase();
+        return {
+          id: row.id,
+          eventId: row.event_id,
           userId: row.user_id,
-          name: row.saved_by_name || 'Partner',
-          email: row.saved_by_email,
-          displayRole: row.display_role || 'GUEST'
-        }
-      }));
+          photoUrl: row.photo_url,
+          storyId: row.story_id,
+          sourceType: row.source_type,
+          createdAt: row.created_at,
+          savedBy: {
+            userId: row.user_id,
+            name: row.saved_by_name || (dRole === 'BRIDE' ? 'Bride' : dRole === 'GROOM' ? 'Groom' : 'Partner'),
+            email: row.saved_by_email,
+            displayRole: dRole
+          }
+        };
+      });
 
       return reply.send({ success: true, saves: items });
     } catch (err) {
@@ -269,7 +311,7 @@ module.exports = async function savesRoutes(fastify, opts) {
       if (eventId && isCouple) {
         result = await pool.query(
           `SELECT id, user_id, display_role FROM saved_photos 
-           WHERE photo_url = $1 AND (user_id = $2 OR (event_id = $3 AND display_role IN ('BRIDE', 'GROOM')))
+           WHERE photo_url = $1 AND (user_id = $2 OR event_id = $3)
            LIMIT 1`,
           [photoUrl, userId, eventId]
         );
