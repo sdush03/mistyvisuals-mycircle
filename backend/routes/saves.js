@@ -115,7 +115,7 @@ module.exports = async function savesRoutes(fastify, opts) {
           [eventId, userId, displayRole, photoUrl, storyId || null, sourceType]
         );
       } else {
-        // Regular guests: Save to personal private collection
+        // Regular guests: Save to personal private collection with event_id = NULL
         result = await pool.query(
           `INSERT INTO saved_photos (event_id, user_id, display_role, photo_url, story_id, source_type)
            VALUES (NULL, $1, 'GUEST', $2, $3, $4)
@@ -148,7 +148,7 @@ module.exports = async function savesRoutes(fastify, opts) {
       if (id) {
         if (eventId && isCouple) {
           await pool.query(
-            `DELETE FROM saved_photos WHERE id = $1 AND (user_id = $2 OR event_id = $3)`,
+            `DELETE FROM saved_photos WHERE id = $1 AND (user_id = $2 OR (event_id = $3 AND display_role IN ('BRIDE', 'GROOM')))`,
             [Number(id), userId, eventId]
           );
         } else {
@@ -160,7 +160,7 @@ module.exports = async function savesRoutes(fastify, opts) {
       } else if (photoUrl) {
         if (eventId && isCouple) {
           await pool.query(
-            `DELETE FROM saved_photos WHERE photo_url = $1 AND (user_id = $2 OR event_id = $3)`,
+            `DELETE FROM saved_photos WHERE photo_url = $1 AND (user_id = $2 OR (event_id = $3 AND display_role IN ('BRIDE', 'GROOM')))`,
             [photoUrl, userId, eventId]
           );
         } else {
@@ -190,8 +190,8 @@ module.exports = async function savesRoutes(fastify, opts) {
     const { userId, eventId, isCouple } = await resolveUserContext(pool, req);
 
     try {
-      // 1. Proactively auto-heal any past couple saves in database
       if (eventId && isCouple) {
+        // 1. Proactively auto-heal couple saves to link with couple's event_id
         try {
           await pool.query(
             `UPDATE saved_photos sp
@@ -206,12 +206,27 @@ module.exports = async function savesRoutes(fastify, opts) {
             [eventId]
           );
         } catch (_healErr) {}
+
+        // 2. Unlink any guest saves from the couple's event_id so they don't appear in the couple feed
+        try {
+          await pool.query(
+            `UPDATE saved_photos sp
+             SET event_id = NULL
+             WHERE sp.event_id = $1
+               AND sp.user_id NOT IN (
+                 SELECT cu.id FROM circle_users cu
+                 JOIN guests g ON LOWER(g.email) = LOWER(cu.email)
+                 WHERE g.event_id = $1 AND g.display_role IN ('BRIDE', 'GROOM')
+               )`,
+            [eventId]
+          );
+        } catch (_cleanErr) {}
       }
 
       let query;
       let params;
 
-      // BRIDE & GROOM: Query the shared couple collection
+      // BRIDE & GROOM: Strictly query ONLY photos saved by the Bride or Groom for this event
       if (eventId && isCouple) {
         query = `
           SELECT 
@@ -232,16 +247,18 @@ module.exports = async function savesRoutes(fastify, opts) {
           FROM saved_photos sp
           LEFT JOIN circle_users cu ON sp.user_id = cu.id
           LEFT JOIN guests g ON (LOWER(g.email) = LOWER(cu.email) AND g.event_id = $1)
-          WHERE sp.event_id = $1
-             OR sp.user_id = $2
-             OR sp.user_id IN (
-               SELECT cu2.id FROM circle_users cu2
-               JOIN guests g2 ON LOWER(g2.email) = LOWER(cu2.email)
-               WHERE g2.event_id = $1 AND g2.display_role IN ('BRIDE', 'GROOM')
-             )
+          WHERE sp.user_id IN (
+              SELECT cu2.id FROM circle_users cu2
+              JOIN guests g2 ON LOWER(g2.email) = LOWER(cu2.email)
+              WHERE g2.event_id = $1 AND g2.display_role IN ('BRIDE', 'GROOM')
+            )
+            OR (
+              sp.event_id = $1 
+              AND COALESCE(NULLIF(g.display_role, ''), NULLIF(sp.display_role, '')) IN ('BRIDE', 'GROOM')
+            )
           ORDER BY sp.created_at DESC
         `;
-        params = [eventId, userId];
+        params = [eventId];
       } else {
         // REGULAR GUESTS: Query strictly their own private bookmarks
         query = `
@@ -311,15 +328,13 @@ module.exports = async function savesRoutes(fastify, opts) {
       if (eventId && isCouple) {
         result = await pool.query(
           `SELECT id, user_id, display_role FROM saved_photos 
-           WHERE photo_url = $1 AND (user_id = $2 OR event_id = $3)
-           LIMIT 1`,
+           WHERE photo_url = $1 AND (user_id = $2 OR (event_id = $3 AND display_role IN ('BRIDE', 'GROOM')))` ,
           [photoUrl, userId, eventId]
         );
       } else {
         result = await pool.query(
           `SELECT id, user_id, display_role FROM saved_photos 
-           WHERE photo_url = $1 AND user_id = $2
-           LIMIT 1`,
+           WHERE photo_url = $1 AND user_id = $2`,
           [photoUrl, userId]
         );
       }
