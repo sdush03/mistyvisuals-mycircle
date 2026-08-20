@@ -303,21 +303,21 @@ module.exports = async function savesRoutes(fastify, opts) {
       let findQuery;
       let findParams;
 
-      if (id) {
+      if (photoUrl) {
         if (eventId && isCouple) {
-          findQuery = `SELECT * FROM saved_photos WHERE id = $1 AND (user_id = $2 OR event_id = $3)`;
-          findParams = [Number(id), userId, eventId];
-        } else {
-          findQuery = `SELECT * FROM saved_photos WHERE id = $1 AND user_id = $2`;
-          findParams = [Number(id), userId];
-        }
-      } else if (photoUrl) {
-        if (eventId && isCouple) {
-          findQuery = `SELECT * FROM saved_photos WHERE photo_url = $1 AND (user_id = $2 OR event_id = $3)`;
+          findQuery = `SELECT * FROM saved_photos WHERE photo_url = $1 AND (user_id = $2 OR (event_id = $3 AND display_role IN ('BRIDE', 'GROOM')))`;
           findParams = [photoUrl, userId, eventId];
         } else {
           findQuery = `SELECT * FROM saved_photos WHERE photo_url = $1 AND user_id = $2`;
           findParams = [photoUrl, userId];
+        }
+      } else if (id && !isNaN(Number(id))) {
+        if (eventId && isCouple) {
+          findQuery = `SELECT * FROM saved_photos WHERE id = $1 AND (user_id = $2 OR (event_id = $3 AND display_role IN ('BRIDE', 'GROOM')))`;
+          findParams = [Number(id), userId, eventId];
+        } else {
+          findQuery = `SELECT * FROM saved_photos WHERE id = $1 AND user_id = $2`;
+          findParams = [Number(id), userId];
         }
       } else {
         return reply.code(400).send({ error: 'id or photoUrl is required' });
