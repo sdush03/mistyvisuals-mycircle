@@ -1,10 +1,31 @@
 const { prisma } = require('../prisma');
+const { uploadAssetWithRetry, deleteAsset } = require('../utils/r2');
+const path = require('path');
+
+/**
+ * Helper to ensure tags column exists in saved_photos
+ */
+let ensuredSchema = false;
+async function ensureSchema(pool) {
+  if (ensuredSchema) return;
+  try {
+    await pool.query(`
+      ALTER TABLE saved_photos ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
+      CREATE INDEX IF NOT EXISTS idx_saved_photos_tags ON saved_photos USING GIN(tags);
+    `);
+    ensuredSchema = true;
+  } catch (err) {
+    console.warn('[saves] Schema ensure warning:', err?.message);
+  }
+}
 
 /**
  * Helper to resolve user context (userId, email, eventId, displayRole, isCouple)
  * Robust resolution checking JWT auth, circle_users, and guests tables.
  */
 async function resolveUserContext(pool, req) {
+  await ensureSchema(pool);
+
   const auth = req.auth || {};
   let userId = auth.sub || auth.id || auth.userId || null;
   let email = auth.email || req.query?.email || req.body?.email || null;
@@ -85,42 +106,61 @@ async function resolveUserContext(pool, req) {
   return { userId, email, eventId, displayRole: isCouple ? normalizedRole : 'GUEST', isCouple };
 }
 
+/**
+ * Normalizes tags array from string, JSON, or array
+ */
+function normalizeTags(rawTags) {
+  if (!rawTags) return [];
+  if (Array.isArray(rawTags)) {
+    return rawTags.map(t => String(t).trim()).filter(Boolean);
+  }
+  if (typeof rawTags === 'string') {
+    try {
+      const parsed = JSON.parse(rawTags);
+      if (Array.isArray(parsed)) return parsed.map(t => String(t).trim()).filter(Boolean);
+    } catch (_) {}
+    return rawTags.split(',').map(t => t.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 module.exports = async function savesRoutes(fastify, opts) {
   const { pool, requireAuth } = opts;
 
-  // POST /api/saves - Save a photo
+  // POST /api/saves - Save a story / featured photo (with optional tags)
   fastify.post('/api/saves', async (req, reply) => {
     const auth = req.auth;
     if (!auth) {
       return reply.code(401).send({ error: 'Not authenticated' });
     }
 
-    const { photoUrl, storyId, sourceType = 'FEATURED_STORY' } = req.body || {};
+    const { photoUrl, storyId, sourceType = 'FEATURED_STORY', tags = [] } = req.body || {};
     if (!photoUrl) {
       return reply.code(400).send({ error: 'photoUrl is required' });
     }
 
     const { userId, eventId, displayRole, isCouple } = await resolveUserContext(pool, req);
+    const parsedTags = normalizeTags(tags);
 
     try {
       let result;
       // Couple (Bride/Groom): Save to shared wedding collection
       if (eventId && isCouple) {
         result = await pool.query(
-          `INSERT INTO saved_photos (event_id, user_id, display_role, photo_url, story_id, source_type)
-           VALUES ($1, $2, $3, $4, $5, $6)
+          `INSERT INTO saved_photos (event_id, user_id, display_role, photo_url, story_id, source_type, tags)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (event_id, photo_url, user_id)
-           DO UPDATE SET display_role = EXCLUDED.display_role, created_at = NOW()
+           DO UPDATE SET display_role = EXCLUDED.display_role, tags = EXCLUDED.tags, created_at = NOW()
            RETURNING *`,
-          [eventId, userId, displayRole, photoUrl, storyId || null, sourceType]
+          [eventId, userId, displayRole, photoUrl, storyId || null, sourceType, parsedTags]
         );
       } else {
         // Regular guests: Save to personal private collection with event_id = NULL
         result = await pool.query(
-          `INSERT INTO saved_photos (event_id, user_id, display_role, photo_url, story_id, source_type)
-           VALUES (NULL, $1, 'GUEST', $2, $3, $4)
+          `INSERT INTO saved_photos (event_id, user_id, display_role, photo_url, story_id, source_type, tags)
+           VALUES (NULL, $1, 'GUEST', $2, $3, $4, $5)
            RETURNING *`,
-          [userId, photoUrl, storyId || null, sourceType]
+          [userId, photoUrl, storyId || null, sourceType, parsedTags]
         );
       }
 
@@ -134,7 +174,116 @@ module.exports = async function savesRoutes(fastify, opts) {
     }
   });
 
-  // DELETE /api/saves - Remove a saved photo (by photoUrl or id)
+  // POST /api/saves/upload - Upload custom inspiration photo from camera roll to R2
+  fastify.post('/api/saves/upload', async (req, reply) => {
+    const auth = req.auth;
+    if (!auth) {
+      return reply.code(401).send({ error: 'Not authenticated' });
+    }
+
+    try {
+      const parts = req.parts();
+      let fileBuffer = null;
+      let filename = null;
+      let mimeType = 'image/jpeg';
+      const fields = {};
+
+      for await (const part of parts) {
+        if (part.file) {
+          const chunks = [];
+          for await (const chunk of part.file) {
+            chunks.push(chunk);
+          }
+          fileBuffer = Buffer.concat(chunks);
+          filename = part.filename || 'inspiration.jpg';
+          mimeType = part.mimetype || 'image/jpeg';
+        } else {
+          fields[part.fieldname] = part.value;
+        }
+      }
+
+      if (!fileBuffer || fileBuffer.length === 0) {
+        return reply.code(400).send({ error: 'No image file provided' });
+      }
+
+      // Inject fields into req.body / req.query for context resolution
+      req.body = { ...fields, ...req.body };
+      const { userId, eventId, displayRole, isCouple } = await resolveUserContext(pool, req);
+      const parsedTags = normalizeTags(fields.tags || req.query?.tags);
+
+      // Generate unique clean filename
+      const ext = path.extname(filename) || '.jpg';
+      const cleanFilename = `inspo_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${ext}`;
+      const subfolder = (eventId && isCouple)
+        ? `moodboard/events/${eventId}`
+        : `moodboard/users/user_${userId}`;
+
+      // Upload file to Cloudflare R2
+      const r2Url = await uploadAssetWithRetry(fileBuffer, cleanFilename, subfolder, mimeType);
+
+      let result;
+      if (eventId && isCouple) {
+        result = await pool.query(
+          `INSERT INTO saved_photos (event_id, user_id, display_role, photo_url, story_id, source_type, tags)
+           VALUES ($1, $2, $3, $4, NULL, 'MANUAL_UPLOAD', $5)
+           RETURNING *`,
+          [eventId, userId, displayRole, r2Url, parsedTags]
+        );
+      } else {
+        result = await pool.query(
+          `INSERT INTO saved_photos (event_id, user_id, display_role, photo_url, story_id, source_type, tags)
+           VALUES (NULL, $1, 'GUEST', $2, NULL, 'MANUAL_UPLOAD', $3)
+           RETURNING *`,
+          [userId, r2Url, parsedTags]
+        );
+      }
+
+      return reply.send({
+        success: true,
+        savedPhoto: result.rows[0]
+      });
+    } catch (err) {
+      console.error('[saves] Error uploading inspiration photo:', err);
+      return reply.code(500).send({ error: 'Failed to upload inspiration photo' });
+    }
+  });
+
+  // PATCH /api/saves/:id/tags - Update tags for an existing saved photo
+  fastify.patch('/api/saves/:id/tags', async (req, reply) => {
+    const auth = req.auth;
+    if (!auth) {
+      return reply.code(401).send({ error: 'Not authenticated' });
+    }
+
+    const { id } = req.params;
+    const { tags } = req.body || {};
+    const { userId, eventId, isCouple } = await resolveUserContext(pool, req);
+    const parsedTags = normalizeTags(tags);
+
+    try {
+      let query;
+      let params;
+      if (eventId && isCouple) {
+        query = `UPDATE saved_photos SET tags = $1 WHERE id = $2 AND (user_id = $3 OR event_id = $4) RETURNING *`;
+        params = [parsedTags, Number(id), userId, eventId];
+      } else {
+        query = `UPDATE saved_photos SET tags = $1 WHERE id = $2 AND user_id = $3 RETURNING *`;
+        params = [parsedTags, Number(id), userId];
+      }
+
+      const result = await pool.query(query, params);
+      if (result.rows.length === 0) {
+        return reply.code(404).send({ error: 'Saved photo not found or not authorized' });
+      }
+
+      return reply.send({ success: true, savedPhoto: result.rows[0] });
+    } catch (err) {
+      console.error('[saves] Error updating tags:', err);
+      return reply.code(500).send({ error: 'Failed to update tags' });
+    }
+  });
+
+  // DELETE /api/saves - Remove a saved photo (Safe delete: only deletes user custom uploads from R2)
   fastify.delete('/api/saves', async (req, reply) => {
     const auth = req.auth;
     if (!auth) {
@@ -145,32 +294,49 @@ module.exports = async function savesRoutes(fastify, opts) {
     const { userId, eventId, isCouple } = await resolveUserContext(pool, req);
 
     try {
+      let findQuery;
+      let findParams;
+
       if (id) {
         if (eventId && isCouple) {
-          await pool.query(
-            `DELETE FROM saved_photos WHERE id = $1 AND (user_id = $2 OR (event_id = $3 AND display_role IN ('BRIDE', 'GROOM')))`,
-            [Number(id), userId, eventId]
-          );
+          findQuery = `SELECT * FROM saved_photos WHERE id = $1 AND (user_id = $2 OR event_id = $3)`;
+          findParams = [Number(id), userId, eventId];
         } else {
-          await pool.query(
-            `DELETE FROM saved_photos WHERE id = $1 AND user_id = $2`,
-            [Number(id), userId]
-          );
+          findQuery = `SELECT * FROM saved_photos WHERE id = $1 AND user_id = $2`;
+          findParams = [Number(id), userId];
         }
       } else if (photoUrl) {
         if (eventId && isCouple) {
-          await pool.query(
-            `DELETE FROM saved_photos WHERE photo_url = $1 AND (user_id = $2 OR (event_id = $3 AND display_role IN ('BRIDE', 'GROOM')))`,
-            [photoUrl, userId, eventId]
-          );
+          findQuery = `SELECT * FROM saved_photos WHERE photo_url = $1 AND (user_id = $2 OR event_id = $3)`;
+          findParams = [photoUrl, userId, eventId];
         } else {
-          await pool.query(
-            `DELETE FROM saved_photos WHERE photo_url = $1 AND user_id = $2`,
-            [photoUrl, userId]
-          );
+          findQuery = `SELECT * FROM saved_photos WHERE photo_url = $1 AND user_id = $2`;
+          findParams = [photoUrl, userId];
         }
       } else {
         return reply.code(400).send({ error: 'id or photoUrl is required' });
+      }
+
+      const foundRes = await pool.query(findQuery, findParams);
+      if (foundRes.rows.length > 0) {
+        const itemToDelete = foundRes.rows[0];
+
+        // Delete from database
+        await pool.query(`DELETE FROM saved_photos WHERE id = $1`, [itemToDelete.id]);
+
+        // SAFE DELETION: ONLY delete custom files in moodboard/ folder from R2.
+        // Official MistyVisuals photos (FEATURED_STORY, GALLERY) are NEVER deleted!
+        if (
+          itemToDelete.source_type === 'MANUAL_UPLOAD' &&
+          itemToDelete.photo_url &&
+          itemToDelete.photo_url.includes('/moodboard/')
+        ) {
+          try {
+            await deleteAsset(itemToDelete.photo_url);
+          } catch (r2Err) {
+            console.warn('[saves] Could not delete user upload from R2:', r2Err?.message);
+          }
+        }
       }
 
       return reply.send({ success: true });
@@ -241,6 +407,7 @@ module.exports = async function savesRoutes(fastify, opts) {
             sp.photo_url,
             sp.story_id,
             sp.source_type,
+            sp.tags,
             sp.created_at,
             COALESCE(cu.name, g.name, 'Partner') as saved_by_name,
             COALESCE(cu.email, g.email) as saved_by_email
@@ -270,6 +437,7 @@ module.exports = async function savesRoutes(fastify, opts) {
             sp.photo_url,
             sp.story_id,
             sp.source_type,
+            sp.tags,
             sp.created_at,
             cu.name as saved_by_name,
             cu.email as saved_by_email
@@ -292,6 +460,7 @@ module.exports = async function savesRoutes(fastify, opts) {
           photoUrl: row.photo_url,
           storyId: row.story_id,
           sourceType: row.source_type,
+          tags: Array.isArray(row.tags) ? row.tags : normalizeTags(row.tags),
           createdAt: row.created_at,
           savedBy: {
             userId: row.user_id,
