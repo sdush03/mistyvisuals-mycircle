@@ -209,14 +209,20 @@ module.exports = async function savesRoutes(fastify, opts) {
       // Inject fields into req.body / req.query for context resolution
       req.body = { ...fields, ...req.body };
       const { userId, eventId, displayRole, isCouple } = await resolveUserContext(pool, req);
+
+      // STRICT PERMISSION: Only Bride and Groom can upload custom inspirations
+      if (!isCouple || !eventId) {
+        return reply.code(403).send({
+          error: 'Moodboard uploads are an exclusive feature for couples. Hire MistyVisuals for your wedding to unlock this feature.'
+        });
+      }
+
       const parsedTags = normalizeTags(fields.tags || req.query?.tags);
 
       // Generate unique clean filename
       const ext = path.extname(filename) || '.jpg';
       const cleanFilename = `inspo_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${ext}`;
-      const subfolder = (eventId && isCouple)
-        ? `moodboard/events/${eventId}`
-        : `moodboard/users/user_${userId}`;
+      const subfolder = `moodboard/events/${eventId}`;
 
       // Upload file to Cloudflare R2
       const r2Url = await uploadAssetWithRetry(fileBuffer, cleanFilename, subfolder, mimeType);
