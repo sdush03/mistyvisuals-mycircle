@@ -1,6 +1,7 @@
 const { prisma } = require('../prisma');
 const { uploadAssetWithRetry, deleteAsset } = require('../utils/r2');
 const path = require('path');
+const sharp = require('sharp');
 
 /**
  * Helper to ensure tags column exists in saved_photos
@@ -219,13 +220,32 @@ module.exports = async function savesRoutes(fastify, opts) {
 
       const parsedTags = normalizeTags(fields.tags || req.query?.tags);
 
+      // Automatic High-Quality Compression & Orientation Auto-Fix with Sharp
+      let processedBuffer = fileBuffer;
+      let targetMimeType = 'image/jpeg';
+      let targetExt = '.jpg';
+
+      try {
+        processedBuffer = await sharp(fileBuffer)
+          .rotate() // Automatically fixes EXIF rotation (prevents sideways photos from iPhones)
+          .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 82, mozjpeg: true })
+          .toBuffer();
+        targetMimeType = 'image/jpeg';
+        targetExt = '.jpg';
+      } catch (sharpErr) {
+        console.warn('[saves] Sharp compression fallback to raw buffer:', sharpErr?.message);
+        processedBuffer = fileBuffer;
+        targetMimeType = mimeType;
+        targetExt = path.extname(filename) || '.jpg';
+      }
+
       // Generate unique clean filename
-      const ext = path.extname(filename) || '.jpg';
-      const cleanFilename = `inspo_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${ext}`;
+      const cleanFilename = `inspo_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${targetExt}`;
       const subfolder = `moodboard/events/${eventId}`;
 
-      // Upload file to Cloudflare R2
-      const r2Url = await uploadAssetWithRetry(fileBuffer, cleanFilename, subfolder, mimeType);
+      // Upload optimized file to Cloudflare R2
+      const r2Url = await uploadAssetWithRetry(processedBuffer, cleanFilename, subfolder, targetMimeType);
 
       let result;
       if (eventId && isCouple) {
