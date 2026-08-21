@@ -2,6 +2,10 @@ const { prisma } = require('../prisma');
 const { uploadAssetWithRetry, deleteAsset } = require('../utils/r2');
 const path = require('path');
 const sharp = require('sharp');
+let heicConvert;
+try {
+  heicConvert = require('heic-convert');
+} catch (_) {}
 
 /**
  * Helper to ensure tags column exists in saved_photos
@@ -220,19 +224,37 @@ module.exports = async function savesRoutes(fastify, opts) {
 
       const parsedTags = normalizeTags(fields.tags || req.query?.tags);
 
-      // Automatic High-Quality Compression & Orientation Auto-Fix with Sharp
+      // Automatic High-Quality Compression & Orientation Auto-Fix with Sharp & HEIC support
       let processedBuffer = fileBuffer;
       let targetMimeType = 'image/jpeg';
       let targetExt = '.jpg';
 
       try {
-        processedBuffer = await sharp(fileBuffer)
+        let decodeBuffer = fileBuffer;
+        const isHeic = (filename && /\.(heic|heif)$/i.test(filename)) ||
+          (fileBuffer.length > 12 && fileBuffer.toString('utf8', 4, 12).includes('ftyp'));
+
+        if (isHeic && heicConvert) {
+          try {
+            decodeBuffer = await heicConvert({
+              buffer: fileBuffer,
+              format: 'JPEG',
+              quality: 1,
+            });
+          } catch (heicErr) {
+            console.warn('[saves] HEIC decode warning:', heicErr?.message);
+          }
+        }
+
+        processedBuffer = await sharp(decodeBuffer)
           .rotate() // Automatically fixes EXIF rotation (prevents sideways photos from iPhones)
-          .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
-          .jpeg({ quality: 82, mozjpeg: true })
+          .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 80, mozjpeg: true })
           .toBuffer();
+
         targetMimeType = 'image/jpeg';
         targetExt = '.jpg';
+        console.log(`[saves] Compressed inspiration upload from ${(fileBuffer.length / 1024).toFixed(1)}KB -> ${(processedBuffer.length / 1024).toFixed(1)}KB`);
       } catch (sharpErr) {
         console.warn('[saves] Sharp compression fallback to raw buffer:', sharpErr?.message);
         processedBuffer = fileBuffer;
