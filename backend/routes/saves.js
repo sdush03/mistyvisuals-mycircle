@@ -8,29 +8,10 @@ try {
 } catch (_) {}
 
 /**
- * Helper to ensure tags column exists in saved_photos
- */
-let ensuredSchema = false;
-async function ensureSchema(pool) {
-  if (ensuredSchema) return;
-  try {
-    await pool.query(`
-      ALTER TABLE saved_photos ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
-      CREATE INDEX IF NOT EXISTS idx_saved_photos_tags ON saved_photos USING GIN(tags);
-    `);
-    ensuredSchema = true;
-  } catch (err) {
-    console.warn('[saves] Schema ensure warning:', err?.message);
-  }
-}
-
-/**
  * Helper to resolve user context (userId, email, eventId, displayRole, isCouple)
  * Robust resolution checking JWT auth, circle_users, and guests tables.
  */
 async function resolveUserContext(pool, req) {
-  await ensureSchema(pool);
-
   const auth = req.auth || {};
   let userId = auth.sub || auth.id || auth.userId || null;
   let email = auth.email || req.query?.email || req.body?.email || null;
@@ -65,7 +46,7 @@ async function resolveUserContext(pool, req) {
     try {
       const guestRes = await pool.query(
         `SELECT event_id, display_role FROM guests 
-         WHERE LOWER(email) = LOWER($1) AND event_id = $2 AND is_blocked = false 
+         WHERE LOWER(email) = LOWER($1) AND event_id = $2 
          ORDER BY CASE WHEN display_role IN ('BRIDE', 'GROOM') THEN 1 ELSE 2 END, id DESC LIMIT 1`,
         [email, eventId]
       );
@@ -83,7 +64,7 @@ async function resolveUserContext(pool, req) {
     try {
       const guestRes = await pool.query(
         `SELECT event_id, display_role FROM guests 
-         WHERE LOWER(email) = LOWER($1) AND is_blocked = false 
+         WHERE LOWER(email) = LOWER($1) 
          ORDER BY CASE WHEN display_role IN ('BRIDE', 'GROOM') THEN 1 ELSE 2 END, id DESC LIMIT 1`,
         [email]
       );
@@ -393,87 +374,41 @@ module.exports = async function savesRoutes(fastify, opts) {
       return reply.code(401).send({ error: 'Not authenticated' });
     }
 
-    const { userId, eventId, isCouple } = await resolveUserContext(pool, req);
+    const { userId, eventId, isCouple, email } = await resolveUserContext(pool, req);
 
     try {
-      if (eventId && isCouple) {
-        // 1. Proactively auto-heal couple saves to link with couple's event_id
-        try {
-          await pool.query(
-            `UPDATE saved_photos sp
-             SET event_id = g.event_id,
-                 display_role = g.display_role
-             FROM circle_users cu
-             JOIN guests g ON LOWER(g.email) = LOWER(cu.email)
-             WHERE sp.user_id = cu.id
-               AND g.event_id = $1
-               AND g.display_role IN ('BRIDE', 'GROOM')
-               AND (sp.event_id IS NULL OR sp.display_role NOT IN ('BRIDE', 'GROOM'))`,
-            [eventId]
-          );
-        } catch (_healErr) {}
-
-        // 2. Unlink any guest saves from the couple's event_id so they don't appear in the couple feed
-        try {
-          await pool.query(
-            `UPDATE saved_photos sp
-             SET event_id = NULL
-             WHERE sp.event_id = $1
-               AND sp.user_id NOT IN (
-                 SELECT cu.id FROM circle_users cu
-                 JOIN guests g ON LOWER(g.email) = LOWER(cu.email)
-                 WHERE g.event_id = $1 AND g.display_role IN ('BRIDE', 'GROOM')
-               )`,
-            [eventId]
-          );
-        } catch (_cleanErr) {}
-      }
-
       let query;
       let params;
 
-      // BRIDE & GROOM: Strictly query ONLY photos saved by the Bride or Groom for this event
+      // BRIDE & GROOM: Query photos saved by the Bride or Groom for this event
       if (eventId && isCouple) {
         query = `
           SELECT 
             sp.id,
             sp.event_id,
             sp.user_id,
-            COALESCE(
-              NULLIF(g.display_role, ''),
-              NULLIF(sp.display_role, ''),
-              'GUEST'
-            ) as display_role,
+            COALESCE(NULLIF(sp.display_role, ''), 'BRIDE') as display_role,
             sp.photo_url,
             sp.story_id,
             sp.source_type,
             sp.tags,
             sp.created_at,
-            COALESCE(cu.name, g.name, 'Partner') as saved_by_name,
-            COALESCE(cu.email, g.email) as saved_by_email
+            COALESCE(cu.name, 'Partner') as saved_by_name,
+            cu.email as saved_by_email
           FROM saved_photos sp
           LEFT JOIN circle_users cu ON sp.user_id = cu.id
-          LEFT JOIN guests g ON (LOWER(g.email) = LOWER(cu.email) AND g.event_id = $1)
-          WHERE sp.user_id IN (
-              SELECT cu2.id FROM circle_users cu2
-              JOIN guests g2 ON LOWER(g2.email) = LOWER(cu2.email)
-              WHERE g2.event_id = $1 AND g2.display_role IN ('BRIDE', 'GROOM')
-            )
-            OR (
-              sp.event_id = $1 
-              AND COALESCE(NULLIF(g.display_role, ''), NULLIF(sp.display_role, '')) IN ('BRIDE', 'GROOM')
-            )
+          WHERE sp.event_id = $1 AND sp.display_role IN ('BRIDE', 'GROOM')
           ORDER BY sp.created_at DESC
         `;
         params = [eventId];
       } else {
-        // REGULAR GUESTS: Query strictly their own private bookmarks
+        // REGULAR GUESTS: Query strictly their own private bookmarks by userId or email
         query = `
           SELECT 
             sp.id,
             sp.event_id,
             sp.user_id,
-            sp.display_role,
+            COALESCE(NULLIF(sp.display_role, ''), 'GUEST') as display_role,
             sp.photo_url,
             sp.story_id,
             sp.source_type,
@@ -483,10 +418,11 @@ module.exports = async function savesRoutes(fastify, opts) {
             cu.email as saved_by_email
           FROM saved_photos sp
           LEFT JOIN circle_users cu ON sp.user_id = cu.id
-          WHERE sp.user_id = $1
+          WHERE (sp.user_id = $1 AND $1 IS NOT NULL)
+             OR (cu.email IS NOT NULL AND LOWER(cu.email) = LOWER($2))
           ORDER BY sp.created_at DESC
         `;
-        params = [userId];
+        params = [userId, email || ''];
       }
 
       const result = await pool.query(query, params);
