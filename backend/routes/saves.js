@@ -36,7 +36,6 @@ async function resolveUserContext(pool, req) {
   let email = auth.email || req.query?.email || req.body?.email || null;
   let eventSlug = req.query?.eventSlug || req.body?.eventSlug || null;
   let eventId = req.query?.eventId || req.body?.eventId || auth.eventId || auth.event_id || null;
-  let displayRole = req.query?.displayRole || req.body?.displayRole || auth.displayRole || null;
 
   // 1. If email is missing, lookup from circle_users by userId
   if (!email && userId) {
@@ -58,30 +57,42 @@ async function resolveUserContext(pool, req) {
     } catch (err) {}
   }
 
-  // 3. Lookup guest record in guests table (prioritize BRIDE or GROOM role)
-  if (email) {
+  let displayRole = 'GUEST';
+  let isCouple = false;
+
+  // 3. Lookup guest record in guests table strictly by email for this event
+  if (email && eventId) {
     try {
-      let query;
-      let params;
-      if (eventId) {
-        query = `SELECT event_id, display_role FROM guests 
-                 WHERE LOWER(email) = LOWER($1) AND event_id = $2 AND status != 'LEFT' 
-                 ORDER BY CASE WHEN display_role IN ('BRIDE', 'GROOM') THEN 1 ELSE 2 END, id DESC LIMIT 1`;
-        params = [email, eventId];
-      } else {
-        query = `SELECT event_id, display_role FROM guests 
-                 WHERE LOWER(email) = LOWER($1) AND status != 'LEFT' 
-                 ORDER BY CASE WHEN display_role IN ('BRIDE', 'GROOM') THEN 1 ELSE 2 END, id DESC LIMIT 1`;
-        params = [email];
+      const guestRes = await pool.query(
+        `SELECT event_id, display_role FROM guests 
+         WHERE LOWER(email) = LOWER($1) AND event_id = $2 AND is_blocked = false 
+         ORDER BY CASE WHEN display_role IN ('BRIDE', 'GROOM') THEN 1 ELSE 2 END, id DESC LIMIT 1`,
+        [email, eventId]
+      );
+      if (guestRes.rows.length > 0) {
+        const gRole = (guestRes.rows[0].display_role || 'GUEST').toString().toUpperCase();
+        displayRole = gRole;
+        if (['BRIDE', 'GROOM'].includes(gRole)) {
+          isCouple = true;
+        }
       }
-      const guestRes = await pool.query(query, params);
+    } catch (err) {
+      console.warn('[saves] guest lookup error:', err?.message);
+    }
+  } else if (email) {
+    try {
+      const guestRes = await pool.query(
+        `SELECT event_id, display_role FROM guests 
+         WHERE LOWER(email) = LOWER($1) AND is_blocked = false 
+         ORDER BY CASE WHEN display_role IN ('BRIDE', 'GROOM') THEN 1 ELSE 2 END, id DESC LIMIT 1`,
+        [email]
+      );
       if (guestRes.rows.length > 0) {
         if (!eventId) eventId = guestRes.rows[0].event_id;
-        const gRole = (guestRes.rows[0].display_role || '').toString().toUpperCase();
+        const gRole = (guestRes.rows[0].display_role || 'GUEST').toString().toUpperCase();
+        displayRole = gRole;
         if (['BRIDE', 'GROOM'].includes(gRole)) {
-          displayRole = gRole;
-        } else if (!displayRole || ['GUEST', 'FAMILY'].includes(displayRole.toUpperCase())) {
-          displayRole = gRole || 'GUEST';
+          isCouple = true;
         }
       }
     } catch (err) {
@@ -89,26 +100,7 @@ async function resolveUserContext(pool, req) {
     }
   }
 
-  // 4. Fallback lookup from previously saved photos
-  if (!eventId && userId) {
-    try {
-      const saveRes = await pool.query(
-        `SELECT event_id, display_role FROM saved_photos WHERE user_id = $1 AND event_id IS NOT NULL ORDER BY id DESC LIMIT 1`,
-        [userId]
-      );
-      if (saveRes.rows.length > 0) {
-        eventId = saveRes.rows[0].event_id;
-        if (!displayRole || displayRole === 'GUEST') {
-          displayRole = saveRes.rows[0].display_role;
-        }
-      }
-    } catch (err) {}
-  }
-
-  const normalizedRole = (displayRole || '').toString().toUpperCase();
-  const isCouple = normalizedRole === 'BRIDE' || normalizedRole === 'GROOM';
-
-  return { userId, email, eventId, displayRole: isCouple ? normalizedRole : 'GUEST', isCouple };
+  return { userId, email, eventId, displayRole: isCouple ? displayRole : 'GUEST', isCouple };
 }
 
 /**
