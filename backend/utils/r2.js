@@ -12,21 +12,39 @@ const isR2Enabled = !!(
   process.env.R2_BUCKET_NAME &&
   process.env.R2_PUBLIC_DOMAIN_URL
 );
+// Read client — used for GetObject (resize/fetch). Large pool for concurrent thumbnail loads.
 let r2Client = null;
+// Write client — used for PutObject/DeleteObject (uploads, selfies). Dedicated pool so
+// a thumbnail flood can never starve selfie uploads or photo processing.
+let r2WriteClient = null;
+
+const r2Config = isR2Enabled ? {
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+  },
+  region: 'auto',
+} : null;
+
 if (isR2Enabled) {
+  // 400 sockets for reads — handles concurrent gallery thumbnail fetches
   r2Client = new S3Client({
-    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-    },
-    region: 'auto',
-    // Increase socket pool to prevent starvation when resize API floods connections.
-    // Default is 50; 500 gives ample headroom for concurrent photo fetches + uploads.
+    ...r2Config,
     requestHandler: new NodeHttpHandler({
       connectionTimeout: 30000,
       socketTimeout: 30000,
-      maxSockets: 500,
+      maxSockets: 400,
+    }),
+  });
+
+  // 100 sockets reserved exclusively for writes (selfie uploads, photo uploads, deletes)
+  r2WriteClient = new S3Client({
+    ...r2Config,
+    requestHandler: new NodeHttpHandler({
+      connectionTimeout: 30000,
+      socketTimeout: 60000, // longer timeout for large file uploads
+      maxSockets: 100,
     }),
   });
 }
@@ -50,7 +68,7 @@ async function uploadAsset(buffer, filename, subfolder, contentType = 'image/jpe
       ContentType: contentType,
       CacheControl: 'public, max-age=31536000, immutable'
     };
-    await r2Client.send(new PutObjectCommand(uploadParams));
+    await r2WriteClient.send(new PutObjectCommand(uploadParams));
     
     // Remove protocol double-slashes in custom domain if user provided https:// prefix in env
     let publicDomain = process.env.R2_PUBLIC_DOMAIN_URL.trim();
@@ -126,7 +144,7 @@ async function deleteAsset(fileUrl) {
         Key: key
       };
       try {
-        await r2Client.send(new DeleteObjectCommand(deleteParams));
+        await r2WriteClient.send(new DeleteObjectCommand(deleteParams));
       } catch (err) {
         console.error(`[R2 Delete Error] Failed to delete asset: ${key}`, err);
       }
