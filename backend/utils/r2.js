@@ -1,5 +1,6 @@
 const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { NodeHttpHandler } = require('@smithy/node-http-handler');
 const fs = require('fs');
 const path = require('path');
 const { PHOTO_UPLOAD_DIR } = require('../config/constants');
@@ -19,7 +20,14 @@ if (isR2Enabled) {
       accessKeyId: process.env.R2_ACCESS_KEY_ID,
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
     },
-    region: 'auto'
+    region: 'auto',
+    // Increase socket pool to prevent starvation when resize API floods connections.
+    // Default is 50; 500 gives ample headroom for concurrent photo fetches + uploads.
+    requestHandler: new NodeHttpHandler({
+      connectionTimeout: 30000,
+      socketTimeout: 30000,
+      maxSockets: 500,
+    }),
   });
 }
 
