@@ -16,10 +16,24 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
   const [existingToken, setExistingToken] = useState<string | undefined>(undefined)
   const [existingProfile, setExistingProfile] = useState<any>(null)
   const [circleToken, setCircleToken] = useState<string | undefined>(undefined)
+  const [isMobileDevice, setIsMobileDevice] = useState(false)
+  const [devicePlatform, setDevicePlatform] = useState<'ios' | 'android' | 'other'>('other')
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
 
   useEffect(() => {
+    // Detect mobile platform
+    if (typeof window !== 'undefined') {
+      const ua = navigator.userAgent || navigator.vendor || (window as any).opera || ''
+      if (/iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream) {
+        setIsMobileDevice(true)
+        setDevicePlatform('ios')
+      } else if (/android/i.test(ua)) {
+        setIsMobileDevice(true)
+        setDevicePlatform('android')
+      }
+    }
+
     const searchParams = new URLSearchParams(window.location.search)
     const code = searchParams.get('code')
     if (code) {
@@ -93,7 +107,6 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                 if (localGuest.phoneNumber && localGuest.hasSelfie) {
                   localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(localGuest))
                   setGuest(localGuest)
-                  // Keep loading: true so the spinner stays visible during Next.js router.push navigation
                   router.push(`/${slug}/gallery/photos`)
                   return
                 } else {
@@ -165,12 +178,46 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
   }, [slug, router, apiUrl])
 
   const handleLoginSuccess = (profile: any, token: string) => {
-    setLoading(true) // Show the loading spinner while Next.js transitions to the photos grid
+    setLoading(true)
     localStorage.setItem(`mv_gallery_token_${slug}`, token)
     localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(profile))
     setGuest(profile)
     setShowLoginModal(false)
     router.push(`/${slug}/gallery/photos`)
+  }
+
+  const handleOpenApp = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+
+    const deepLinkUrl = `mycircle://${slug}${inviteCode ? `?code=${encodeURIComponent(inviteCode)}` : ''}`
+    const appStoreUrl = 'https://apps.apple.com/app/id6796633077'
+    const playStoreReferrer = `slug%3D${encodeURIComponent(slug)}${inviteCode ? `%26code%3D${encodeURIComponent(inviteCode)}` : ''}`
+    const playStoreUrl = `https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle&referrer=${playStoreReferrer}`
+
+    if (devicePlatform === 'ios') {
+      // Copy deep link to clipboard for seamless first-launch detection if app needs to be downloaded
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(deepLinkUrl).catch(() => {})
+      }
+
+      const start = Date.now()
+      window.location.href = deepLinkUrl
+      setTimeout(() => {
+        if (Date.now() - start < 2000) {
+          window.location.href = appStoreUrl
+        }
+      }, 1200)
+    } else if (devicePlatform === 'android') {
+      const start = Date.now()
+      window.location.href = deepLinkUrl
+      setTimeout(() => {
+        if (Date.now() - start < 2000) {
+          window.location.href = playStoreUrl
+        }
+      }, 1200)
+    } else {
+      setShowLoginModal(true)
+    }
   }
 
   if (loading) {
@@ -193,7 +240,6 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
           fontFamily: 'var(--font-sans)',
         }}
       >
-        {/* Decorative subtle ambient lights */}
         <div style={{
           position: 'absolute',
           top: '20%',
@@ -213,7 +259,6 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
         <div 
           className="relative z-10 flex max-w-[440px] w-full flex-col items-center rounded-2xl border border-[#eae8e3] bg-white p-8 md:p-10 shadow-[0_20px_50px_rgba(28,26,24,0.06)]"
         >
-          {/* Header Logo */}
           <div className="mb-8">
             <a 
               href="https://mistyvisuals.com" 
@@ -229,7 +274,6 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
             </a>
           </div>
 
-          {/* Status Icon */}
           {isUnpublished ? (
             <div className="relative mb-6 flex items-center justify-center">
               <div className="absolute inset-0 rounded-full bg-amber-500/5 blur-xl w-16 h-16"></div>
@@ -250,19 +294,16 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
             </div>
           )}
 
-          {/* Heading */}
           <h1 className="font-lora text-2xl font-semibold text-[#1c1a18] tracking-wide mb-3">
             {isUnpublished ? 'Gallery Unpublished' : 'Connection Offline'}
           </h1>
 
-          {/* Message */}
           <p className="font-sans text-sm text-neutral-500 leading-relaxed mb-8 px-2 max-w-sm">
             {isUnpublished 
               ? 'This photo gallery is currently set to private or has not been published yet. Please check back later or contact your photographer/host for access details.' 
               : error}
           </p>
 
-          {/* CTAs */}
           <div className="flex w-full flex-col gap-3">
             <button 
               onClick={() => window.location.reload()} 
@@ -306,6 +347,62 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
         }
       }}
     >
+      {/* Mobile App Smart Banner */}
+      {isMobileDevice && !showLoginModal && (
+        <div 
+          style={{
+            position: 'absolute',
+            top: '1rem',
+            left: '1rem',
+            right: '1rem',
+            zIndex: 40,
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(12px)',
+            borderRadius: '16px',
+            padding: '10px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.25)',
+            border: '1px solid rgba(255, 255, 255, 0.4)'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <img 
+              src="/logo_black.png" 
+              alt="Misty Visuals" 
+              style={{ width: '28px', height: '28px', objectFit: 'contain' }} 
+            />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.8125rem', fontWeight: 600, color: '#111' }}>
+                Misty Visuals App
+              </span>
+              <span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.6875rem', color: '#666' }}>
+                Find photos with Facial Recognition
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={handleOpenApp}
+            style={{
+              background: '#000',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '20px',
+              padding: '6px 14px',
+              fontSize: '0.6875rem',
+              fontWeight: 600,
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+              cursor: 'pointer'
+            }}
+          >
+            Open App
+          </button>
+        </div>
+      )}
+
       {/* Full-bleed Cover Image */}
       {event?.coverPhotoUrl && (
         <picture>
@@ -370,12 +467,23 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
           </p>
         )}
 
-        <button 
-          onClick={(e) => { e.stopPropagation(); setShowLoginModal(true); }}
-          className="cover-cta"
-        >
-          Enter Gallery
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+          {isMobileDevice && (
+            <button 
+              onClick={handleOpenApp}
+              className="app-cta"
+            >
+              Open in Misty Visuals App
+            </button>
+          )}
+
+          <button 
+            onClick={(e) => { e.stopPropagation(); setShowLoginModal(true); }}
+            className="cover-cta"
+          >
+            {isMobileDevice ? 'Continue in Web Browser' : 'Enter Gallery'}
+          </button>
+        </div>
       </div>
 
       {/* Brand Footer Logo */}
@@ -433,12 +541,34 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
           padding: 0.9rem 2.25rem;
           background-color: transparent;
           cursor: pointer;
-          transition: background 0.3s, border-color 0.3s;
+          transition: background 0.3s, border-color 0.3s, color 0.3s;
         }
         .cover-cta:hover {
           background-color: #ffffff;
           border-color: #ffffff;
           color: #000000;
+        }
+        .app-cta {
+          font-family: var(--font-sans);
+          font-size: 0.625rem;
+          font-weight: 600;
+          color: #000000;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          background-color: #ffffff;
+          border: 1px solid #ffffff;
+          border-radius: 0px;
+          padding: 0.9rem 2.25rem;
+          cursor: pointer;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+          transition: transform 0.2s, background 0.3s;
+        }
+        .app-cta:hover {
+          transform: scale(1.02);
+          background-color: #f0f0f0;
+        }
+        .app-cta:active {
+          transform: scale(0.98);
         }
       `}</style>
     </div>

@@ -59,12 +59,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       ],
       type: 'website',
     },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description: desc,
-      images: [imageUrl],
-    }
+    other: {
+      'apple-itunes-app': `app-id=6796633077, app-argument=https://mycircle.mistyvisuals.com/${slug}/gallery`,
+    },
   }
 }
 

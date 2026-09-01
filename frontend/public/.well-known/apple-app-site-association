@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "9S743W7CRJ.com.mistyvisuals.mycircle",
+        "paths": ["/*", "/api/gallery/*"]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["9S743W7CRJ.com.mistyvisuals.mycircle"]
+  }
+}
