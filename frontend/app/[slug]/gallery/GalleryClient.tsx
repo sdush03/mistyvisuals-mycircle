@@ -222,6 +222,15 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
     }
   }
 
+  const handleEnterGallery = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    if (isMobileDevice) {
+      handleOpenApp(e)
+    } else {
+      setShowLoginModal(true)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[#f5f4f0]">
@@ -345,66 +354,10 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
       }}
       onClick={() => {
         if (!showLoginModal) {
-          setShowLoginModal(true)
+          handleEnterGallery()
         }
       }}
     >
-      {/* Mobile App Smart Banner */}
-      {isMobileDevice && !showLoginModal && (
-        <div 
-          style={{
-            position: 'absolute',
-            top: '1rem',
-            left: '1rem',
-            right: '1rem',
-            zIndex: 40,
-            background: 'rgba(255, 255, 255, 0.95)',
-            backdropFilter: 'blur(12px)',
-            borderRadius: '16px',
-            padding: '10px 14px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.25)',
-            border: '1px solid rgba(255, 255, 255, 0.4)'
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <img 
-              src="/logo_black.png" 
-              alt="Misty Visuals" 
-              style={{ width: '28px', height: '28px', objectFit: 'contain' }} 
-            />
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.8125rem', fontWeight: 600, color: '#111' }}>
-                Misty Visuals App
-              </span>
-              <span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.6875rem', color: '#666' }}>
-                Find photos with Facial Recognition
-              </span>
-            </div>
-          </div>
-          <button
-            onClick={handleOpenApp}
-            style={{
-              background: '#000',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '20px',
-              padding: '6px 14px',
-              fontSize: '0.6875rem',
-              fontWeight: 600,
-              letterSpacing: '0.05em',
-              textTransform: 'uppercase',
-              cursor: 'pointer'
-            }}
-          >
-            Open App
-          </button>
-        </div>
-      )}
-
       {/* Full-bleed Cover Image */}
       {event?.coverPhotoUrl && (
         <picture>
@@ -469,23 +422,12 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
           </p>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-          {isMobileDevice && (
-            <button 
-              onClick={handleOpenApp}
-              className="app-cta"
-            >
-              Open in Misty Visuals App
-            </button>
-          )}
-
-          <button 
-            onClick={(e) => { e.stopPropagation(); setShowLoginModal(true); }}
-            className="cover-cta"
-          >
-            {isMobileDevice ? 'Continue in Web Browser' : 'Enter Gallery'}
-          </button>
-        </div>
+        <button 
+          onClick={handleEnterGallery}
+          className="cover-cta"
+        >
+          Enter Gallery
+        </button>
       </div>
 
       {/* Brand Footer Logo */}
@@ -549,28 +491,6 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
           background-color: #ffffff;
           border-color: #ffffff;
           color: #000000;
-        }
-        .app-cta {
-          font-family: var(--font-sans);
-          font-size: 0.625rem;
-          font-weight: 600;
-          color: #000000;
-          letter-spacing: 0.2em;
-          text-transform: uppercase;
-          background-color: #ffffff;
-          border: 1px solid #ffffff;
-          border-radius: 0px;
-          padding: 0.9rem 2.25rem;
-          cursor: pointer;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-          transition: transform 0.2s, background 0.3s;
-        }
-        .app-cta:hover {
-          transform: scale(1.02);
-          background-color: #f0f0f0;
-        }
-        .app-cta:active {
-          transform: scale(0.98);
         }
       `}</style>
     </div>
