@@ -208,11 +208,13 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
         }
       }, 1200)
     } else if (devicePlatform === 'android') {
+      const intentUrl = `intent://details?id=com.mistyvisuals.mycircle&referrer=${playStoreReferrer}#Intent;scheme=market;package=com.android.vending;S.browser_fallback_url=${encodeURIComponent(playStoreUrl)};end;`
+
       const start = Date.now()
       window.location.href = deepLinkUrl
       setTimeout(() => {
         if (Date.now() - start < 2000) {
-          window.location.href = playStoreUrl
+          window.location.href = intentUrl
         }
       }, 1200)
     } else {
