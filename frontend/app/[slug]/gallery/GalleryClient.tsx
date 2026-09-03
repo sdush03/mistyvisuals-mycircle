@@ -192,11 +192,6 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
     const playStoreUrl = `https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle&referrer=${playStoreReferrer}`
 
     if (devicePlatform === 'ios') {
-      // Copy deep link to clipboard for seamless first-launch detection if app needs to be downloaded
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(deepLinkUrl).catch(() => {})
-      }
-
       const start = Date.now()
       window.location.href = deepLinkUrl
       setTimeout(() => {

@@ -1263,9 +1263,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
       const androidIntentUrl = `intent://${slug}#Intent;scheme=mycircle;package=com.mistyvisuals.mycircle;S.market_referrer=${playStoreReferrer};end;`
 
       if (devicePlatform === 'ios') {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(deepLinkUrl).catch(() => {})
-        }
         const start = Date.now()
         window.location.href = deepLinkUrl
         setTimeout(() => {
