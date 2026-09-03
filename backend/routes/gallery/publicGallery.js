@@ -44,8 +44,60 @@ function purgeOrphanedFacesBackground(log) {
   }, 100);
 }
 
+const deferredInvites = new Map();
+
+// Cleanup expired deferred invites every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of deferredInvites.entries()) {
+    if (now - val.timestamp > 15 * 60 * 1000) {
+      deferredInvites.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+
+function getClientFingerprintKey(req) {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '';
+  const ua = req.headers['user-agent'] || '';
+  return `${ip}::${ua.slice(0, 150)}`;
+}
+
 module.exports = async function publicGalleryRoutes(fastify, opts) {
   const { requireAdmin } = opts;
+
+  // Record pending gallery invite from web click for zero-prompt deferred deep linking
+  fastify.post('/api/gallery/public/record-invite', async (req, reply) => {
+    const { slug, code } = req.body || {};
+    if (!slug) return reply.code(400).send({ error: 'Missing slug' });
+    const key = getClientFingerprintKey(req);
+    deferredInvites.set(key, { slug, passcode: code || null, timestamp: Date.now() });
+    return { success: true };
+  });
+
+  // Consume deferred invite when mobile app opens for the first time
+  fastify.get('/api/gallery/public/consume-deferred-invite', async (req, reply) => {
+    const key = getClientFingerprintKey(req);
+    const match = deferredInvites.get(key);
+    if (match) {
+      deferredInvites.delete(key);
+      if (Date.now() - match.timestamp < 15 * 60 * 1000) {
+        return { found: true, slug: match.slug, passcode: match.passcode };
+      }
+    }
+
+    // IP-based fallback if user agent differs slightly between Safari and App network stack
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '';
+    if (ip) {
+      for (const [k, val] of deferredInvites.entries()) {
+        if (k.startsWith(`${ip}::`) && Date.now() - val.timestamp < 15 * 60 * 1000) {
+          deferredInvites.delete(k);
+          return { found: true, slug: val.slug, passcode: val.passcode };
+        }
+      }
+    }
+
+    return { found: false };
+  });
 
   // Validate face on an uploaded image without saving or changing anything
   fastify.post('/api/gallery/public/validate-face', async (req, reply) => {

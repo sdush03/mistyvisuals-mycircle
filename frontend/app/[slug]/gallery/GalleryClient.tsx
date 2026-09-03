@@ -186,6 +186,16 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
   const handleOpenApp = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
 
+    // Record deferred invite with backend (IP + Device fingerprint)
+    try {
+      fetch(`${apiUrl}/api/gallery/public/record-invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug, code: inviteCode }),
+        keepalive: true
+      }).catch(() => {})
+    } catch (_) {}
+
     const deepLinkUrl = `mycircle://${slug}${inviteCode ? `?code=${encodeURIComponent(inviteCode)}` : ''}`
     const appStoreUrl = 'https://apps.apple.com/app/id6796633077'
     const playStoreReferrer = `slug%3D${encodeURIComponent(slug)}${inviteCode ? `%26code%3D${encodeURIComponent(inviteCode)}` : ''}`
