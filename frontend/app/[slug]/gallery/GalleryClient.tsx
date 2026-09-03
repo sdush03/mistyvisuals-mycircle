@@ -202,13 +202,9 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
     const playStoreUrl = `https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle&referrer=${playStoreReferrer}`
 
     if (devicePlatform === 'ios') {
-      const start = Date.now()
-      window.location.href = deepLinkUrl
-      setTimeout(() => {
-        if (Date.now() - start < 2000) {
-          window.location.href = appStoreUrl
-        }
-      }, 1200)
+      // On iOS, if the app is installed, Universal Links opens it directly from the link.
+      // If the user is on the web page, the app is not installed, so open App Store directly.
+      window.location.href = appStoreUrl
     } else if (devicePlatform === 'android') {
       // Official Android Intent: opens the app directly if installed;
       // if not installed, opens the native Google Play Store app with the referrer payload attached.
