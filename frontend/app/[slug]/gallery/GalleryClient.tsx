@@ -23,15 +23,12 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
 
   useEffect(() => {
     // Detect mobile platform
-    if (typeof window !== 'undefined') {
-      const ua = navigator.userAgent || navigator.vendor || (window as any).opera || ''
-      if (/iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream) {
-        setIsMobileDevice(true)
-        setDevicePlatform('ios')
-      } else if (/android/i.test(ua)) {
-        setIsMobileDevice(true)
-        setDevicePlatform('android')
-      }
+    const ua = typeof window !== 'undefined' ? (navigator.userAgent || navigator.vendor || (window as any).opera || '') : ''
+    const isMobile = /iPad|iPhone|iPod|android/i.test(ua) && !(window as any).MSStream
+    if (isMobile) {
+      setIsMobileDevice(true)
+      if (/iPad|iPhone|iPod/.test(ua)) setDevicePlatform('ios')
+      else if (/android/i.test(ua)) setDevicePlatform('android')
     }
 
     const searchParams = new URLSearchParams(window.location.search)
@@ -103,14 +100,14 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                 setExistingToken(token)
                 setExistingProfile(localGuest)
                 
-                // Only bypass if both are complete
-                if (localGuest.phoneNumber && localGuest.hasSelfie) {
+                // Only bypass if both are complete and not on mobile
+                if (!isMobile && localGuest.phoneNumber && localGuest.hasSelfie) {
                   localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(localGuest))
                   setGuest(localGuest)
                   router.push(`/${slug}/gallery/photos`)
                   return
-                } else {
-                  // Incomplete profile: force open login modal to prompt mobile/selfie completion
+                } else if (!isMobile) {
+                  // Incomplete profile: force open login modal to prompt mobile/selfie completion on desktop
                   setShowLoginModal(true)
                 }
               }
@@ -148,13 +145,13 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                   setExistingToken(exchangeData.token)
                   setExistingProfile(localGuest)
                   
-                  if (localGuest.phoneNumber && localGuest.hasSelfie) {
+                  if (!isMobile && localGuest.phoneNumber && localGuest.hasSelfie) {
                     localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(localGuest))
                     setGuest(localGuest)
                     router.push(`/${slug}/gallery/photos`)
                     return
-                  } else {
-                    // Incomplete profile: force open login modal to prompt mobile/selfie completion
+                  } else if (!isMobile) {
+                    // Incomplete profile: force open login modal to prompt mobile/selfie completion on desktop
                     setShowLoginModal(true)
                   }
                 }
@@ -208,15 +205,10 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
         }
       }, 1200)
     } else if (devicePlatform === 'android') {
-      const intentUrl = `intent://details?id=com.mistyvisuals.mycircle&referrer=${playStoreReferrer}#Intent;scheme=market;package=com.android.vending;S.browser_fallback_url=${encodeURIComponent(playStoreUrl)};end;`
-
-      const start = Date.now()
-      window.location.href = deepLinkUrl
-      setTimeout(() => {
-        if (Date.now() - start < 2000) {
-          window.location.href = intentUrl
-        }
-      }, 1200)
+      // Official Android Intent: opens the app directly if installed;
+      // if not installed, opens the native Google Play Store app with the referrer payload attached.
+      const androidIntentUrl = `intent://${slug}${inviteCode ? `?code=${encodeURIComponent(inviteCode)}` : ''}#Intent;scheme=mycircle;package=com.mistyvisuals.mycircle;S.market_referrer=${playStoreReferrer};end;`
+      window.location.href = androidIntentUrl
     } else {
       setShowLoginModal(true)
     }

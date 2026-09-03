@@ -26,6 +26,21 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const [hasSearched, setHasSearched] = useState(false)
   const [searching, setSearching] = useState(false)
   const [selfiePreview, setSelfiePreview] = useState<string | null>(null)
+  const [isMobileDevice, setIsMobileDevice] = useState(false)
+  const [devicePlatform, setDevicePlatform] = useState<'ios' | 'android' | 'other'>('other')
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const ua = navigator.userAgent || navigator.vendor || (window as any).opera || ''
+      if (/iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream) {
+        setIsMobileDevice(true)
+        setDevicePlatform('ios')
+      } else if (/android/i.test(ua)) {
+        setIsMobileDevice(true)
+        setDevicePlatform('android')
+      }
+    }
+  }, [])
 
   // Helper to fetch selfie image with auth and return a blob URL
   const fetchAuthenticatedSelfie = async (selfieGuestId: number) => {
@@ -1239,6 +1254,69 @@ export default function GuestGalleryPhotos({ params }: Props) {
       })}
     </div>
   );
+
+  if (isMobileDevice) {
+    const handleOpenAppFromGate = () => {
+      const deepLinkUrl = `mycircle://${slug}`
+      const appStoreUrl = 'https://apps.apple.com/app/id6796633077'
+      const playStoreReferrer = `slug%3D${encodeURIComponent(slug)}`
+      const androidIntentUrl = `intent://${slug}#Intent;scheme=mycircle;package=com.mistyvisuals.mycircle;S.market_referrer=${playStoreReferrer};end;`
+
+      if (devicePlatform === 'ios') {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(deepLinkUrl).catch(() => {})
+        }
+        const start = Date.now()
+        window.location.href = deepLinkUrl
+        setTimeout(() => {
+          if (Date.now() - start < 2000) {
+            window.location.href = appStoreUrl
+          }
+        }, 1200)
+      } else if (devicePlatform === 'android') {
+        window.location.href = androidIntentUrl
+      }
+    }
+
+    return (
+      <div 
+        className="force-light flex h-screen w-full flex-col items-center justify-center px-6 text-center select-none"
+        style={{
+          colorScheme: 'light',
+          background: 'radial-gradient(circle at center, #1a1a1a 0%, #0d0d0d 100%)',
+          color: '#ffffff',
+          fontFamily: 'var(--font-sans)',
+        }}
+      >
+        <div className="relative z-10 flex max-w-[400px] w-full flex-col items-center rounded-3xl border border-white/10 bg-[#141414] p-8 shadow-[0_25px_60px_rgba(0,0,0,0.8)]">
+          <img 
+            src="/logo-white.png" 
+            alt="Misty Visuals" 
+            style={{ height: '3.5rem', width: 'auto', objectFit: 'contain', marginBottom: '2rem' }} 
+          />
+
+          <div className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[10px] font-medium tracking-wider uppercase text-neutral-300">
+            <span>✨ App Exclusive</span>
+          </div>
+
+          <h1 className="font-lora text-2xl font-semibold tracking-wide text-white mb-3">
+            View in Misty Visuals App
+          </h1>
+
+          <p className="text-xs text-neutral-400 leading-relaxed mb-8 px-2">
+            Enjoy full high-resolution browsing, instant Facial Recognition search to find all your photos, and one-tap saves directly to your device.
+          </p>
+
+          <button
+            onClick={handleOpenAppFromGate}
+            className="w-full rounded-full bg-white py-3.5 text-black font-sans text-xs font-semibold uppercase tracking-widest shadow-lg transition-all hover:bg-neutral-200 active:scale-[0.98] cursor-pointer"
+          >
+            Open in Misty Visuals App
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="relative min-h-screen w-full text-[#111111] flex flex-col justify-between force-light" style={{ colorScheme: 'light', background: '#ffffff' }}>
