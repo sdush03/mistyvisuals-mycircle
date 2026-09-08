@@ -418,7 +418,10 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
       ]);
 
       return {
-        photos,
+        photos: photos.map(p => ({
+          ...p,
+          isFeatured: Boolean(p.exif && p.exif.isFeatured)
+        })),
         total,
         hasMore: offset + photos.length < total
       };
@@ -836,6 +839,70 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
     }
   });
 
+  // Set or toggle featured video for a gallery (at most 1 featured video per gallery)
+  fastify.post('/api/gallery/events/:id/photos/:photoId/feature', async (req, reply) => {
+    const auth = requireAdmin(req, reply);
+    if (!auth) return;
+
+    const eventId = parseInt(req.params.id, 10);
+    const photoId = parseInt(req.params.photoId, 10);
+    const requestedState = req.body?.isFeatured;
+
+    try {
+      const photo = await prisma.photo.findFirst({
+        where: { id: photoId, eventId }
+      });
+      if (!photo) {
+        return reply.code(404).send({ error: 'Photo/video not found in this gallery' });
+      }
+
+      const isCurrentlyFeatured = Boolean(photo.exif && photo.exif.isFeatured);
+      const newFeaturedState = typeof requestedState === 'boolean' ? requestedState : !isCurrentlyFeatured;
+
+      if (newFeaturedState) {
+        // Enforce at most 1 featured video per gallery: unfeature any other photos in this gallery
+        const existingFeatured = await prisma.photo.findMany({
+          where: { eventId, exif: { path: ['isFeatured'], equals: true } }
+        });
+        for (const ef of existingFeatured) {
+          if (ef.id !== photoId) {
+            await prisma.photo.update({
+              where: { id: ef.id },
+              data: { exif: { ...(ef.exif || {}), isFeatured: false } }
+            });
+          }
+        }
+
+        const updated = await prisma.photo.update({
+          where: { id: photoId },
+          data: { exif: { ...(photo.exif || {}), isFeatured: true } }
+        });
+
+        return {
+          success: true,
+          photoId,
+          isFeatured: true,
+          photo: updated
+        };
+      } else {
+        const updated = await prisma.photo.update({
+          where: { id: photoId },
+          data: { exif: { ...(photo.exif || {}), isFeatured: false } }
+        });
+
+        return {
+          success: true,
+          photoId,
+          isFeatured: false,
+          photo: updated
+        };
+      }
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to update featured status' });
+    }
+  });
+
   // Bulk upload photo metadata and face vectors
   fastify.post('/api/gallery/events/:id/photos/bulk', async (req, reply) => {
     const auth = requireAdmin(req, reply);
@@ -861,6 +928,21 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
         const hasThumbnail = fs.existsSync(path.join(__dirname, '..', '..', 'uploads', 'photos', 'events', event.slug, 'thumbnails', `thumb_${p.filename}`));
         const thumbnailUrl = p.thumbnailUrl || (hasThumbnail ? `/api/photos/file/events/${event.slug}/thumbnails/thumb_${encodeURIComponent(p.filename)}` : null);
 
+        const isFeaturedItem = Boolean(p.isFeatured || (p.exif && p.exif.isFeatured));
+        if (isFeaturedItem) {
+          // Unfeature any existing photo in this event to enforce at most 1 featured video per gallery
+          const existingFeatured = await prisma.photo.findMany({
+            where: { eventId, exif: { path: ['isFeatured'], equals: true } }
+          });
+          for (const ef of existingFeatured) {
+            await prisma.photo.update({
+              where: { id: ef.id },
+              data: { exif: { ...(ef.exif || {}), isFeatured: false } }
+            });
+          }
+        }
+        const photoExif = isFeaturedItem ? { ...(p.exif || {}), isFeatured: true } : (p.exif || null);
+
         const photo = await prisma.photo.create({
           data: {
             eventId,
@@ -870,7 +952,7 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
             fileSize: p.fileSize,
             originalFileSize: p.originalSize || null,
             tabName: p.tabName || null,
-            exif: p.exif || null,
+            exif: photoExif,
             capturedAt: p.capturedAt ? new Date(p.capturedAt) : null,
             facesScanned,
             width: p.width || null,

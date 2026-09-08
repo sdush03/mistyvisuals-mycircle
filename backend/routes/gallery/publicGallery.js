@@ -363,6 +363,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         width: true,
         height: true,
         isPrivate: true,
+        exif: true,
         _count: {
           select: {
             likes: true
@@ -403,7 +404,8 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         height: p.height,
         likeCount: p._count?.likes || 0,
         isLiked: guestId ? (p.likes && p.likes.length > 0) : false,
-        isPrivate: isBrideOrGroom ? (p.isPrivate || false) : undefined
+        isPrivate: isBrideOrGroom ? (p.isPrivate || false) : undefined,
+        isFeatured: Boolean(p.exif && p.exif.isFeatured)
       }));
 
       reply.header('Cache-Control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=300');
