@@ -22,6 +22,22 @@ function getImageContentType(filename) {
 }
 
 function getDerivedThumbnail(thumbnailUrl, r2Url) {
+  const isVideo = (url) => {
+    if (!url || typeof url !== 'string') return false;
+    const clean = url.split('?')[0].toLowerCase();
+    return clean.endsWith('.mp4') || clean.endsWith('.mov') || clean.endsWith('.m4v') || clean.endsWith('.webm');
+  };
+
+  // If a valid image thumbnail already exists (e.g. video poster or custom cover), use it directly!
+  if (thumbnailUrl && !isVideo(thumbnailUrl)) {
+    return thumbnailUrl;
+  }
+
+  // If r2Url is a video, never route to image resize service
+  if (isVideo(r2Url)) {
+    return null;
+  }
+
   const source = r2Url || thumbnailUrl;
   if (!source) return null;
   return `/api/gallery/resize?url=${encodeURIComponent(source)}&w=600&q=75`;

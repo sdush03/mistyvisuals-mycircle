@@ -388,6 +388,46 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
     }
   });
 
+  // Get all photos for a gallery event (Admin only - used by desktop uploader)
+  fastify.get('/api/gallery/events/:id/photos', async (req, reply) => {
+    const auth = requireAdmin(req, reply);
+    if (!auth) return;
+
+    const eventId = parseInt(req.params.id, 10);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 10000, 50000);
+    const offset = parseInt(req.query.offset, 10) || 0;
+    const tabName = req.query.tab;
+
+    try {
+      const whereClause = { eventId };
+      if (tabName && tabName !== 'ALL') {
+        whereClause.tabName = tabName;
+      }
+
+      const [total, photos] = await Promise.all([
+        prisma.photo.count({ where: whereClause }),
+        prisma.photo.findMany({
+          where: whereClause,
+          orderBy: [
+            { capturedAt: 'asc' },
+            { id: 'asc' }
+          ],
+          skip: offset,
+          take: limit
+        })
+      ]);
+
+      return {
+        photos,
+        total,
+        hasMore: offset + photos.length < total
+      };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to retrieve event photos' });
+    }
+  });
+
   // Delete multiple photos by ID (admin only)
   fastify.delete('/api/gallery/events/:id/photos', async (req, reply) => {
     const auth = requireAdmin(req, reply);
@@ -696,6 +736,103 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
         return reply.code(500).send({ error: err.message });
       }
       return reply.code(500).send({ error: 'Failed to upload cover photo' });
+    }
+  });
+
+  // Upload and update cover/poster for an uploaded video photo
+  fastify.post('/api/gallery/events/:id/photos/:photoId/cover', { bodyLimit: 50 * 1024 * 1024 }, async (req, reply) => {
+    const auth = requireAdmin(req, reply);
+    if (!auth) return;
+
+    const eventId = parseInt(req.params.id, 10);
+    const photoId = parseInt(req.params.photoId, 10);
+    const { filename, fileContent } = req.body;
+
+    if (!fileContent) {
+      return reply.code(400).send({ error: 'Missing fileContent (base64 image)' });
+    }
+
+    try {
+      const dbEvent = await prisma.galleryEvent.findUnique({
+        where: { id: eventId }
+      });
+      if (!dbEvent) {
+        return reply.code(404).send({ error: 'Gallery event not found' });
+      }
+
+      const photo = await prisma.photo.findFirst({
+        where: { id: photoId, eventId }
+      });
+      if (!photo) {
+        return reply.code(404).send({ error: 'Photo/video not found' });
+      }
+
+      const slug = dbEvent.slug.toLowerCase().trim();
+      const buffer = Buffer.from(fileContent, 'base64');
+      const sharp = require('sharp');
+
+      // Determine orientation: inspect video dimensions from DB or cover image metadata
+      let isVertical = false;
+      if (photo.width && photo.height) {
+        isVertical = photo.height > photo.width;
+      } else {
+        const coverMeta = await sharp(buffer).metadata();
+        let cWidth = coverMeta.width || 1920;
+        let cHeight = coverMeta.height || 1080;
+        if (coverMeta.orientation && coverMeta.orientation >= 5) {
+          cWidth = coverMeta.height;
+          cHeight = coverMeta.width;
+        }
+        isVertical = cHeight > cWidth;
+      }
+
+      const targetW = isVertical ? 1080 : 1920;
+      const targetH = isVertical ? 1920 : 1080;
+
+      let posterBuffer;
+      try {
+        posterBuffer = await sharp(buffer)
+          .rotate()
+          .resize(targetW, targetH, { fit: 'cover', position: 'attention' })
+          .jpeg({ quality: 85 })
+          .toBuffer();
+      } catch (coverErr) {
+        posterBuffer = await sharp(buffer)
+          .rotate()
+          .resize(targetW, targetH, { fit: 'cover', position: 'center' })
+          .jpeg({ quality: 85 })
+          .toBuffer();
+      }
+
+      const baseName = path.basename(photo.filename, path.extname(photo.filename));
+      const thumbFilename = `thumb_${baseName}_${Date.now()}.jpg`;
+      const subfolder = `events/${slug}/thumbnails`;
+
+      const newThumbnailUrl = await uploadAsset(posterBuffer, thumbFilename, subfolder, 'image/jpeg');
+
+      // Delete old thumbnail asset from R2 if one existed
+      if (photo.thumbnailUrl) {
+        await deleteAsset(photo.thumbnailUrl).catch(() => {});
+      }
+
+      const updatedPhoto = await prisma.photo.update({
+        where: { id: photoId },
+        data: {
+          thumbnailUrl: newThumbnailUrl
+        }
+      });
+
+      return {
+        success: true,
+        thumbnailUrl: newThumbnailUrl,
+        photo: updatedPhoto
+      };
+    } catch (err) {
+      req.log.error(err);
+      if (err.message && err.message.includes('R2 storage')) {
+        return reply.code(500).send({ error: err.message });
+      }
+      return reply.code(500).send({ error: 'Failed to update video cover' });
     }
   });
 
