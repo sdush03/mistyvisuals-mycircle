@@ -149,7 +149,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         email: guest.email,
         role: 'guest',
         hasFullAccess: guest.hasFullAccess
-      }, { expiresIn: '7d' });
+      }, { expiresIn: '365d' });
 
       return {
         token: sessionToken,
@@ -304,7 +304,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         role: 'guest',
         displayRole: resolvedDisplayRole,
         hasFullAccess: guest.hasFullAccess
-      }, { expiresIn: '7d' });
+      }, { expiresIn: '365d' });
 
       return {
         token: sessionToken,
@@ -360,7 +360,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         email: updatedGuest.email,
         role: 'guest',
         hasFullAccess: true
-      }, { expiresIn: '7d' });
+      }, { expiresIn: '365d' });
 
       return {
         success: true,

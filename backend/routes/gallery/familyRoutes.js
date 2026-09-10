@@ -120,7 +120,7 @@ module.exports = async function familyRoutes(fastify, opts) {
         role: 'family',
         name: user.name || verifiedName,
         userId: user.id
-      }, { expiresIn: '7d' });
+      }, { expiresIn: '365d' });
 
       return {
         token: familyToken,
@@ -190,7 +190,7 @@ module.exports = async function familyRoutes(fastify, opts) {
         role: 'family',
         name: guest.name,
         userId: user.id
-      }, { expiresIn: '7d' });
+      }, { expiresIn: '365d' });
 
       return {
         token: familyToken,
@@ -356,7 +356,7 @@ module.exports = async function familyRoutes(fastify, opts) {
           role: 'guest',
           displayRole: resolvedDisplayRole,
           hasFullAccess: g.hasFullAccess
-        }, { expiresIn: '7d' });
+        }, { expiresIn: '365d' });
 
         eventsList.push({
           id: event.id,
@@ -394,8 +394,16 @@ module.exports = async function familyRoutes(fastify, opts) {
       const [deletionRow] = await prisma.$queryRaw`SELECT deleted_at FROM circle_users WHERE id = ${user.id}`;
       const isDeactivated = !!(deletionRow?.deleted_at);
 
+      const refreshedToken = fastify.jwt.sign({
+        email: user.email,
+        role: 'family',
+        name: user.name,
+        userId: user.id
+      }, { expiresIn: '365d' });
+
       return {
         events: eventsList,
+        token: refreshedToken,
         selfieUrl: isDeactivated ? null : (user.selfieUrl || null),
         profile: {
           name: user.name,
