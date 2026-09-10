@@ -985,15 +985,19 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
 
     try {
       for (const item of orders) {
-        const pId = parseInt(item.photoId, 10);
+        const pId = parseInt(item.photoId || item.id, 10);
         const orderNum = parseInt(item.sortOrder, 10) || 0;
         if (pId) {
           const photo = await prisma.photo.findFirst({ where: { id: pId, eventId } });
           if (photo) {
             const curExif = (photo.exif && typeof photo.exif === 'object') ? photo.exif : {};
+            const nextExif = { ...curExif, sortOrder: orderNum };
+            if (item.cinemaCategory && typeof item.cinemaCategory === 'string') {
+              nextExif.cinemaCategory = item.cinemaCategory.trim();
+            }
             await prisma.photo.update({
               where: { id: pId },
-              data: { exif: { ...curExif, sortOrder: orderNum } }
+              data: { exif: nextExif }
             });
           }
         }
