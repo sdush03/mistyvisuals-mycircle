@@ -405,7 +405,12 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         likeCount: p._count?.likes || 0,
         isLiked: guestId ? (p.likes && p.likes.length > 0) : false,
         isPrivate: isBrideOrGroom ? (p.isPrivate || false) : undefined,
-        isFeatured: Boolean(p.exif && p.exif.isFeatured)
+        isFeatured: Boolean(p.exif && p.exif.isFeatured),
+        title: p.exif?.title || null,
+        description: p.exif?.description || null,
+        cinemaCategory: p.exif?.cinemaCategory || null,
+        sortOrder: typeof p.exif?.sortOrder === 'number' ? p.exif.sortOrder : 0,
+        exif: p.exif || null
       }));
 
       reply.header('Cache-Control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=300');

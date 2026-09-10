@@ -903,6 +903,109 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
     }
   });
 
+  // Update photo/video metadata (title, description, cinemaCategory, sortOrder, isFeatured)
+  fastify.patch('/api/gallery/events/:id/photos/:photoId', async (req, reply) => {
+    const auth = requireAdmin(req, reply);
+    if (!auth) return;
+
+    const eventId = parseInt(req.params.id, 10);
+    const photoId = parseInt(req.params.photoId, 10);
+    const { title, description, cinemaCategory, sortOrder, isFeatured, tabName } = req.body || {};
+
+    try {
+      const photo = await prisma.photo.findFirst({
+        where: { id: photoId, eventId }
+      });
+      if (!photo) {
+        return reply.code(404).send({ error: 'Photo/video not found in this gallery' });
+      }
+
+      if (isFeatured === true) {
+        const existingFeatured = await prisma.photo.findMany({
+          where: { eventId, exif: { path: ['isFeatured'], equals: true } }
+        });
+        for (const ef of existingFeatured) {
+          if (ef.id !== photoId) {
+            await prisma.photo.update({
+              where: { id: ef.id },
+              data: { exif: { ...(ef.exif || {}), isFeatured: false } }
+            });
+          }
+        }
+      }
+
+      const currentExif = (photo.exif && typeof photo.exif === 'object') ? photo.exif : {};
+      const updatedExif = { ...currentExif };
+
+      if (title !== undefined) updatedExif.title = title ? String(title).trim() : null;
+      if (description !== undefined) updatedExif.description = description ? String(description).trim() : null;
+      if (cinemaCategory !== undefined) updatedExif.cinemaCategory = cinemaCategory ? String(cinemaCategory).trim() : null;
+      if (sortOrder !== undefined) updatedExif.sortOrder = typeof sortOrder === 'number' ? sortOrder : parseInt(sortOrder, 10) || 0;
+      if (isFeatured !== undefined) updatedExif.isFeatured = Boolean(isFeatured);
+
+      const updateData = { exif: updatedExif };
+      if (tabName !== undefined && typeof tabName === 'string') {
+        updateData.tabName = tabName.trim();
+      }
+
+      const updated = await prisma.photo.update({
+        where: { id: photoId },
+        data: updateData
+      });
+
+      return {
+        success: true,
+        photoId,
+        photo: {
+          ...updated,
+          title: updatedExif.title,
+          description: updatedExif.description,
+          cinemaCategory: updatedExif.cinemaCategory,
+          sortOrder: updatedExif.sortOrder,
+          isFeatured: Boolean(updatedExif.isFeatured)
+        }
+      };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to update photo/video metadata' });
+    }
+  });
+
+  // Reorder photos/videos in batch
+  fastify.post('/api/gallery/events/:id/photos/reorder', async (req, reply) => {
+    const auth = requireAdmin(req, reply);
+    if (!auth) return;
+
+    const eventId = parseInt(req.params.id, 10);
+    const { orders } = req.body || {};
+
+    if (!Array.isArray(orders) || orders.length === 0) {
+      return reply.code(400).send({ error: 'Missing or invalid orders array' });
+    }
+
+    try {
+      for (const item of orders) {
+        const pId = parseInt(item.photoId, 10);
+        const orderNum = parseInt(item.sortOrder, 10) || 0;
+        if (pId) {
+          const photo = await prisma.photo.findFirst({ where: { id: pId, eventId } });
+          if (photo) {
+            const curExif = (photo.exif && typeof photo.exif === 'object') ? photo.exif : {};
+            await prisma.photo.update({
+              where: { id: pId },
+              data: { exif: { ...curExif, sortOrder: orderNum } }
+            });
+          }
+        }
+      }
+
+      return { success: true, count: orders.length };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to reorder photos/videos' });
+    }
+  });
+
   // Bulk upload photo metadata and face vectors
   fastify.post('/api/gallery/events/:id/photos/bulk', async (req, reply) => {
     const auth = requireAdmin(req, reply);
@@ -941,7 +1044,18 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
             });
           }
         }
-        const photoExif = isFeaturedItem ? { ...(p.exif || {}), isFeatured: true } : (p.exif || null);
+        const safeFileSize = typeof p.fileSize === 'number' ? Math.min(Math.round(p.fileSize), 2147483647) : 0;
+        const safeOriginalSize = typeof p.originalSize === 'number' ? Math.min(Math.round(p.originalSize), 2147483647) : null;
+        const photoExif = {
+          ...(p.exif || {}),
+          ...(typeof p.fileSize === 'number' ? { fileSize: p.fileSize } : {}),
+          ...(typeof p.originalSize === 'number' ? { originalFileSize: p.originalSize } : {}),
+          ...(isFeaturedItem ? { isFeatured: true } : {}),
+          ...(p.title ? { title: String(p.title).trim() } : {}),
+          ...(p.description ? { description: String(p.description).trim() } : {}),
+          ...(p.cinemaCategory ? { cinemaCategory: String(p.cinemaCategory).trim() } : {}),
+          ...(typeof p.sortOrder === 'number' ? { sortOrder: p.sortOrder } : {})
+        };
 
         const photo = await prisma.photo.create({
           data: {
@@ -949,8 +1063,8 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
             r2Url: p.r2Url,
             thumbnailUrl,
             filename: p.filename,
-            fileSize: p.fileSize,
-            originalFileSize: p.originalSize || null,
+            fileSize: safeFileSize,
+            originalFileSize: safeOriginalSize,
             tabName: p.tabName || null,
             exif: photoExif,
             capturedAt: p.capturedAt ? new Date(p.capturedAt) : null,
