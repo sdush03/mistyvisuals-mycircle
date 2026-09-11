@@ -46,6 +46,15 @@ async function deletePhotosAssets(photos, slug, log) {
           await deleteAsset(thumbUrl).catch(() => {});
         }
 
+        if (p.exif && typeof p.exif === 'object') {
+          if (p.exif.coverUrl && p.exif.coverUrl !== p.thumbnailUrl) {
+            await deleteAsset(p.exif.coverUrl).catch(() => {});
+          }
+          if (p.exif.posterUrl && p.exif.posterUrl !== p.thumbnailUrl) {
+            await deleteAsset(p.exif.posterUrl).catch(() => {});
+          }
+        }
+
         if (p.r2Url) {
           await deleteAsset(p.r2Url).catch(() => {});
         }
