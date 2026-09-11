@@ -851,6 +851,76 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
     }
   });
 
+  // Attach or replace video for an existing photo/film record (e.g. converting a Coming Soon poster to a full active video)
+  fastify.post('/api/gallery/events/:id/photos/:photoId/attach-video', async (req, reply) => {
+    const auth = requireAdmin(req, reply);
+    if (!auth) return;
+
+    const eventId = parseInt(req.params.id, 10);
+    const photoId = parseInt(req.params.photoId, 10);
+    const { r2Url, filename, fileSize, width, height, duration } = req.body || {};
+
+    if (!r2Url || !filename) {
+      return reply.code(400).send({ error: 'Missing r2Url or filename' });
+    }
+
+    try {
+      const photo = await prisma.photo.findFirst({
+        where: { id: photoId, eventId }
+      });
+      if (!photo) {
+        return reply.code(404).send({ error: 'Photo/film not found' });
+      }
+
+      // If previous record had an actual video at r2Url, delete old video asset from R2
+      const isOldVideo = ['.mp4', '.mov', '.m4v'].some(ext => (photo.filename || photo.r2Url || '').toLowerCase().endsWith(ext));
+      if (isOldVideo && photo.r2Url && photo.r2Url !== r2Url) {
+        await deleteAsset(photo.r2Url).catch(() => {});
+      }
+
+      const currentExif = (photo.exif && typeof photo.exif === 'object') ? photo.exif : {};
+      const updatedExif = {
+        ...currentExif,
+        isComingSoon: false, // Automatically remove Coming Soon!
+        fileSize: typeof fileSize === 'number' ? fileSize : (currentExif.fileSize || photo.fileSize),
+        videoWidth: width || currentExif.videoWidth,
+        videoHeight: height || currentExif.videoHeight,
+        duration: duration || currentExif.duration
+      };
+
+      // If subtitle was 'COMING SOON • TEASER POSTER', update it to chapter duration if available
+      if (updatedExif.subtitle === 'COMING SOON • TEASER POSTER') {
+        const mins = duration ? Math.round(duration / 60) : 0;
+        updatedExif.subtitle = mins > 0 ? `CHAPTER I • ${mins} MIN` : 'THE WEDDING FILM';
+      }
+
+      const updatedPhoto = await prisma.photo.update({
+        where: { id: photoId },
+        data: {
+          r2Url,
+          filename,
+          fileSize: typeof fileSize === 'number' ? Math.min(Math.round(fileSize), 2147483647) : photo.fileSize,
+          width: width || photo.width,
+          height: height || photo.height,
+          exif: updatedExif
+        }
+      });
+
+      return {
+        success: true,
+        photo: {
+          ...updatedPhoto,
+          isComingSoon: false,
+          hasBakedCover: Boolean(updatedExif.hasBakedCover || updatedExif.isCoverBaked),
+          isCoverBaked: Boolean(updatedExif.hasBakedCover || updatedExif.isCoverBaked)
+        }
+      };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to attach video to film' });
+    }
+  });
+
   // Set or toggle featured video for a gallery (at most 1 featured video per gallery)
   fastify.post('/api/gallery/events/:id/photos/:photoId/feature', async (req, reply) => {
     const auth = requireAdmin(req, reply);
