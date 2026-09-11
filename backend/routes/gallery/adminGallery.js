@@ -942,8 +942,16 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
       if (description !== undefined) updatedExif.description = description ? String(description).trim() : null;
       if (cinemaCategory !== undefined) updatedExif.cinemaCategory = cinemaCategory ? String(cinemaCategory).trim() : null;
       if (sortOrder !== undefined) updatedExif.sortOrder = typeof sortOrder === 'number' ? sortOrder : parseInt(sortOrder, 10) || 0;
-      if (isFeatured !== undefined) updatedExif.isFeatured = Boolean(isFeatured);
-      if (isComingSoon !== undefined) updatedExif.isComingSoon = Boolean(isComingSoon);
+      const isVideoExt = ['.mp4', '.mov', '.m4v'].some(ext => (photo.filename || photo.r2Url || '').toLowerCase().endsWith(ext));
+      const targetTab = (tabName !== undefined && typeof tabName === 'string') ? tabName : (photo.tabName || '');
+      const isCinemaTab = String(targetTab).trim().toUpperCase() === 'CINEMA';
+      const isPhotoOnlyCinema = isCinemaTab && !isVideoExt;
+      const effectiveComingSoon = (isComingSoon !== undefined)
+        ? Boolean(isComingSoon)
+        : Boolean(currentExif.isComingSoon || isPhotoOnlyCinema);
+
+      if (effectiveComingSoon) updatedExif.isComingSoon = true;
+      else if (isComingSoon !== undefined) updatedExif.isComingSoon = false;
 
       const updateData = { exif: updatedExif };
       if (tabName !== undefined && typeof tabName === 'string') {
@@ -1052,16 +1060,21 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
         }
         const safeFileSize = typeof p.fileSize === 'number' ? Math.min(Math.round(p.fileSize), 2147483647) : 0;
         const safeOriginalSize = typeof p.originalSize === 'number' ? Math.min(Math.round(p.originalSize), 2147483647) : null;
+        const isVideoExt = ['.mp4', '.mov', '.m4v'].some(ext => (p.filename || p.r2Url || '').toLowerCase().endsWith(ext));
+        const isCinemaTab = String(p.tabName || '').trim().toUpperCase() === 'CINEMA';
+        const isPhotoOnlyCinema = isCinemaTab && !isVideoExt;
+        const effectiveComingSoon = Boolean(p.isComingSoon || p.exif?.isComingSoon || isPhotoOnlyCinema);
+
         const photoExif = {
           ...(p.exif || {}),
           ...(typeof p.fileSize === 'number' ? { fileSize: p.fileSize } : {}),
           ...(typeof p.originalSize === 'number' ? { originalFileSize: p.originalSize } : {}),
           ...(isFeaturedItem ? { isFeatured: true } : {}),
           ...(p.title ? { title: String(p.title).trim() } : {}),
-          ...(p.subtitle ? { subtitle: String(p.subtitle).trim() } : {}),
+          ...(p.subtitle ? { subtitle: String(p.subtitle).trim() } : (effectiveComingSoon ? { subtitle: 'COMING SOON • TEASER POSTER' } : {})),
           ...(p.description ? { description: String(p.description).trim() } : {}),
           ...(p.cinemaCategory ? { cinemaCategory: String(p.cinemaCategory).trim() } : {}),
-          ...(p.isComingSoon || p.exif?.isComingSoon ? { isComingSoon: true } : {}),
+          ...(effectiveComingSoon ? { isComingSoon: true } : {}),
           ...(typeof p.sortOrder === 'number' ? { sortOrder: p.sortOrder } : {})
         };
 
