@@ -420,7 +420,9 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
       return {
         photos: photos.map(p => ({
           ...p,
-          isFeatured: Boolean(p.exif && p.exif.isFeatured)
+          isFeatured: Boolean(p.exif && p.exif.isFeatured),
+          hasBakedCover: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked)),
+          isCoverBaked: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked))
         })),
         total,
         hasMore: offset + photos.length < total
@@ -550,13 +552,16 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
 
       const results = [];
       for (const item of uploads) {
+        const isVideoItem = ['.mp4', '.mov', '.m4v', '.webm'].some(ext => (item.filename || '').toLowerCase().endsWith(ext));
+        const baseName = path.basename(item.filename, path.extname(item.filename));
         const photoKey = `events/${slug}/photos/${item.filename}`;
-        const thumbKey = `events/${slug}/thumbnails/thumb_${item.filename}`;
+        const thumbFilename = isVideoItem ? `thumb_${baseName}.jpg` : `thumb_${item.filename}`;
+        const thumbKey = `events/${slug}/thumbnails/${thumbFilename}`;
 
         const r2Url = isR2Enabled ? `https://${publicDomain}/${photoKey}` : `/api/photos/file/${photoKey}`;
         const thumbnailUrl = isR2Enabled ? `https://${publicDomain}/${thumbKey}` : `/api/photos/file/${thumbKey}`;
 
-        const photoPutUrl = await getPresignedUploadUrl(photoKey, 'image/jpeg');
+        const photoPutUrl = await getPresignedUploadUrl(photoKey, isVideoItem ? 'video/mp4' : 'image/jpeg');
         const thumbPutUrl = await getPresignedUploadUrl(thumbKey, 'image/jpeg');
 
         const faceUrls = [];
@@ -575,6 +580,7 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
           filename: item.filename,
           photoPutUrl,
           thumbPutUrl,
+          thumbnailPutUrl: thumbPutUrl,
           r2Url,
           thumbnailUrl,
           faces: faceUrls
@@ -818,10 +824,16 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
         await deleteAsset(photo.thumbnailUrl).catch(() => {});
       }
 
+      const currentExif = (photo.exif && typeof photo.exif === 'object') ? photo.exif : {};
       const updatedPhoto = await prisma.photo.update({
         where: { id: photoId },
         data: {
-          thumbnailUrl: newThumbnailUrl
+          thumbnailUrl: newThumbnailUrl,
+          exif: {
+            ...currentExif,
+            hasBakedCover: true,
+            isCoverBaked: true
+          }
         }
       });
 
@@ -910,7 +922,7 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
 
     const eventId = parseInt(req.params.id, 10);
     const photoId = parseInt(req.params.photoId, 10);
-    const { title, subtitle, description, cinemaCategory, sortOrder, isFeatured, tabName, isComingSoon } = req.body || {};
+    const { title, subtitle, description, cinemaCategory, sortOrder, isFeatured, tabName, isComingSoon, hasBakedCover } = req.body || {};
 
     try {
       const photo = await prisma.photo.findFirst({
@@ -952,6 +964,11 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
 
       if (effectiveComingSoon) updatedExif.isComingSoon = true;
       else if (isComingSoon !== undefined) updatedExif.isComingSoon = false;
+
+      if (hasBakedCover !== undefined) {
+        updatedExif.hasBakedCover = Boolean(hasBakedCover);
+        updatedExif.isCoverBaked = Boolean(hasBakedCover);
+      }
 
       const updateData = { exif: updatedExif };
       if (tabName !== undefined && typeof tabName === 'string') {
@@ -1065,6 +1082,13 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
         const isPhotoOnlyCinema = isCinemaTab && !isVideoExt;
         const effectiveComingSoon = Boolean(p.isComingSoon || p.exif?.isComingSoon || isPhotoOnlyCinema);
 
+        const isBakedCover = Boolean(
+          p.hasBakedCover ||
+          p.isCoverBaked ||
+          p.exif?.hasBakedCover ||
+          p.exif?.isCoverBaked
+        );
+
         const photoExif = {
           ...(p.exif || {}),
           ...(typeof p.fileSize === 'number' ? { fileSize: p.fileSize } : {}),
@@ -1075,6 +1099,7 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
           ...(p.description ? { description: String(p.description).trim() } : {}),
           ...(p.cinemaCategory ? { cinemaCategory: String(p.cinemaCategory).trim() } : {}),
           ...(effectiveComingSoon ? { isComingSoon: true } : {}),
+          ...(isBakedCover ? { hasBakedCover: true, isCoverBaked: true } : {}),
           ...(typeof p.sortOrder === 'number' ? { sortOrder: p.sortOrder } : {})
         };
 
@@ -1117,7 +1142,7 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
         });
       }
 
-      return { status: 'success', count: results.length };
+      return { status: 'success', count: results.length, photos: results };
     } catch (err) {
       req.log.error(err);
       return reply.code(500).send({ error: 'Failed to upload photo metadata' });

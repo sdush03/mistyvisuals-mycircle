@@ -408,6 +408,8 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         isLiked: guestId ? (p.likes && p.likes.length > 0) : false,
         isPrivate: isBrideOrGroom ? (p.isPrivate || false) : undefined,
         isFeatured: Boolean(p.exif && p.exif.isFeatured),
+        hasBakedCover: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked)),
+        isCoverBaked: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked)),
         title: p.exif?.title || null,
         description: p.exif?.description || null,
         cinemaCategory: p.exif?.cinemaCategory || null,
