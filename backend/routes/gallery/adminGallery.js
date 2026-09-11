@@ -910,7 +910,7 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
 
     const eventId = parseInt(req.params.id, 10);
     const photoId = parseInt(req.params.photoId, 10);
-    const { title, description, cinemaCategory, sortOrder, isFeatured, tabName } = req.body || {};
+    const { title, subtitle, description, cinemaCategory, sortOrder, isFeatured, tabName, isComingSoon } = req.body || {};
 
     try {
       const photo = await prisma.photo.findFirst({
@@ -938,10 +938,12 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
       const updatedExif = { ...currentExif };
 
       if (title !== undefined) updatedExif.title = title ? String(title).trim() : null;
+      if (subtitle !== undefined) updatedExif.subtitle = subtitle ? String(subtitle).trim() : null;
       if (description !== undefined) updatedExif.description = description ? String(description).trim() : null;
       if (cinemaCategory !== undefined) updatedExif.cinemaCategory = cinemaCategory ? String(cinemaCategory).trim() : null;
       if (sortOrder !== undefined) updatedExif.sortOrder = typeof sortOrder === 'number' ? sortOrder : parseInt(sortOrder, 10) || 0;
       if (isFeatured !== undefined) updatedExif.isFeatured = Boolean(isFeatured);
+      if (isComingSoon !== undefined) updatedExif.isComingSoon = Boolean(isComingSoon);
 
       const updateData = { exif: updatedExif };
       if (tabName !== undefined && typeof tabName === 'string') {
@@ -1056,8 +1058,10 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
           ...(typeof p.originalSize === 'number' ? { originalFileSize: p.originalSize } : {}),
           ...(isFeaturedItem ? { isFeatured: true } : {}),
           ...(p.title ? { title: String(p.title).trim() } : {}),
+          ...(p.subtitle ? { subtitle: String(p.subtitle).trim() } : {}),
           ...(p.description ? { description: String(p.description).trim() } : {}),
           ...(p.cinemaCategory ? { cinemaCategory: String(p.cinemaCategory).trim() } : {}),
+          ...(p.isComingSoon || p.exif?.isComingSoon ? { isComingSoon: true } : {}),
           ...(typeof p.sortOrder === 'number' ? { sortOrder: p.sortOrder } : {})
         };
 
