@@ -1243,6 +1243,14 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
         },
         take: 50
       });
+
+      if (photos.length === 0) {
+        await prisma.galleryEvent.update({
+          where: { id: eventId },
+          data: { galleryFacesComplete: true }
+        }).catch(() => {});
+      }
+
       return { photos };
     } catch (err) {
       req.log.error(err);
@@ -1293,16 +1301,22 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
     }
   });
 
-  // Explicitly mark cluster cache as dirty
+  // Explicitly mark cluster cache as dirty and update gallery faces completion status
   fastify.post('/api/gallery/events/:id/finalize-upload', async (req, reply) => {
     const auth = requireAdmin(req, reply);
     if (!auth) return;
 
     const eventId = parseInt(req.params.id, 10);
     try {
+      const unscannedCount = await prisma.photo.count({
+        where: { eventId, facesScanned: false }
+      });
       await prisma.galleryEvent.update({
         where: { id: eventId },
-        data: { clustersDirty: true }
+        data: {
+          galleryFacesComplete: unscannedCount === 0,
+          clustersDirty: true
+        }
       });
       return { success: true, message: 'Upload finalized. Cluster cache marked for refresh.' };
     } catch (err) {
