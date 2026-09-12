@@ -418,12 +418,17 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
       ]);
 
       return {
-        photos: photos.map(p => ({
-          ...p,
-          isFeatured: Boolean(p.exif && p.exif.isFeatured),
-          hasBakedCover: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked)),
-          isCoverBaked: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked))
-        })),
+        photos: photos.map(p => {
+          const exifObj = (typeof p.exif === 'string') ? (() => { try { return JSON.parse(p.exif); } catch (_) { return {}; } })() : (p.exif || {});
+          return {
+            ...p,
+            exif: exifObj,
+            isFeatured: Boolean(exifObj.isFeatured),
+            hasBakedCover: Boolean(exifObj.hasBakedCover || exifObj.isCoverBaked),
+            isCoverBaked: Boolean(exifObj.hasBakedCover || exifObj.isCoverBaked),
+            isComingSoon: Boolean(exifObj.isComingSoon)
+          };
+        }),
         total,
         hasMore: offset + photos.length < total
       };
