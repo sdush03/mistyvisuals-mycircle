@@ -330,7 +330,21 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       }
 
       if (!hasFullAccess) {
-        whereClause.tabName = 'Highlights';
+        if (tabFilter && tabFilter.trim().toLowerCase() === 'cinema') {
+          let actualTab = 'Cinema';
+          if (event.tabs && Array.isArray(event.tabs)) {
+            const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === 'cinema');
+            if (matchedTab) actualTab = matchedTab;
+          }
+          whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+        } else {
+          let actualTab = 'Highlights';
+          if (event.tabs && Array.isArray(event.tabs)) {
+            const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === 'highlights');
+            if (matchedTab) actualTab = matchedTab;
+          }
+          whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+        }
       } else {
         const activeTabs = event.tabs || [];
         if (activeTabs.length > 0) {
@@ -348,7 +362,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
               actualTab = matchedTab;
             }
           }
-          whereClause.tabName = actualTab;
+          whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
         }
       }
 
@@ -393,29 +407,39 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         })
       ]);
 
-      const mappedPhotos = photos.map(p => ({
-        id: p.id,
-        r2Url: p.r2Url,
-        thumbnailUrl: getDerivedThumbnail(p.thumbnailUrl, p.r2Url),
-        filename: p.filename,
-        originalSize: p.originalFileSize,
-        tabName: p.tabName,
-        createdAt: p.createdAt,
-        capturedAt: p.capturedAt,
-        width: p.width,
-        height: p.height,
-        likeCount: p._count?.likes || 0,
-        isLiked: guestId ? (p.likes && p.likes.length > 0) : false,
-        isPrivate: isBrideOrGroom ? (p.isPrivate || false) : undefined,
-        isFeatured: Boolean(p.exif && p.exif.isFeatured),
-        hasBakedCover: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked)),
-        isCoverBaked: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked)),
-        title: p.exif?.title || null,
-        description: p.exif?.description || null,
-        cinemaCategory: p.exif?.cinemaCategory || null,
-        sortOrder: typeof p.exif?.sortOrder === 'number' ? p.exif.sortOrder : 0,
-        exif: p.exif || null
-      }));
+      const mappedPhotos = photos.map(p => {
+        const isVideoExt = ['.mp4', '.mov', '.m4v', '.webm'].some(ext => (p.filename || p.r2Url || '').toLowerCase().includes(ext));
+        const isCinemaTab = String(p.tabName || '').trim().toUpperCase() === 'CINEMA';
+        const isPhotoOnlyCinema = isCinemaTab && !isVideoExt;
+        const isComingSoon = Boolean(p.exif?.isComingSoon || p.exif?.comingSoon || isPhotoOnlyCinema);
+
+        return {
+          id: p.id,
+          r2Url: p.r2Url,
+          thumbnailUrl: getDerivedThumbnail(p.thumbnailUrl, p.r2Url),
+          filename: p.filename,
+          originalSize: p.originalFileSize,
+          tabName: p.tabName,
+          createdAt: p.createdAt,
+          capturedAt: p.capturedAt,
+          width: p.width,
+          height: p.height,
+          likeCount: p._count?.likes || 0,
+          isLiked: guestId ? (p.likes && p.likes.length > 0) : false,
+          isPrivate: isBrideOrGroom ? (p.isPrivate || false) : undefined,
+          isFeatured: Boolean(p.exif && p.exif.isFeatured),
+          hasBakedCover: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked)),
+          isCoverBaked: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked)),
+          isComingSoon,
+          isVideo: isVideoExt,
+          title: p.exif?.title || null,
+          subtitle: p.exif?.subtitle || (isComingSoon ? 'COMING SOON • TEASER POSTER' : null),
+          description: p.exif?.description || null,
+          cinemaCategory: p.exif?.cinemaCategory || null,
+          sortOrder: typeof p.exif?.sortOrder === 'number' ? p.exif.sortOrder : 0,
+          exif: p.exif || null
+        };
+      });
 
       reply.header('Cache-Control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=300');
       return {
