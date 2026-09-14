@@ -249,8 +249,10 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       let guestId = null;
       let hasFullAccess = !!isPreview;
       let isBrideOrGroom = false;
+      let refreshPayload = null; // Fix 3: populated on successful guest auth to silently rotate stale tokens
       const authHeader = req.headers.authorization;
       let isTokenValid = false;
+
 
       if (authHeader && authHeader.startsWith('Bearer ')) {
         try {
@@ -278,20 +280,52 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
               });
             }
             guestId = adminGuest.id;
-          } else if (decoded.role === 'guest' && (Number(decoded.eventId) === event.id || (decoded.slug && decoded.slug.toLowerCase().trim() === slug))) {
-            guestId = decoded.guestId;
-            const dbGuest = await prisma.guest.findUnique({
-              where: { id: guestId }
-            });
-            if (!dbGuest) {
-              return reply.code(403).send({ error: 'Access denied: Participant removed from gallery' });
+          } else if (decoded.role === 'guest') {
+            // Fix 1: Use String() comparison to handle older tokens where eventId may be stored as a string
+            const eventIdMatches = decoded.eventId != null && String(decoded.eventId) === String(event.id);
+            const slugMatches = decoded.slug && decoded.slug.toLowerCase().trim() === slug;
+
+            if (eventIdMatches || slugMatches) {
+              guestId = decoded.guestId;
+            } else if (decoded.guestId) {
+              // Fix 2: Fallback DB lookup — if token's eventId/slug don't match (stale token),
+              // check if the guest actually belongs to this event by their guestId.
+              // This fixes existing users who logged in before a token format change
+              // and can't see gallery photos without logging out.
+              const fallbackGuest = await prisma.guest.findFirst({
+                where: { id: decoded.guestId, eventId: event.id }
+              });
+              if (fallbackGuest) {
+                guestId = decoded.guestId;
+              }
             }
-            if (dbGuest.isBlocked) {
-              return reply.code(403).send({ error: 'Access denied: Participant is blocked' });
+
+            if (guestId) {
+              const dbGuest = await prisma.guest.findUnique({
+                where: { id: guestId }
+              });
+              if (!dbGuest) {
+                return reply.code(403).send({ error: 'Access denied: Participant removed from gallery' });
+              }
+              if (dbGuest.isBlocked) {
+                return reply.code(403).send({ error: 'Access denied: Participant is blocked' });
+              }
+              hasFullAccess = dbGuest.hasFullAccess;
+              const guestRole = (dbGuest.displayRole || '').toString().trim().toUpperCase();
+              isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(guestRole);
+              // Fix 3: Capture payload to silently re-mint a fresh token in the response header
+              refreshPayload = {
+                guestId: dbGuest.id,
+                userId: decoded.userId || 0,
+                eventId: event.id,
+                email: dbGuest.email,
+                role: 'guest',
+                displayRole: dbGuest.displayRole || null,
+                hasFullAccess: dbGuest.hasFullAccess
+              };
+            } else {
+              return reply.code(403).send({ error: 'Token does not match this event' });
             }
-            hasFullAccess = dbGuest.hasFullAccess;
-            const guestRole = (dbGuest.displayRole || '').toString().trim().toUpperCase();
-            isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(guestRole);
           } else if (decoded.role === 'family' && decoded.email) {
             let familyGuest = await prisma.guest.findFirst({
               where: { eventId: event.id, email: decoded.email }
@@ -308,6 +342,13 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
             return reply.code(403).send({ error: 'Token does not match this event' });
           }
         } catch (err) {
+          // If a guest token was provided but is expired or invalid, return 401.
+          // The mobile app's API interceptor catches 401 and auto-logs the user out cleanly.
+          // Only fall through to admin check if NO token was sent at all.
+          const hadToken = !!(authHeader && authHeader.startsWith('Bearer '));
+          if (hadToken) {
+            return reply.code(401).send({ error: 'Session expired', code: 'TOKEN_EXPIRED' });
+          }
           isTokenValid = false;
         }
       }
@@ -440,6 +481,15 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           exif: p.exif || null
         };
       });
+
+      // Fix 3: Silently rotate the guest's token on every successful photo load.
+      // Mobile reads X-Refreshed-Token and saves it, so tokens never go stale.
+      if (refreshPayload) {
+        try {
+          const freshToken = fastify.jwt.sign(refreshPayload, { expiresIn: '365d' });
+          reply.header('X-Refreshed-Token', freshToken);
+        } catch (_) {}
+      }
 
       reply.header('Cache-Control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=300');
       return {
