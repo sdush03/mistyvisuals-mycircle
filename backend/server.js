@@ -229,7 +229,7 @@ fastify.addHook('onRequest', async (req, reply) => {
     const isMobileApp = Boolean(appVer) || ua.includes('okhttp') || ua.includes('cfnetwork') || ua.includes('expo');
 
     if (isMobileApp && (!appVer || appVer === '1.1.6')) {
-      return reply.code(426).send({
+      return reply.code(401).send({
         error: 'UPDATE_REQUIRED',
         message: 'Your app version is no longer supported. Please update Misty Visuals from the App Store or Google Play Store to continue.',
         androidStoreUrl: 'https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle',
