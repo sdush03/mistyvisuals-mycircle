@@ -231,7 +231,7 @@ fastify.addHook('onRequest', async (req, reply) => {
 
     if (isMobileApp && (!appVer || appVer === '1.1.6')) {
       if (path.includes('/photos')) {
-        const bannerUrl = 'https://mycircle.mistyvisuals.com/api/app-config/banner.svg';
+        const bannerUrl = 'https://mycircle.mistyvisuals.com/api/app-config/banner.svg?v=vip2';
         return reply.code(200).send({
           photos: [
             {
@@ -506,6 +506,9 @@ fastify.get('/api/app-config/banner.svg', async (req, reply) => {
     <text x="600" y="655" font-family="'Futura', 'Arial', sans-serif" font-size="20" font-weight="bold" fill="#000000" text-anchor="middle" letter-spacing="2">CLAIM YOUR VIP UPDATE 👑</text>
   </svg>`;
   reply.header('Content-Type', 'image/svg+xml');
+  reply.header('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+  reply.header('Pragma', 'no-cache');
+  reply.header('Expires', '0');
   return reply.send(svg);
 });
 
