@@ -180,6 +180,7 @@ const PUBLIC_API_PATHS = new Set([
   '/api/auth/logout',
   '/api/health',
   '/api/version',
+  '/api/app-config/version',
   '/api/webhooks/meta',
   '/auth/login',
   '/auth/logout',
@@ -446,6 +447,19 @@ fastify.register(require('./routes/saves'), {
 
 // Removed apiRoutes registration
 // Removed apiRoutes registration
+
+/* ===================== APP VERSION CONFIG ===================== */
+fastify.get('/api/app-config/version', async (req, reply) => {
+  return reply.send({
+    minSupportedVersion: '1.2.0',
+    latestVersion: '1.2.0',
+    forceUpdate: true,
+    title: 'Update Required',
+    message: 'A new version of Misty Visuals is available. Please update the app to continue using all features.',
+    androidStoreUrl: 'https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle',
+    iosStoreUrl: 'https://apps.apple.com/app/id6796633077'
+  })
+})
 
 /* ===================== START ===================== */
 
