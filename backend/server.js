@@ -181,6 +181,7 @@ const PUBLIC_API_PATHS = new Set([
   '/api/health',
   '/api/version',
   '/api/app-config/version',
+  '/api/app-config/banner.svg',
   '/api/webhooks/meta',
   '/auth/login',
   '/auth/logout',
@@ -222,19 +223,36 @@ fastify.addHook('onRequest', async (req, reply) => {
   if (req.method === 'OPTIONS') return
   const path = url.split('?')[0]
 
-  // Path B: Instant Server Block for <=1.1.6 mobile app requests
+  // Option 1: Update Banner Photo Card for <=1.1.6 mobile app requests
   if (path.startsWith('/api/gallery/public/') || path.startsWith('/api/gallery/family')) {
     const appVer = req.headers['x-app-version'];
     const ua = (req.headers['user-agent'] || '').toLowerCase();
     const isMobileApp = Boolean(appVer) || ua.includes('okhttp') || ua.includes('cfnetwork') || ua.includes('expo');
 
     if (isMobileApp && (!appVer || appVer === '1.1.6')) {
-      return reply.code(401).send({
-        error: 'UPDATE_REQUIRED',
-        message: 'Your app version is no longer supported. Please update Misty Visuals from the App Store or Google Play Store to continue.',
-        androidStoreUrl: 'https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle',
-        iosStoreUrl: 'https://apps.apple.com/app/id6796633077'
-      });
+      if (path.includes('/photos')) {
+        const bannerUrl = 'https://mycircle.mistyvisuals.com/api/app-config/banner.svg';
+        return reply.code(200).send({
+          photos: [
+            {
+              id: 999999,
+              r2Url: bannerUrl,
+              thumbnailUrl: bannerUrl,
+              previewUrl: bannerUrl,
+              aspectRatio: 1.5,
+              width: 1200,
+              height: 800,
+              caption: '⚠️ UPDATE REQUIRED: Please update Misty Visuals to Version 1.2.0 on the App Store or Google Play Store to view your event photos.',
+              title: '⚠️ UPDATE REQUIRED',
+              category: 'ALL',
+              tabName: 'ALL',
+              uploadedAt: new Date().toISOString()
+            }
+          ],
+          total: 1,
+          hasMore: false
+        });
+      }
     }
   }
 
@@ -473,9 +491,22 @@ fastify.get('/api/app-config/version', async (req, reply) => {
     title: 'Update Required',
     message: 'A new version of Misty Visuals is available. Please update the app to continue using all features.',
     androidStoreUrl: 'https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle',
-    iosStoreUrl: 'https://apps.apple.com/app/id6796633077'
-  })
-})
+  });
+});
+fastify.get('/api/app-config/banner.svg', async (req, reply) => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+    <rect width="1200" height="800" fill="#0f0f11"/>
+    <circle cx="600" cy="230" r="70" fill="#1c1c24"/>
+    <path d="M570 230l30-30 30 30m-30-30v70" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="600" y="390" font-family="Arial, sans-serif" font-size="44" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="1.5">UPDATE REQUIRED</text>
+    <text x="600" y="460" font-family="Arial, sans-serif" font-size="24" fill="#a1a1aa" text-anchor="middle">A new version of Misty Visuals is available.</text>
+    <text x="600" y="505" font-family="Arial, sans-serif" font-size="24" fill="#a1a1aa" text-anchor="middle">Please update to Version 1.2.0 on the App Store or Google Play Store.</text>
+    <rect x="420" y="580" width="360" height="70" rx="35" fill="#ffffff"/>
+    <text x="600" y="625" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#000000" text-anchor="middle" letter-spacing="2">UPDATE NOW ON STORE</text>
+  </svg>`;
+  reply.header('Content-Type', 'image/svg+xml');
+  return reply.send(svg);
+});
 
 /* ===================== START ===================== */
 
