@@ -231,7 +231,7 @@ fastify.addHook('onRequest', async (req, reply) => {
 
     if (isMobileApp && (!appVer || appVer === '1.1.6')) {
       if (path.includes('/photos')) {
-        const bannerUrl = 'https://mycircle.mistyvisuals.com/api/app-config/banner.svg?v=vip2';
+        const bannerUrl = 'https://mycircle.mistyvisuals.com/api/app-config/banner.svg?v=v3';
         return reply.code(200).send({
           photos: [
             {
@@ -242,8 +242,8 @@ fastify.addHook('onRequest', async (req, reply) => {
               aspectRatio: 1.5,
               width: 1200,
               height: 800,
-              caption: "✨ TIME FOR A VIP UPGRADE! We've added fresh new sparkle to the app! Update to the latest version on the App Store or Google Play Store to view your full photo gallery & cinema reels.",
-              title: "✨ TIME FOR A VIP UPGRADE!",
+              caption: "🚀 TIME FOR APP UPGRADE! We've added fresh new features to the app! Update to the latest version on the App Store or Google Play Store to view your full photo gallery & cinema reels.",
+              title: "🚀 TIME FOR APP UPGRADE",
               category: 'ALL',
               tabName: 'ALL',
               uploadedAt: new Date().toISOString()
@@ -496,14 +496,22 @@ fastify.get('/api/app-config/version', async (req, reply) => {
 fastify.get('/api/app-config/banner.svg', async (req, reply) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
     <rect width="1200" height="800" fill="#0c0c0e"/>
-    <circle cx="600" cy="220" r="75" fill="#1c1c24" stroke="#d4af37" stroke-width="2"/>
-    <text x="600" y="235" font-family="Arial, sans-serif" font-size="40" text-anchor="middle">👑</text>
-    <text x="600" y="380" font-family="'Futura', 'Arial', sans-serif" font-size="44" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="2">TIME FOR A VIP UPGRADE!</text>
-    <text x="600" y="450" font-family="Arial, sans-serif" font-size="26" font-weight="600" fill="#d4af37" text-anchor="middle">We’ve added fresh new sparkle to the app! ✨</text>
-    <text x="600" y="505" font-family="Arial, sans-serif" font-size="22" fill="#a1a1aa" text-anchor="middle">Update to the latest version on the App Store or Google Play Store</text>
-    <text x="600" y="545" font-family="Arial, sans-serif" font-size="22" fill="#a1a1aa" text-anchor="middle">to view your full photo gallery &amp; cinema reels.</text>
-    <rect x="380" y="610" width="440" height="72" rx="36" fill="#ffffff"/>
-    <text x="600" y="655" font-family="'Futura', 'Arial', sans-serif" font-size="20" font-weight="bold" fill="#000000" text-anchor="middle" letter-spacing="2">CLAIM YOUR VIP UPDATE 👑</text>
+    <circle cx="600" cy="200" r="70" fill="#1c1c24" stroke="#ffffff" stroke-width="2"/>
+    <path d="M570 200l30-30 30 30m-30-30v70" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="600" y="340" font-family="'Futura', 'Arial', sans-serif" font-size="44" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="2">TIME FOR APP UPGRADE</text>
+    <text x="600" y="410" font-family="Arial, sans-serif" font-size="26" font-weight="600" fill="#a1a1aa" text-anchor="middle">We’ve added fresh new features to the app! ✨</text>
+    <text x="600" y="460" font-family="Arial, sans-serif" font-size="22" fill="#71717a" text-anchor="middle">Update Misty Visuals to view your full photo gallery &amp; cinema reels.</text>
+    <g transform="translate(0, 520)">
+      <text x="600" y="30" font-family="'Futura', 'Arial', sans-serif" font-size="16" font-weight="bold" fill="#71717a" text-anchor="middle" letter-spacing="3">DOWNLOAD FROM</text>
+      <g transform="translate(360, 50)">
+        <rect width="220" height="64" rx="16" fill="#1c1c24" stroke="#33333f" stroke-width="1.5"/>
+        <text x="110" y="39" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle"> App Store</text>
+      </g>
+      <g transform="translate(620, 50)">
+        <rect width="220" height="64" rx="16" fill="#1c1c24" stroke="#33333f" stroke-width="1.5"/>
+        <text x="110" y="39" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">▶ Google Play</text>
+      </g>
+    </g>
   </svg>`;
   reply.header('Content-Type', 'image/svg+xml');
   reply.header('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
