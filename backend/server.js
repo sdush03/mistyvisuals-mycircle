@@ -222,6 +222,22 @@ fastify.addHook('onRequest', async (req, reply) => {
   if (req.method === 'OPTIONS') return
   const path = url.split('?')[0]
 
+  // Path B: Instant Server Block for <=1.1.6 mobile app requests
+  if (path.startsWith('/api/gallery/public/') || path.startsWith('/api/gallery/family')) {
+    const appVer = req.headers['x-app-version'];
+    const ua = (req.headers['user-agent'] || '').toLowerCase();
+    const isMobileApp = Boolean(appVer) || ua.includes('okhttp') || ua.includes('cfnetwork') || ua.includes('expo');
+
+    if (isMobileApp && (!appVer || appVer === '1.1.6')) {
+      return reply.code(426).send({
+        error: 'UPDATE_REQUIRED',
+        message: 'Your app version is no longer supported. Please update Misty Visuals from the App Store or Google Play Store to continue.',
+        androidStoreUrl: 'https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle',
+        iosStoreUrl: 'https://apps.apple.com/app/id6796633077'
+      });
+    }
+  }
+
   // Apply high-capacity global rate limit to public gallery endpoints
   if (path.startsWith('/api/gallery/public/') || path.startsWith('/gallery/public/')) {
     await globalPublicRateLimiter(req, reply);
