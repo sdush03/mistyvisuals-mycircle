@@ -168,13 +168,13 @@ def match_selfie(selfie_path, database_vectors, extra_vectors=[], aligner=None, 
         sorted_matches.sort(key=lambda x: x['score'], reverse=True)
         return sorted_matches
 
-    # Step 1: Initial Scan (Threshold 0.48)
-    threshold = 0.48
+    # Step 1: Initial Scan (Threshold 0.35)
+    threshold = 0.35
     initial_matches = get_matches_for_vector(selfie_feat_norm, database_vectors, threshold, extra_norms)
     
-    # Step 1 Fallback (Adaptive thresholding): if matches < 3, lower threshold to 0.45
+    # Step 1 Fallback (Adaptive thresholding): if matches < 3, lower threshold by 0.03 to 0.32
     if len(initial_matches) < 3:
-        threshold = 0.45
+        threshold = 0.32
         initial_matches = get_matches_for_vector(selfie_feat_norm, database_vectors, threshold, extra_norms)
         
     # Step 2: Stage 1 Query Expansion (Diverse seeds) if matches >= 3
@@ -207,7 +207,7 @@ def match_selfie(selfie_path, database_vectors, extra_vectors=[], aligner=None, 
         blended_vector = blended_vector / np.linalg.norm(blended_vector)
         
         # Run Stage 1 search sweep using blended vector
-        stage1_matches = get_matches_for_vector(blended_vector, database_vectors, 0.48, extra_norms)
+        stage1_matches = get_matches_for_vector(blended_vector, database_vectors, 0.35, extra_norms)
         
         # Step 3: Stage 2 Deep Query Expansion (Deep seeds selection)
         init_pids = {m['photoId'] for m in initial_matches}
@@ -240,8 +240,8 @@ def match_selfie(selfie_path, database_vectors, extra_vectors=[], aligner=None, 
                 final_vector += qv * w
             final_vector = final_vector / np.linalg.norm(final_vector)
             
-            # Run final sweep at 0.48 threshold using expanded final vector
-            final_matches = get_matches_for_vector(final_vector, database_vectors, 0.48, extra_norms)
+            # Run final sweep at 0.35 threshold using expanded final vector
+            final_matches = get_matches_for_vector(final_vector, database_vectors, 0.35, extra_norms)
             return {
                 "matches": [{"photoId": m["photoId"], "score": m["score"]} for m in final_matches],
                 "query_expanded": "two-stage",
@@ -291,8 +291,8 @@ def verify_anchor(selfie_path, anchor_vector, aligner=None, arcface_net=None):
     db_vector_norm = db_vector / np.linalg.norm(db_vector) if np.linalg.norm(db_vector) > 0 else db_vector
     similarity = float(np.dot(selfie_feat_norm, db_vector_norm))
     
-    # Check threshold (below 0.45 is a reject)
-    verified = similarity >= 0.45
+    # Check threshold (below 0.28 is a reject)
+    verified = similarity >= 0.28
     
     if verified:
         return {

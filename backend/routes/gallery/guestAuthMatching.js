@@ -525,11 +525,11 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
           }
         }
       } else {
-        const mainMatches = await qdrant.searchVectors(eventId, anchorVector, 100000, 0.48);
+        const mainMatches = await qdrant.searchVectors(eventId, anchorVector, 100000, 0.35);
         const photoIdsSet = new Set(mainMatches.map(m => m.photo_id));
         
         for (const extraVec of extraVectors) {
-          const extraMatches = await qdrant.searchVectors(eventId, extraVec, 100000, 0.48);
+          const extraMatches = await qdrant.searchVectors(eventId, extraVec, 100000, 0.35);
           extraMatches.forEach(m => photoIdsSet.add(m.photo_id));
         }
         photoIds = Array.from(photoIdsSet);
