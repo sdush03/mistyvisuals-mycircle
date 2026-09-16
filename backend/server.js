@@ -242,8 +242,8 @@ fastify.addHook('onRequest', async (req, reply) => {
               aspectRatio: 1.5,
               width: 1200,
               height: 800,
-              caption: '⚠️ UPDATE REQUIRED: Please update Misty Visuals to Version 1.2.0 on the App Store or Google Play Store to view your event photos.',
-              title: '⚠️ UPDATE REQUIRED',
+              caption: "✨ TIME FOR A VIP UPGRADE! We've added fresh new sparkle to the app! Update to the latest version on the App Store or Google Play Store to view your full photo gallery & cinema reels.",
+              title: "✨ TIME FOR A VIP UPGRADE!",
               category: 'ALL',
               tabName: 'ALL',
               uploadedAt: new Date().toISOString()
@@ -495,14 +495,15 @@ fastify.get('/api/app-config/version', async (req, reply) => {
 });
 fastify.get('/api/app-config/banner.svg', async (req, reply) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
-    <rect width="1200" height="800" fill="#0f0f11"/>
-    <circle cx="600" cy="230" r="70" fill="#1c1c24"/>
-    <path d="M570 230l30-30 30 30m-30-30v70" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="600" y="390" font-family="Arial, sans-serif" font-size="44" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="1.5">UPDATE REQUIRED</text>
-    <text x="600" y="460" font-family="Arial, sans-serif" font-size="24" fill="#a1a1aa" text-anchor="middle">A new version of Misty Visuals is available.</text>
-    <text x="600" y="505" font-family="Arial, sans-serif" font-size="24" fill="#a1a1aa" text-anchor="middle">Please update to Version 1.2.0 on the App Store or Google Play Store.</text>
-    <rect x="420" y="580" width="360" height="70" rx="35" fill="#ffffff"/>
-    <text x="600" y="625" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#000000" text-anchor="middle" letter-spacing="2">UPDATE NOW ON STORE</text>
+    <rect width="1200" height="800" fill="#0c0c0e"/>
+    <circle cx="600" cy="220" r="75" fill="#1c1c24" stroke="#d4af37" stroke-width="2"/>
+    <text x="600" y="235" font-family="Arial, sans-serif" font-size="40" text-anchor="middle">👑</text>
+    <text x="600" y="380" font-family="'Futura', 'Arial', sans-serif" font-size="44" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="2">TIME FOR A VIP UPGRADE!</text>
+    <text x="600" y="450" font-family="Arial, sans-serif" font-size="26" font-weight="600" fill="#d4af37" text-anchor="middle">We’ve added fresh new sparkle to the app! ✨</text>
+    <text x="600" y="505" font-family="Arial, sans-serif" font-size="22" fill="#a1a1aa" text-anchor="middle">Update to the latest version on the App Store or Google Play Store</text>
+    <text x="600" y="545" font-family="Arial, sans-serif" font-size="22" fill="#a1a1aa" text-anchor="middle">to view your full photo gallery &amp; cinema reels.</text>
+    <rect x="380" y="610" width="440" height="72" rx="36" fill="#ffffff"/>
+    <text x="600" y="655" font-family="'Futura', 'Arial', sans-serif" font-size="20" font-weight="bold" fill="#000000" text-anchor="middle" letter-spacing="2">CLAIM YOUR VIP UPDATE 👑</text>
   </svg>`;
   reply.header('Content-Type', 'image/svg+xml');
   return reply.send(svg);
