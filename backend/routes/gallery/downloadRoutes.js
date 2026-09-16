@@ -90,11 +90,11 @@ module.exports = async function downloadRoutes(fastify, opts) {
           }
         }
       } else {
-        const mainMatches = await qdrant.searchVectors(eventId, anchorVector, 100000, 0.35);
+        const mainMatches = await qdrant.searchVectors(eventId, anchorVector, 100000, 0.48);
         const photoIdsSet = new Set(mainMatches.map(m => m.photo_id));
         
         for (const extraVec of extraVectors) {
-          const extraMatches = await qdrant.searchVectors(eventId, extraVec, 100000, 0.35);
+          const extraMatches = await qdrant.searchVectors(eventId, extraVec, 100000, 0.48);
           extraMatches.forEach(m => photoIdsSet.add(m.photo_id));
         }
         photoIds = Array.from(photoIdsSet);
