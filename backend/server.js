@@ -495,21 +495,40 @@ fastify.get('/api/app-config/version', async (req, reply) => {
 });
 fastify.get('/api/app-config/banner.svg', async (req, reply) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
-    <rect width="1200" height="800" fill="#0c0c0e"/>
-    <circle cx="600" cy="200" r="70" fill="#1c1c24" stroke="#ffffff" stroke-width="2"/>
-    <path d="M570 200l30-30 30 30m-30-30v70" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="600" y="340" font-family="'Futura', 'Arial', sans-serif" font-size="44" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="2">TIME FOR APP UPGRADE</text>
-    <text x="600" y="410" font-family="Arial, sans-serif" font-size="26" font-weight="600" fill="#a1a1aa" text-anchor="middle">We’ve added fresh new features to the app! ✨</text>
-    <text x="600" y="460" font-family="Arial, sans-serif" font-size="22" fill="#71717a" text-anchor="middle">Update Misty Visuals to view your full photo gallery &amp; cinema reels.</text>
+    <rect width="1200" height="800" fill="#0E0E14"/>
+    <rect x="40" y="40" width="1120" height="720" rx="32" fill="#14141F" stroke="#2A2A3C" stroke-width="3"/>
+
+    <circle cx="600" cy="180" r="70" fill="#1E1E2C" stroke="#F59E0B" stroke-width="3"/>
+    <g transform="translate(600, 180)">
+      <path d="M-20 -8 L0 -28 L20 -8 M0 -28 L0 16 M-24 24 L24 24" stroke="#F59E0B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </g>
+
+    <text x="600" y="320" font-family="'Futura', 'Montserrat', 'Arial', sans-serif" font-size="44" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="2">TIME FOR APP UPGRADE!</text>
+    <text x="600" y="385" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#F59E0B" text-anchor="middle">We’ve added fresh new sparkle to the app! ✨</text>
+    <text x="600" y="440" font-family="Arial, sans-serif" font-size="22" fill="#A1A1AA" text-anchor="middle">Update Misty Visuals from the store to view your full photo gallery &amp; cinema reels.</text>
+
     <g transform="translate(0, 520)">
-      <text x="600" y="30" font-family="'Futura', 'Arial', sans-serif" font-size="16" font-weight="bold" fill="#71717a" text-anchor="middle" letter-spacing="3">DOWNLOAD FROM</text>
-      <g transform="translate(360, 50)">
-        <rect width="220" height="64" rx="16" fill="#1c1c24" stroke="#33333f" stroke-width="1.5"/>
-        <text x="110" y="39" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle"> App Store</text>
+      <text x="600" y="20" font-family="'Futura', 'Arial', sans-serif" font-size="16" font-weight="800" fill="#71717A" text-anchor="middle" letter-spacing="3">DOWNLOAD LATEST VERSION FROM</text>
+
+      <g transform="translate(330, 42)">
+        <rect width="250" height="74" rx="16" fill="#1E1E2A" stroke="#3F3F54" stroke-width="2"/>
+        <g transform="translate(24, 17) scale(1.5)">
+          <path fill="#FFFFFF" d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.64c.67-.82 1.13-1.96.99-3.1-.98.04-2.16.65-2.85 1.46-.62.72-1.16 1.88-1.01 3 .1.01 2.2.06 2.87-1.36"/>
+        </g>
+        <text x="80" y="30" font-family="Arial, sans-serif" font-size="12" fill="#A1A1AA">Download on the</text>
+        <text x="80" y="52" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF">App Store</text>
       </g>
-      <g transform="translate(620, 50)">
-        <rect width="220" height="64" rx="16" fill="#1c1c24" stroke="#33333f" stroke-width="1.5"/>
-        <text x="110" y="39" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">▶ Google Play</text>
+
+      <g transform="translate(620, 42)">
+        <rect width="250" height="74" rx="16" fill="#1E1E2A" stroke="#3F3F54" stroke-width="2"/>
+        <g transform="translate(24, 18) scale(1.4)">
+          <path fill="#00D2FF" d="M1.22 0.08C0.7 0.32 0.35 0.8 0.35 1.45v25.1c0 0.65 0.35 1.13 0.87 1.37l0.14 0.08 14.04-14.04v-0.28L1.36 0z"/>
+          <path fill="#FF3A44" d="M20.06 18.62l-4.66-4.66v-0.28l4.66-4.66 0.14 0.08 5.53 3.14c1.58 0.9 1.58 2.37 0 3.27l-5.53 3.14-0.14 0.08z"/>
+          <path fill="#00E676" d="M20.2 18.93L15.4 14.13 1.36 28.17c0.52 0.55 1.37 0.62 2.33 0.08l16.51-9.32z"/>
+          <path fill="#FFC107" d="M20.2 9.38L3.69 0.06C2.73-0.48 1.88-0.41 1.36 0.14L15.4 14.18l4.8-4.8z"/>
+        </g>
+        <text x="78" y="30" font-family="Arial, sans-serif" font-size="12" fill="#A1A1AA">GET IT ON</text>
+        <text x="78" y="52" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF">Google Play</text>
       </g>
     </g>
   </svg>`;
