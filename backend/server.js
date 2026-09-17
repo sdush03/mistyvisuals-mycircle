@@ -182,6 +182,8 @@ const PUBLIC_API_PATHS = new Set([
   '/api/version',
   '/api/app-config/version',
   '/api/app-config/banner.svg',
+  '/api/app-config/banner.jpg',
+  '/api/app-config/banner.png',
   '/api/webhooks/meta',
   '/auth/login',
   '/auth/logout',
