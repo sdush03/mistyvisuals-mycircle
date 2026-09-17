@@ -273,6 +273,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const swipeStartXRef = useRef<number | null>(null)
   const swipeStartYRef = useRef<number | null>(null)
   const gesturePreventLikeRef = useRef(false)
+  const lightboxVideoRef = useRef<HTMLVideoElement | null>(null)
 
   const loadFavoritesList = useCallback(async () => {
     setLoadingFavorites(true)
@@ -299,6 +300,11 @@ export default function GuestGalleryPhotos({ params }: Props) {
   }, [slug, apiUrl])
 
   useEffect(() => {
+    // Pause any playing video when navigating or closing the lightbox
+    if (lightboxVideoRef.current) {
+      lightboxVideoRef.current.pause()
+      lightboxVideoRef.current.currentTime = 0
+    }
     setHighResLoaded(false)
     setZoomScale(1)
     setZoomPosition({ x: 0, y: 0 })
@@ -1767,6 +1773,26 @@ export default function GuestGalleryPhotos({ params }: Props) {
                             className="pointer-events-none select-none"
                             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }}
                           />
+                          {/* ▶ Play badge for videos */}
+                          {p.isVideo && (
+                            <div className="pointer-events-none" style={{
+                              position: 'absolute', inset: 0,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              <div style={{
+                                width: '40px', height: '40px', borderRadius: '50%',
+                                background: 'rgba(0,0,0,0.55)',
+                                backdropFilter: 'blur(4px)',
+                                WebkitBackdropFilter: 'blur(4px)',
+                                border: '1.5px solid rgba(255,255,255,0.55)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="white" style={{ marginLeft: '2px' }}>
+                                  <path d="M8 5v14l11-7z"/>
+                                </svg>
+                              </div>
+                            </div>
+                          )}
                           {/* Bottom-Right Controls (Download & Heart/Like) */}
                           <div 
                             className="absolute bottom-3 right-3 z-10 flex items-center gap-3"
@@ -1897,6 +1923,26 @@ export default function GuestGalleryPhotos({ params }: Props) {
                             className="pointer-events-none select-none"
                             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }}
                           />
+                          {/* ▶ Play badge for videos */}
+                          {p.isVideo && (
+                            <div className="pointer-events-none" style={{
+                              position: 'absolute', inset: 0,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              <div style={{
+                                width: '40px', height: '40px', borderRadius: '50%',
+                                background: 'rgba(0,0,0,0.55)',
+                                backdropFilter: 'blur(4px)',
+                                WebkitBackdropFilter: 'blur(4px)',
+                                border: '1.5px solid rgba(255,255,255,0.55)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="white" style={{ marginLeft: '2px' }}>
+                                  <path d="M8 5v14l11-7z"/>
+                                </svg>
+                              </div>
+                            </div>
+                          )}
                           {/* Bottom-Right Controls (Download & Heart/Like) */}
                           <div 
                             className="absolute bottom-3 right-3 z-10 flex items-center gap-3"
@@ -2032,6 +2078,26 @@ export default function GuestGalleryPhotos({ params }: Props) {
                               className="pointer-events-none select-none"
                               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }}
                             />
+                            {/* ▶ Play badge for videos */}
+                            {p.isVideo && (
+                              <div className="pointer-events-none" style={{
+                                position: 'absolute', inset: 0,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>
+                                <div style={{
+                                  width: '40px', height: '40px', borderRadius: '50%',
+                                  background: 'rgba(0,0,0,0.55)',
+                                  backdropFilter: 'blur(4px)',
+                                  WebkitBackdropFilter: 'blur(4px)',
+                                  border: '1.5px solid rgba(255,255,255,0.55)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="white" style={{ marginLeft: '2px' }}>
+                                    <path d="M8 5v14l11-7z"/>
+                                  </svg>
+                                </div>
+                              </div>
+                            )}
                             {/* Bottom-Right Controls (Download & Heart/Like) */}
                             <div 
                               className="absolute bottom-3 right-3 z-10 flex items-center gap-3"
@@ -2263,91 +2329,118 @@ export default function GuestGalleryPhotos({ params }: Props) {
               }}
               onClick={e => e.stopPropagation()}
             >
-              {/* Blurred thumbnail placeholder visible while high-res loads */}
-              {!highResLoaded && (
-                <img
-                  src={getThumbnailUrl(activePhotosList[activePhotoIndex], 600)}
-                  alt=""
-                  onError={(e) => {
-                    const target = e.currentTarget
-                    const current = activePhotosList[activePhotoIndex]
-                    const fallback = current?.r2Url || current?.url || current?.file_url
-                    if (fallback && target.src !== fallback) {
-                      target.src = fallback
-                    }
-                  }}
-                  onDragStart={(e) => e.preventDefault()}
-                  className="pointer-events-none select-none"
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'contain',
-                    borderRadius: '3px',
-                    filter: 'blur(10px)',
-                    transform: 'scale(1.02)', // hides raw blur edge bleeding
-                    imageOrientation: 'from-image',
-                  }}
-                />
-              )}
+              {/* ── Video or Image ── */}
+              {activePhotosList[activePhotoIndex].isVideo ? (
+                /* Native video player — no zoom/swipe overlay so browser controls work */
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <video
+                    ref={lightboxVideoRef}
+                    key={activePhotosList[activePhotoIndex].r2Url}
+                    src={activePhotosList[activePhotoIndex].r2Url}
+                    controls
+                    autoPlay
+                    playsInline
+                    onClick={e => e.stopPropagation()}
+                    onContextMenu={e => e.preventDefault()}
+                    style={{
+                      maxWidth: '96vw',
+                      maxHeight: 'calc(100vh - 148px)',
+                      borderRadius: '3px',
+                      display: 'block',
+                      background: '#000',
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+              ) : (
+                <>
+                  {/* Blurred thumbnail placeholder visible while high-res loads */}
+                  {!highResLoaded && (
+                    <img
+                      src={getThumbnailUrl(activePhotosList[activePhotoIndex], 600)}
+                      alt=""
+                      onError={(e) => {
+                        const target = e.currentTarget
+                        const current = activePhotosList[activePhotoIndex]
+                        const fallback = current?.r2Url || current?.url || current?.file_url
+                        if (fallback && target.src !== fallback) {
+                          target.src = fallback
+                        }
+                      }}
+                      onDragStart={(e) => e.preventDefault()}
+                      className="pointer-events-none select-none"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'contain',
+                        borderRadius: '3px',
+                        filter: 'blur(10px)',
+                        transform: 'scale(1.02)',
+                        imageOrientation: 'from-image',
+                      }}
+                    />
+                  )}
 
-              <div style={{ position: 'relative', display: 'block', userSelect: 'none', WebkitTouchCallout: 'none' }}>
-                {/* Transparent overlay capturing all pointer events to prevent right click & touch hold menus */}
-                <div
-                  onDoubleClick={() => {
-                    const now = Date.now();
-                    if (now - lastTouchDoubleTapRef.current < 500) {
-                      return;
-                    }
-                    if (!gesturePreventLikeRef.current) {
-                      handleLightboxDoubleTap(activePhotosList[activePhotoIndex].id, activePhotosList[activePhotoIndex].isLiked)
-                    }
-                  }}
-                  onTouchEnd={e => {
-                    if (gesturePreventLikeRef.current) {
-                      return;
-                    }
-                    const now = Date.now();
-                    if (now - lastTapRef.current < 300) {
-                      lastTouchDoubleTapRef.current = now;
-                      handleLightboxDoubleTap(activePhotosList[activePhotoIndex].id, activePhotosList[activePhotoIndex].isLiked);
-                    }
-                    lastTapRef.current = now;
-                  }}
-                  onContextMenu={(e) => e.preventDefault()}
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    zIndex: 10,
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    WebkitTouchCallout: 'none'
-                  }}
-                />
-                <img
-                  src={activePhotosList[activePhotoIndex].r2Url}
-                  alt=""
-                  onLoad={() => setHighResLoaded(true)}
-                  onDragStart={(e) => e.preventDefault()}
-                  onContextMenu={(e) => e.preventDefault()}
-                  className="pointer-events-none select-none lightbox-main-img"
-                  style={{
-                    maxWidth: '96vw',
-                    maxHeight: 'calc(100vh - 148px)', // 100vh - 68px bottom bar - 60px top padding - 20px bottom padding
-                    objectFit: 'contain',
-                    userSelect: 'none',
-                    borderRadius: '3px',
-                    display: 'block',
-                    opacity: highResLoaded ? 1 : 0,
-                    transition: 'opacity 0.35s ease',
-                    position: 'relative',
-                    zIndex: 2,
-                    imageOrientation: 'from-image',
-                    WebkitTouchCallout: 'none',
-                  }}
-                />
-              </div>
+                  <div style={{ position: 'relative', display: 'block', userSelect: 'none', WebkitTouchCallout: 'none' }}>
+                    {/* Transparent overlay capturing all pointer events to prevent right click & touch hold menus */}
+                    <div
+                      onDoubleClick={() => {
+                        const now = Date.now();
+                        if (now - lastTouchDoubleTapRef.current < 500) {
+                          return;
+                        }
+                        if (!gesturePreventLikeRef.current) {
+                          handleLightboxDoubleTap(activePhotosList[activePhotoIndex].id, activePhotosList[activePhotoIndex].isLiked)
+                        }
+                      }}
+                      onTouchEnd={e => {
+                        if (gesturePreventLikeRef.current) {
+                          return;
+                        }
+                        const now = Date.now();
+                        if (now - lastTapRef.current < 300) {
+                          lastTouchDoubleTapRef.current = now;
+                          handleLightboxDoubleTap(activePhotosList[activePhotoIndex].id, activePhotosList[activePhotoIndex].isLiked);
+                        }
+                        lastTapRef.current = now;
+                      }}
+                      onContextMenu={(e) => e.preventDefault()}
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        zIndex: 10,
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        WebkitTouchCallout: 'none'
+                      }}
+                    />
+                    <img
+                      src={activePhotosList[activePhotoIndex].r2Url}
+                      alt=""
+                      onLoad={() => setHighResLoaded(true)}
+                      onDragStart={(e) => e.preventDefault()}
+                      onContextMenu={(e) => e.preventDefault()}
+                      className="pointer-events-none select-none lightbox-main-img"
+                      style={{
+                        maxWidth: '96vw',
+                        maxHeight: 'calc(100vh - 148px)',
+                        objectFit: 'contain',
+                        userSelect: 'none',
+                        borderRadius: '3px',
+                        display: 'block',
+                        opacity: highResLoaded ? 1 : 0,
+                        transition: 'opacity 0.35s ease',
+                        position: 'relative',
+                        zIndex: 2,
+                        imageOrientation: 'from-image',
+                        WebkitTouchCallout: 'none',
+                      }}
+                    />
+                  </div>
+                </>
+              )}
 
               {showHeartPop && (
                 <div
