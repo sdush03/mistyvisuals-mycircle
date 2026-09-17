@@ -248,30 +248,33 @@ fastify.addHook('onRequest', async (req, reply) => {
   if (path.startsWith('/api/gallery/public/') || path.startsWith('/api/gallery/family')) {
     const appVer = req.headers['x-app-version'];
     const ua = (req.headers['user-agent'] || '').toLowerCase();
-    const isMobileApp = Boolean(appVer) || ua.includes('okhttp') || ua.includes('cfnetwork') || ua.includes('expo');
+    const isMobileApp = Boolean(appVer) || ua.includes('okhttp') || ua.includes('cfnetwork') || ua.includes('expo') || ua.includes('mycircle') || ua.includes('darwin') || ua.includes('reactnative') || !ua.includes('mozilla');
 
     const isVerified120 = isClientVerifiedModern(req) || (appVer && (appVer.startsWith('1.2') || appVer.startsWith('1.3') || appVer === '1.2.0'));
     const isUnverifiedMobileClient = isMobileApp && !isVerified120;
 
-    if (isUnverifiedMobileClient && path.includes('/photos')) {
+    const isPhotoOrGalleryPath = path.includes('/photos') || path.includes('/favorites') || path.includes('/matched-photos');
+
+    if (isUnverifiedMobileClient && isPhotoOrGalleryPath) {
       const bannerUrl = 'https://mycircle.mistyvisuals.com/api/app-config/banner.svg?v=v3';
+      const bannerItem = {
+        id: 999999,
+        r2Url: bannerUrl,
+        thumbnailUrl: bannerUrl,
+        previewUrl: bannerUrl,
+        aspectRatio: 1.5,
+        width: 1200,
+        height: 800,
+        caption: "🚀 TIME FOR APP UPGRADE! We've added fresh new features to the app! Update to the latest version on the App Store or Google Play Store to view your full photo gallery & cinema reels.",
+        title: "🚀 TIME FOR APP UPGRADE",
+        category: 'ALL',
+        tabName: 'ALL',
+        uploadedAt: new Date().toISOString()
+      };
       return reply.code(200).send({
-        photos: [
-          {
-            id: 999999,
-            r2Url: bannerUrl,
-            thumbnailUrl: bannerUrl,
-            previewUrl: bannerUrl,
-            aspectRatio: 1.5,
-            width: 1200,
-            height: 800,
-            caption: "🚀 TIME FOR APP UPGRADE! We've added fresh new features to the app! Update to the latest version on the App Store or Google Play Store to view your full photo gallery & cinema reels.",
-            title: "🚀 TIME FOR APP UPGRADE",
-            category: 'ALL',
-            tabName: 'ALL',
-            uploadedAt: new Date().toISOString()
-          }
-        ],
+        photos: [bannerItem],
+        matchedPhotos: [bannerItem],
+        favorites: [bannerItem],
         total: 1,
         hasMore: false
       });
