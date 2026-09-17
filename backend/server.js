@@ -256,7 +256,7 @@ fastify.addHook('onRequest', async (req, reply) => {
     const isPhotoOrGalleryPath = path.includes('/photos') || path.includes('/favorites') || path.includes('/matched-photos');
 
     if (isUnverifiedMobileClient && isPhotoOrGalleryPath) {
-      const bannerUrl = 'https://mycircle.mistyvisuals.com/api/app-config/banner.svg?v=v3';
+      const bannerUrl = 'https://mycircle.mistyvisuals.com/api/app-config/banner.jpg?v=v5';
       const bannerItem = {
         id: 999999,
         r2Url: bannerUrl,
@@ -519,8 +519,8 @@ fastify.get('/api/app-config/version', async (req, reply) => {
     androidStoreUrl: 'https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle',
   });
 });
-fastify.get('/api/app-config/banner.svg', async (req, reply) => {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+function getBannerSvg() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
     <rect width="1200" height="800" fill="#0E0E14"/>
     <rect x="40" y="40" width="1120" height="720" rx="32" fill="#14141F" stroke="#2A2A3C" stroke-width="3"/>
 
@@ -558,11 +558,30 @@ fastify.get('/api/app-config/banner.svg', async (req, reply) => {
       </g>
     </g>
   </svg>`;
+}
+
+fastify.get('/api/app-config/banner.svg', async (req, reply) => {
   reply.header('Content-Type', 'image/svg+xml');
   reply.header('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
   reply.header('Pragma', 'no-cache');
   reply.header('Expires', '0');
-  return reply.send(svg);
+  return reply.send(getBannerSvg());
+});
+
+fastify.get('/api/app-config/banner.jpg', async (req, reply) => {
+  const sharp = require('sharp');
+  const jpgBuffer = await sharp(Buffer.from(getBannerSvg())).jpeg({ quality: 95 }).toBuffer();
+  reply.header('Content-Type', 'image/jpeg');
+  reply.header('Cache-Control', 'public, max-age=86400');
+  return reply.send(jpgBuffer);
+});
+
+fastify.get('/api/app-config/banner.png', async (req, reply) => {
+  const sharp = require('sharp');
+  const pngBuffer = await sharp(Buffer.from(getBannerSvg())).png().toBuffer();
+  reply.header('Content-Type', 'image/png');
+  reply.header('Cache-Control', 'public, max-age=86400');
+  return reply.send(pngBuffer);
 });
 
 /* ===================== START ===================== */
