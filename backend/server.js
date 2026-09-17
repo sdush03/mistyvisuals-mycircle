@@ -223,41 +223,7 @@ fastify.addHook('onRequest', async (req, reply) => {
   if (req.method === 'OPTIONS') return
   const path = url.split('?')[0]
 
-  // Option 1: Update Banner Photo Card for <=1.1.6 mobile app requests
-  if (path.startsWith('/api/gallery/public/') || path.startsWith('/api/gallery/family')) {
-    const appVer = req.headers['x-app-version'];
-    const ua = (req.headers['user-agent'] || '').toLowerCase();
-    const isMobileApp = Boolean(appVer) || ua.includes('okhttp') || ua.includes('cfnetwork') || ua.includes('expo');
-
-    const isModernVersion = appVer && (appVer.startsWith('1.2') || appVer.startsWith('1.3') || appVer === '1.2.0');
-    const isOldVersion = !isModernVersion && (appVer === '1.1.6' || (isMobileApp && !appVer));
-
-    if (isOldVersion) {
-      if (path.includes('/photos')) {
-        const bannerUrl = 'https://mycircle.mistyvisuals.com/api/app-config/banner.svg?v=v3';
-        return reply.code(200).send({
-          photos: [
-            {
-              id: 999999,
-              r2Url: bannerUrl,
-              thumbnailUrl: bannerUrl,
-              previewUrl: bannerUrl,
-              aspectRatio: 1.5,
-              width: 1200,
-              height: 800,
-              caption: "🚀 TIME FOR APP UPGRADE! We've added fresh new features to the app! Update to the latest version on the App Store or Google Play Store to view your full photo gallery & cinema reels.",
-              title: "🚀 TIME FOR APP UPGRADE",
-              category: 'ALL',
-              tabName: 'ALL',
-              uploadedAt: new Date().toISOString()
-            }
-          ],
-          total: 1,
-          hasMore: false
-        });
-      }
-    }
-  }
+  // Global rate limit or interceptor hooks can go here if needed
 
   // Apply high-capacity global rate limit to public gallery endpoints
   if (path.startsWith('/api/gallery/public/') || path.startsWith('/gallery/public/')) {
