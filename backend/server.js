@@ -220,19 +220,17 @@ const globalPublicRateLimiter = createRateLimiter({
   errorMessage: 'Server busy. Please slow down your requests.'
 });
 
-// Map to track IP addresses and Auth Tokens of verified modern app (1.2.0+) clients
+// Map to track per-session Auth Tokens / Guest Tokens of verified modern app (1.2.0+) clients
 const verifiedModernClients = new Map();
 
 function markClientAsModern(req) {
-  const ip = req.ip || req.raw?.socket?.remoteAddress || req.socket?.remoteAddress;
-  if (ip) verifiedModernClients.set(ip, Date.now());
-  if (req.headers.authorization) verifiedModernClients.set(req.headers.authorization, Date.now());
+  const token = req.headers.authorization || req.headers['x-guest-token'];
+  if (token) verifiedModernClients.set(token, Date.now());
 }
 
 function isClientVerifiedModern(req) {
-  const ip = req.ip || req.raw?.socket?.remoteAddress || req.socket?.remoteAddress;
-  if (ip && verifiedModernClients.has(ip)) return true;
-  if (req.headers.authorization && verifiedModernClients.has(req.headers.authorization)) return true;
+  const token = req.headers.authorization || req.headers['x-guest-token'];
+  if (token && verifiedModernClients.has(token)) return true;
   return false;
 }
 
