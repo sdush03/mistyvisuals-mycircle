@@ -23,6 +23,10 @@ module.exports = async function galleryRoutes(fastify, opts) {
       return reply.code(400).send({ error: 'Missing url parameter' });
     }
 
+    if (imageUrl.includes('banner.svg') || imageUrl.toLowerCase().split('?')[0].endsWith('.svg')) {
+      return reply.redirect(encodeURI(imageUrl));
+    }
+
     let key = '';
 
     if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
