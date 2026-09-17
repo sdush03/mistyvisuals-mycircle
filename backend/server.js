@@ -243,16 +243,17 @@ fastify.addHook('onRequest', async (req, reply) => {
     markClientAsModern(req);
   }
 
-  // Intercept old <=1.1.6 mobile app requests that never call version/analytics APIs
+  // Intercept mobile app requests: ONLY verified 1.2.0+ users see actual photos.
+  // All other unverified mobile app clients see the upgrade photo banner.
   if (path.startsWith('/api/gallery/public/') || path.startsWith('/api/gallery/family')) {
     const appVer = req.headers['x-app-version'];
     const ua = (req.headers['user-agent'] || '').toLowerCase();
     const isMobileApp = Boolean(appVer) || ua.includes('okhttp') || ua.includes('cfnetwork') || ua.includes('expo');
 
-    const isModernVersion = isClientVerifiedModern(req) || (appVer && (appVer.startsWith('1.2') || appVer.startsWith('1.3') || appVer === '1.2.0'));
-    const isOldVersion = !isModernVersion && (appVer === '1.1.6' || (isMobileApp && !appVer));
+    const isVerified120 = isClientVerifiedModern(req) || (appVer && (appVer.startsWith('1.2') || appVer.startsWith('1.3') || appVer === '1.2.0'));
+    const isUnverifiedMobileClient = isMobileApp && !isVerified120;
 
-    if (isOldVersion && path.includes('/photos')) {
+    if (isUnverifiedMobileClient && path.includes('/photos')) {
       const bannerUrl = 'https://mycircle.mistyvisuals.com/api/app-config/banner.svg?v=v3';
       return reply.code(200).send({
         photos: [
