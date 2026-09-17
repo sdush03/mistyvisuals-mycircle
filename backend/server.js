@@ -229,7 +229,10 @@ fastify.addHook('onRequest', async (req, reply) => {
     const ua = (req.headers['user-agent'] || '').toLowerCase();
     const isMobileApp = Boolean(appVer) || ua.includes('okhttp') || ua.includes('cfnetwork') || ua.includes('expo');
 
-    if (isMobileApp && (!appVer || appVer === '1.1.6')) {
+    const isModernVersion = appVer && (appVer.startsWith('1.2') || appVer.startsWith('1.3') || appVer === '1.2.0');
+    const isOldVersion = !isModernVersion && (appVer === '1.1.6' || (isMobileApp && !appVer));
+
+    if (isOldVersion) {
       if (path.includes('/photos')) {
         const bannerUrl = 'https://mycircle.mistyvisuals.com/api/app-config/banner.svg?v=v3';
         return reply.code(200).send({
