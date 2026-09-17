@@ -218,12 +218,64 @@ const globalPublicRateLimiter = createRateLimiter({
   errorMessage: 'Server busy. Please slow down your requests.'
 });
 
+// Map to track IP addresses and Auth Tokens of verified modern app (1.2.0+) clients
+const verifiedModernClients = new Map();
+
+function markClientAsModern(req) {
+  const ip = req.ip || req.raw?.socket?.remoteAddress || req.socket?.remoteAddress;
+  if (ip) verifiedModernClients.set(ip, Date.now());
+  if (req.headers.authorization) verifiedModernClients.set(req.headers.authorization, Date.now());
+}
+
+function isClientVerifiedModern(req) {
+  const ip = req.ip || req.raw?.socket?.remoteAddress || req.socket?.remoteAddress;
+  if (ip && verifiedModernClients.has(ip)) return true;
+  if (req.headers.authorization && verifiedModernClients.has(req.headers.authorization)) return true;
+  return false;
+}
+
 fastify.addHook('onRequest', async (req, reply) => {
   const url = req.raw?.url || req.url || ''
   if (req.method === 'OPTIONS') return
   const path = url.split('?')[0]
 
-  // Global rate limit or interceptor hooks can go here if needed
+  if (req.headers['x-app-version']) {
+    markClientAsModern(req);
+  }
+
+  // Intercept old <=1.1.6 mobile app requests that never call version/analytics APIs
+  if (path.startsWith('/api/gallery/public/') || path.startsWith('/api/gallery/family')) {
+    const appVer = req.headers['x-app-version'];
+    const ua = (req.headers['user-agent'] || '').toLowerCase();
+    const isMobileApp = Boolean(appVer) || ua.includes('okhttp') || ua.includes('cfnetwork') || ua.includes('expo');
+
+    const isModernVersion = isClientVerifiedModern(req) || (appVer && (appVer.startsWith('1.2') || appVer.startsWith('1.3') || appVer === '1.2.0'));
+    const isOldVersion = !isModernVersion && (appVer === '1.1.6' || (isMobileApp && !appVer));
+
+    if (isOldVersion && path.includes('/photos')) {
+      const bannerUrl = 'https://mycircle.mistyvisuals.com/api/app-config/banner.svg?v=v3';
+      return reply.code(200).send({
+        photos: [
+          {
+            id: 999999,
+            r2Url: bannerUrl,
+            thumbnailUrl: bannerUrl,
+            previewUrl: bannerUrl,
+            aspectRatio: 1.5,
+            width: 1200,
+            height: 800,
+            caption: "🚀 TIME FOR APP UPGRADE! We've added fresh new features to the app! Update to the latest version on the App Store or Google Play Store to view your full photo gallery & cinema reels.",
+            title: "🚀 TIME FOR APP UPGRADE",
+            category: 'ALL',
+            tabName: 'ALL',
+            uploadedAt: new Date().toISOString()
+          }
+        ],
+        total: 1,
+        hasMore: false
+      });
+    }
+  }
 
   // Apply high-capacity global rate limit to public gallery endpoints
   if (path.startsWith('/api/gallery/public/') || path.startsWith('/gallery/public/')) {
@@ -453,6 +505,7 @@ fastify.register(require('./routes/saves'), {
 
 /* ===================== APP VERSION CONFIG ===================== */
 fastify.get('/api/app-config/version', async (req, reply) => {
+  markClientAsModern(req);
   return reply.send({
     minSupportedVersion: '1.2.0',
     latestVersion: '1.2.0',
