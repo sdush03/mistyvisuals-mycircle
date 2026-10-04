@@ -236,6 +236,400 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
     }
   });
 
+  // Consolidated Gallery Bundle: Validates guest auth & returns event details, profile,
+  // authorized photos, and tabs in a SINGLE high-speed network round-trip.
+  fastify.post('/api/gallery/public/events/:slug/bundle', async (req, reply) => {
+    const slug = req.params.slug.toLowerCase().trim();
+    const { code } = req.body || {};
+    try {
+      const isPreview = checkPreviewToken(fastify, req);
+      const event = await prisma.galleryEvent.findUnique({
+        where: { slug },
+        select: {
+          id: true,
+          title: true,
+          date: true,
+          coverPhotoUrl: true,
+          coverPhotoMobileUrl: true,
+          coverPhotoSquareUrl: true,
+          active: true,
+          tabs: true,
+          allowDownloads: true,
+          allowBulkDownloads: true,
+          fullCode: true,
+          partialCode: true,
+        }
+      });
+
+      if (!event || (!event.active && !isPreview)) {
+        return reply.code(404).send({ error: 'Gallery not found or inactive' });
+      }
+
+      let guestId = null;
+      let hasFullAccess = !!isPreview;
+      let isBrideOrGroom = false;
+      let resolvedDisplayRole = null;
+      let dbGuest = null;
+      let circleUser = null;
+      let refreshPayload = null;
+      const authHeader = req.headers.authorization;
+
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+          const rawToken = authHeader.split(' ')[1];
+          const decoded = fastify.jwt.verify(rawToken);
+
+          if (decoded.role === 'admin' || (decoded.roles && decoded.roles.includes('admin'))) {
+            hasFullAccess = true;
+          } else if (decoded.isAdminPreview && decoded.slug && decoded.slug.toLowerCase().trim() === slug) {
+            hasFullAccess = true;
+            let adminGuest = await prisma.guest.findFirst({
+              where: { eventId: event.id, email: 'admin@mistyvisuals.com' }
+            });
+            if (!adminGuest) {
+              adminGuest = await prisma.guest.create({
+                data: {
+                  eventId: event.id,
+                  email: 'admin@mistyvisuals.com',
+                  name: 'Admin Preview',
+                  provider: 'system',
+                  providerId: 'admin-preview',
+                  hasFullAccess: true
+                }
+              });
+            }
+            dbGuest = adminGuest;
+            guestId = adminGuest.id;
+          } else if (decoded.role === 'guest') {
+            const eventIdMatches = decoded.eventId != null && String(decoded.eventId) === String(event.id);
+            const slugMatches = decoded.slug && decoded.slug.toLowerCase().trim() === slug;
+
+            if (eventIdMatches || slugMatches) {
+              guestId = decoded.guestId;
+            } else if (decoded.guestId) {
+              const fallbackGuest = await prisma.guest.findFirst({
+                where: { id: decoded.guestId, eventId: event.id }
+              });
+              if (fallbackGuest) guestId = decoded.guestId;
+            }
+
+            if (guestId) {
+              dbGuest = await prisma.guest.findUnique({
+                where: { id: guestId },
+                include: { circleUser: true }
+              });
+
+              if (!dbGuest) {
+                return reply.code(403).send({ error: 'Participant removed from gallery', code: 'ACCESS_REVOKED' });
+              }
+              if (dbGuest.isBlocked) {
+                return reply.code(403).send({ error: 'Participant is blocked', code: 'ACCESS_BLOCKED' });
+              }
+
+              // Check passcode upgrade if user entered a fullCode
+              if (code && event.fullCode && code.trim().toUpperCase() === event.fullCode.trim().toUpperCase() && !dbGuest.hasFullAccess) {
+                dbGuest = await prisma.guest.update({
+                  where: { id: dbGuest.id },
+                  data: { hasFullAccess: true },
+                  include: { circleUser: true }
+                });
+              }
+
+              hasFullAccess = dbGuest.hasFullAccess;
+              resolvedDisplayRole = (dbGuest.displayRole || '').toString().trim().toUpperCase() || 'GUEST';
+              isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(resolvedDisplayRole);
+              circleUser = dbGuest.circleUser;
+
+              // Reactivate if marked LEFT
+              if (dbGuest.status === 'LEFT') {
+                await prisma.$executeRaw`UPDATE guests SET status = 'ACTIVE', updated_at = NOW() WHERE id = ${dbGuest.id}`;
+              }
+            } else {
+              return reply.code(403).send({ error: 'Token does not match this event', code: 'INVALID_EVENT' });
+            }
+          } else if (decoded.role === 'family' && decoded.email) {
+            // Family SSO token exchange inside bundle call
+            const email = decoded.email.trim().toLowerCase();
+            circleUser = await prisma.circleUser.findUnique({ where: { email } });
+            dbGuest = await prisma.guest.findFirst({
+              where: { eventId: event.id, email },
+              include: { circleUser: true }
+            });
+
+            const dbPasscode = event.fullCode;
+            const dbPartialPasscode = event.partialCode;
+            let isCodeValid = false;
+
+            if (dbPasscode || dbPartialPasscode) {
+              if (!code) {
+                if (!dbGuest) {
+                  return reply.code(400).send({ error: 'Passcode is required to access this gallery', code: 'PASSCODE_REQUIRED' });
+                }
+              } else {
+                const cleanCode = code.trim().toUpperCase();
+                const cleanFull = dbPasscode ? dbPasscode.trim().toUpperCase() : null;
+                const cleanPartial = dbPartialPasscode ? dbPartialPasscode.trim().toUpperCase() : null;
+
+                if (cleanFull && cleanCode === cleanFull) {
+                  isCodeValid = true;
+                } else if (cleanPartial && cleanCode === cleanPartial) {
+                  isCodeValid = false;
+                } else {
+                  return reply.code(400).send({ error: 'Invalid passcode', code: 'INVALID_PASSCODE' });
+                }
+              }
+            }
+
+            if (!dbGuest) {
+              const userName = circleUser ? circleUser.name : 'Guest';
+              const userPhone = circleUser ? circleUser.phoneNumber : null;
+              dbGuest = await prisma.guest.create({
+                data: {
+                  eventId: event.id,
+                  email,
+                  name: userName,
+                  phoneNumber: userPhone,
+                  provider: circleUser?.provider || 'circle',
+                  providerId: circleUser?.providerId || 'circle',
+                  hasFullAccess: isCodeValid
+                },
+                include: { circleUser: true }
+              });
+            } else {
+              if (dbGuest.isBlocked) {
+                return reply.code(403).send({ error: 'Participant is blocked', code: 'ACCESS_BLOCKED' });
+              }
+              if (isCodeValid && !dbGuest.hasFullAccess) {
+                dbGuest = await prisma.guest.update({
+                  where: { id: dbGuest.id },
+                  data: { hasFullAccess: true },
+                  include: { circleUser: true }
+                });
+              }
+              if (dbGuest.status === 'LEFT') {
+                await prisma.$executeRaw`UPDATE guests SET status = 'ACTIVE', updated_at = NOW() WHERE id = ${dbGuest.id}`;
+              }
+            }
+
+            guestId = dbGuest.id;
+            hasFullAccess = dbGuest.hasFullAccess;
+            resolvedDisplayRole = (dbGuest.displayRole || '').toString().trim().toUpperCase() || 'GUEST';
+            isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(resolvedDisplayRole);
+          }
+        } catch (err) {
+          return reply.code(401).send({ error: 'Session expired or invalid', code: 'TOKEN_EXPIRED' });
+        }
+      } else {
+        return reply.code(401).send({ error: 'Authentication required', code: 'AUTH_REQUIRED' });
+      }
+
+      // Generate refreshed guest JWT token
+      if (dbGuest) {
+        refreshPayload = {
+          guestId: dbGuest.id,
+          userId: circleUser?.id || dbGuest.id,
+          eventId: event.id,
+          email: dbGuest.email,
+          role: 'guest',
+          displayRole: resolvedDisplayRole,
+          hasFullAccess: hasFullAccess
+        };
+      }
+      const sessionToken = refreshPayload ? fastify.jwt.sign(refreshPayload, { expiresIn: '365d' }) : null;
+
+      // Event details processing
+      const hasPasscode = !!(event.fullCode || event.partialCode);
+      delete event.fullCode;
+      delete event.partialCode;
+
+      // Calculate tab counts & tabs
+      const activePhotoTabs = await prisma.photo.groupBy({
+        by: ['tabName'],
+        where: { eventId: event.id, tabName: { not: null } },
+        _count: { _all: true }
+      });
+      const activeTabNames = activePhotoTabs
+        .filter(t => t.tabName)
+        .map(t => t.tabName.trim().toUpperCase());
+      const tabCounts = {};
+      activePhotoTabs.forEach(t => {
+        if (t.tabName) tabCounts[t.tabName.trim().toUpperCase()] = t._count._all;
+      });
+
+      // Filter ceremony tabs according to full vs partial access
+      let allowedTabs = (event.tabs || []).filter(tab => typeof tab === 'string' && activeTabNames.includes(tab.trim().toUpperCase()));
+      if (!hasFullAccess) {
+        allowedTabs = allowedTabs.filter(tab => ['HIGHLIGHTS', 'CINEMA'].includes(tab.trim().toUpperCase()));
+      }
+      event.tabs = allowedTabs;
+
+      // Fetch first page of photos with strict full vs partial access controls:
+      const whereClause = {
+        eventId: event.id,
+        ...(!isBrideOrGroom ? { isPrivate: false } : {}),
+      };
+
+      if (!hasFullAccess) {
+        let actualTab = 'Highlights';
+        if (event.tabs && Array.isArray(event.tabs)) {
+          const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === 'highlights');
+          if (matchedTab) actualTab = matchedTab;
+        }
+        whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+      } else {
+        const activeTabs = event.tabs || [];
+        if (activeTabs.length > 0) {
+          whereClause.OR = [
+            { tabName: { in: activeTabs } },
+            { tabName: null }
+          ];
+        }
+      }
+
+      const totalAllCount = await prisma.photo.count({ where: whereClause });
+      if (hasFullAccess) {
+        tabCounts['ALL'] = totalAllCount;
+      }
+      event.tabCounts = tabCounts;
+
+      const selectClause = {
+        id: true,
+        r2Url: true,
+        thumbnailUrl: true,
+        filename: true,
+        originalFileSize: true,
+        tabName: true,
+        createdAt: true,
+        capturedAt: true,
+        width: true,
+        height: true,
+        isPrivate: true,
+        exif: true,
+        _count: { select: { likes: true } }
+      };
+
+      if (guestId) {
+        selectClause.likes = {
+          where: { guestId },
+          select: { id: true }
+        };
+      }
+
+      // Parallel data fetching: photos, favorites, cinema in single execution
+      const [photos, favorites, cinemaPhotos] = await Promise.all([
+        prisma.photo.findMany({
+          where: whereClause,
+          select: selectClause,
+          orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }],
+          take: 60
+        }),
+        guestId ? prisma.photoLike.findMany({
+          where: { guestId, photo: { eventId: event.id } },
+          include: {
+            photo: {
+              select: selectClause
+            }
+          },
+          orderBy: { createdAt: 'desc' }
+        }) : Promise.resolve([]),
+        prisma.photo.findMany({
+          where: {
+            eventId: event.id,
+            tabName: { in: ['Cinema', 'CINEMA', 'cinema'] },
+            ...(!isBrideOrGroom ? { isPrivate: false } : {}),
+          },
+          select: selectClause,
+          orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }],
+          take: 60
+        })
+      ]);
+
+      const formatPhoto = (p) => {
+        const isVideoExt = ['.mp4', '.mov', '.m4v', '.webm'].some(ext => (p.filename || p.r2Url || '').toLowerCase().includes(ext));
+        const isCinemaTab = String(p.tabName || '').trim().toUpperCase() === 'CINEMA';
+        const isPhotoOnlyCinema = isCinemaTab && !isVideoExt;
+        const isComingSoon = Boolean(p.exif?.isComingSoon || p.exif?.comingSoon || isPhotoOnlyCinema);
+
+        return {
+          id: p.id,
+          r2Url: p.r2Url,
+          thumbnailUrl: getDerivedThumbnail(p.thumbnailUrl, p.r2Url),
+          filename: p.filename,
+          originalSize: p.originalFileSize,
+          tabName: p.tabName,
+          createdAt: p.createdAt,
+          capturedAt: p.capturedAt,
+          width: p.width,
+          height: p.height,
+          likeCount: p._count?.likes || 0,
+          isLiked: guestId ? (p.likes && p.likes.length > 0) : false,
+          isPrivate: isBrideOrGroom ? (p.isPrivate || false) : undefined,
+          isFeatured: Boolean(p.exif && p.exif.isFeatured),
+          hasBakedCover: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked)),
+          isCoverBaked: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked)),
+          isComingSoon,
+          isVideo: isVideoExt,
+          title: p.exif?.title || null,
+          subtitle: p.exif?.subtitle || (isComingSoon ? 'COMING SOON • TEASER POSTER' : null),
+          description: p.exif?.description || null,
+          cinemaCategory: p.exif?.cinemaCategory || null,
+          sortOrder: typeof p.exif?.sortOrder === 'number' ? p.exif.sortOrder : 0,
+          exif: p.exif || null
+        };
+      };
+
+      const mappedPhotos = photos.map(formatPhoto);
+      const mappedFavorites = favorites.map(f => formatPhoto(f.photo));
+      const mappedCinema = cinemaPhotos.map(formatPhoto);
+
+      // Check matched photos if guest has selfie
+      let matchedPhotosList = [];
+      const hasSelfie = Boolean(circleUser?.selfieUrl || dbGuest?.selfieUrl);
+      if (hasSelfie && circleUser?.selfieVector && !qdrant.isMock) {
+        try {
+          const vectorMatches = await qdrant.searchVectors(event.id, circleUser.selfieVector, 100, 0.40);
+          if (vectorMatches && vectorMatches.length > 0) {
+            const photoIds = vectorMatches.map(m => m.photo_id);
+            const rawMatched = await prisma.photo.findMany({
+              where: { id: { in: photoIds }, eventId: event.id, ...(!isBrideOrGroom ? { isPrivate: false } : {}) },
+              select: selectClause
+            });
+            matchedPhotosList = rawMatched.map(formatPhoto);
+          }
+        } catch (_) {}
+      }
+
+      return {
+        success: true,
+        token: sessionToken,
+        event,
+        guest: dbGuest ? {
+          id: dbGuest.id,
+          name: dbGuest.name,
+          email: dbGuest.email,
+          phoneNumber: dbGuest.phoneNumber,
+          hasFullAccess,
+          displayRole: resolvedDisplayRole,
+          hasSelfie,
+          selfieUrl: circleUser?.selfieUrl || null
+        } : null,
+        photos: mappedPhotos,
+        total: totalAllCount,
+        hasMore: photos.length < totalAllCount,
+        matched: matchedPhotosList,
+        favorites: mappedFavorites,
+        cinema: mappedCinema,
+        tabCache: {
+          ...(mappedFavorites.length > 0 ? { 'MY FAVOURITES': mappedFavorites } : {}),
+          ...(mappedCinema.length > 0 ? { 'CINEMA': mappedCinema } : {}),
+        }
+      };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to load gallery bundle' });
+    }
+  });
+
   // Load photos of the event (requires guest auth OR admin auth)
   fastify.get('/api/gallery/public/events/:slug/photos', async (req, reply) => {
     const slug = req.params.slug.toLowerCase().trim();

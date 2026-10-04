@@ -28,3 +28,5 @@ Thumbs.db
 # Deployment / Local temp files
 deploy-logs/
 *.log
+mobile/
+

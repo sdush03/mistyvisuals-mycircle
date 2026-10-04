@@ -24,6 +24,26 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
     }
   }, [])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    // Never redirect legal compliance pages
+    if (pathname === '/terms' || pathname === '/privacy' || pathname === '/refund') {
+      return
+    }
+
+    const ua = navigator.userAgent || ''
+    const isTouchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || isTouchMac
+    const isAndroid = /Android/i.test(ua)
+
+    if (isIOS) {
+      window.location.replace('https://apps.apple.com/app/id6796633077')
+    } else if (isAndroid) {
+      window.location.replace('https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle')
+    }
+  }, [pathname])
+
   // The splash screen has a custom dark background and no footer
   const isSplash = pathname && /^\/[^/]+\/gallery\/?$/.test(pathname)
 
