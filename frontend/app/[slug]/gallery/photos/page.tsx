@@ -1373,31 +1373,17 @@ export default function GuestGalleryPhotos({ params }: Props) {
           {/* Heading */}
           <h2 style={{
             fontFamily: '"Montserrat", system-ui, sans-serif',
-            fontSize: '1rem',
-            fontWeight: 500,
-            letterSpacing: '0.2em',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            letterSpacing: '0.14em',
             textTransform: 'uppercase',
             textAlign: 'center',
-            marginBottom: '0.35rem',
-            color: '#ffffff'
+            marginBottom: '1.25rem',
+            color: '#ffffff',
+            lineHeight: 1.4
           }}>
-            View in App
+            Download the My Circle App
           </h2>
-
-          {/* Event title */}
-          {event?.title && (
-            <p style={{
-              fontFamily: '"Montserrat", system-ui, sans-serif',
-              fontSize: '0.75rem',
-              letterSpacing: '0.12em',
-              textTransform: 'uppercase',
-              color: 'rgba(255, 255, 255, 0.65)',
-              textAlign: 'center',
-              marginBottom: '1.5rem'
-            }}>
-              {(event.title || '').replace(/'s\s+Wedding/gi, '').replace('&', '').replace(/\s+/g, ' ').trim()}
-            </p>
-          )}
 
           {isMobileDevice ? (
             <button
@@ -1440,12 +1426,14 @@ export default function GuestGalleryPhotos({ params }: Props) {
               <p style={{
                 fontFamily: '"Montserrat", system-ui, sans-serif',
                 fontSize: '0.6875rem',
-                letterSpacing: '0.04em',
+                letterSpacing: '0.02em',
+                lineHeight: 1.5,
                 color: 'rgba(255, 255, 255, 0.65)',
                 textAlign: 'center',
-                marginBottom: '1.5rem'
+                marginBottom: '1.5rem',
+                maxWidth: '280px'
               }}>
-                Scan with your phone camera to view in the app
+                Scan the QR with your phone camera to download &amp; view the gallery in the app
               </p>
 
               {/* Official Badges side-by-side like in ss2 */}
