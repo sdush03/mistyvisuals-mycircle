@@ -372,6 +372,8 @@ module.exports = async function familyRoutes(fastify, opts) {
           totalPhotoCount,
           eventToken,
           galleryFacesComplete: event.galleryFacesComplete,
+          allowDownloads: event.allowDownloads !== false,
+          allowBulkDownloads: !!event.allowBulkDownloads,
           guestInfo: {
             id: g.id,
             name: user.name || g.name,

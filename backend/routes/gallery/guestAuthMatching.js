@@ -12,6 +12,7 @@ const {
   ensureUserSelfieMigrated,
   getDerivedThumbnail,
   verifyGuestAuth,
+  isMobileAppRequest,
 } = require('./galleryCommon');
 
 const passcodeRateLimiter = createRateLimiter({
@@ -478,6 +479,13 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
       const event = req.event || await prisma.galleryEvent.findUnique({ where: { id: eventId } });
       if (!event) return reply.code(404).send({ error: 'Event not found' });
 
+      if (event.allowDownloads === false && !req.guest?.isPreviewMode && !isMobileAppRequest(req)) {
+        return reply.code(403).send({
+          error: 'This gallery has download protection enabled and can only be viewed in the Misty Visuals mobile app.',
+          code: 'APP_ONLY_GALLERY'
+        });
+      }
+
       let anchorVector = guestAnchors[guestKey]?.anchorVector;
 
       if (!anchorVector) {
@@ -613,6 +621,14 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
     let tempPath = null;
 
     try {
+      const event = req.event || await prisma.galleryEvent.findUnique({ where: { id: eventId } });
+      if (event && event.allowDownloads === false && !req.guest?.isPreviewMode && !isMobileAppRequest(req)) {
+        return reply.code(403).send({
+          error: 'This gallery has download protection enabled and can only be viewed in the Misty Visuals mobile app.',
+          code: 'APP_ONLY_GALLERY'
+        });
+      }
+
       const data = await req.file();
       if (!data) return reply.code(400).send({ error: 'No selfie image provided' });
 

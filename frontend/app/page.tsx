@@ -20,6 +20,7 @@ interface CircleEvent {
   coverPhotoSquareUrl: string | null
   matchedCount: number
   eventToken: string
+  allowDownloads?: boolean
   guestInfo: {
     id: number
     name: string
@@ -858,6 +859,29 @@ export default function CirclePage() {
                           fontSize: '2rem'
                         }}>
                           📷
+                        </div>
+                      )}
+
+                      {/* Download protected App Only badge */}
+                      {ev.allowDownloads === false && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '0.75rem',
+                          left: '0.75rem',
+                          background: 'rgba(28, 26, 24, 0.85)',
+                          backdropFilter: 'blur(4px)',
+                          color: '#f59e0b',
+                          fontWeight: 600,
+                          fontSize: '0.5625rem',
+                          letterSpacing: '0.08em',
+                          textTransform: 'uppercase',
+                          padding: '0.3rem 0.55rem',
+                          borderRadius: '1px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem'
+                        }}>
+                          <span>🔒 APP ONLY</span>
                         </div>
                       )}
 

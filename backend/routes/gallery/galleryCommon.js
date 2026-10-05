@@ -76,6 +76,13 @@ function checkPreviewToken(fastify, req) {
   return null;
 }
 
+function isMobileAppRequest(req) {
+  const appVer = req.headers['x-app-version'];
+  if (appVer) return true;
+  const ua = (req.headers['user-agent'] || '').toLowerCase();
+  return ua.includes('okhttp') || ua.includes('cfnetwork') || ua.includes('expo') || ua.includes('mycircle') || ua.includes('darwin') || ua.includes('reactnative') || !ua.includes('mozilla');
+}
+
 const guestAnchors = {};
 
 const checkUserSelfie = async (userId) => {
@@ -149,6 +156,7 @@ module.exports = {
   getDerivedThumbnail,
   getArchiver,
   checkPreviewToken,
+  isMobileAppRequest,
   guestAnchors,
   checkUserSelfie,
   ensureUserSelfieMigrated,

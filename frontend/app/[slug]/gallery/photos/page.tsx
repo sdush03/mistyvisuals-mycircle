@@ -276,6 +276,10 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const lightboxVideoRef = useRef<HTMLVideoElement | null>(null)
 
   const loadFavoritesList = useCallback(async () => {
+    if (event && event.allowDownloads === false && !event.isPreviewMode) {
+      setLoadingFavorites(false)
+      return
+    }
     setLoadingFavorites(true)
     const token = localStorage.getItem(`mv_gallery_token_${slug}`)
     if (!token) {
@@ -630,6 +634,20 @@ export default function GuestGalleryPhotos({ params }: Props) {
       })
       .then(data => {
         setEvent(data)
+        if (data && data.allowDownloads === false && !data.isPreviewMode) {
+          // If downloads are blocked, guests must not view photos in browser (only app)
+          const ua = typeof window !== 'undefined' ? (navigator.userAgent || '') : ''
+          const isTouchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1
+          const isIOS = /iPad|iPhone|iPod/.test(ua) || isTouchMac
+          const isAndroid = /Android/i.test(ua)
+          if (isIOS) {
+            window.location.href = 'https://apps.apple.com/app/id6796633077'
+          } else if (isAndroid) {
+            const playStoreReferrer = `slug%3D${encodeURIComponent(slug)}`
+            window.location.href = `https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle&referrer=${playStoreReferrer}`
+          }
+          return
+        }
         // Background-load the first page of photos (empty tab = all tabs)
         loadAllPhotos('')
         // Load matched photos
@@ -715,6 +733,10 @@ export default function GuestGalleryPhotos({ params }: Props) {
   }, [showProfileModal])
 
   const loadMatchedPhotos = async () => {
+    if (event && event.allowDownloads === false && !event.isPreviewMode) {
+      setLoadingMatched(false)
+      return
+    }
     setLoadingMatched(true)
     const token = localStorage.getItem(`mv_gallery_token_${slug}`)
     const savedGuest = localStorage.getItem(`mv_gallery_guest_${slug}`)
@@ -871,6 +893,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
   // Cache-aware paginated photo loader
   // tab: which tab to load. If already fully loaded (hasMore=false), skips.
   const loadAllPhotos = useCallback(async (tab: string) => {
+    if (event && event.allowDownloads === false && !event.isPreviewMode) return
     // Don't double-fetch
     if (loadingMore) return
     const cached = tabCache[tab]
@@ -1261,23 +1284,28 @@ export default function GuestGalleryPhotos({ params }: Props) {
     </div>
   );
 
-  if (isMobileDevice) {
+  const isDownloadBlocked = Boolean(event && event.allowDownloads === false && !event.isPreviewMode);
+
+  if (isMobileDevice || isDownloadBlocked) {
     const handleOpenAppFromGate = () => {
       const deepLinkUrl = `mycircle://${slug}`
       const appStoreUrl = 'https://apps.apple.com/app/id6796633077'
       const playStoreReferrer = `slug%3D${encodeURIComponent(slug)}`
       const androidIntentUrl = `intent://${slug}#Intent;scheme=mycircle;package=com.mistyvisuals.mycircle;S.market_referrer=${playStoreReferrer};end;`
+      const playStoreUrl = `https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle&referrer=${playStoreReferrer}`
 
       if (devicePlatform === 'ios') {
         window.location.href = appStoreUrl
       } else if (devicePlatform === 'android') {
         window.location.href = androidIntentUrl
+      } else {
+        window.location.href = appStoreUrl
       }
     }
 
     return (
       <div 
-        className="force-light flex h-screen w-full flex-col items-center justify-center px-6 text-center select-none"
+        className="force-light flex min-h-screen w-full flex-col items-center justify-center px-6 py-12 text-center select-none"
         style={{
           colorScheme: 'light',
           background: 'radial-gradient(circle at center, #1a1a1a 0%, #0d0d0d 100%)',
@@ -1285,31 +1313,70 @@ export default function GuestGalleryPhotos({ params }: Props) {
           fontFamily: 'var(--font-sans)',
         }}
       >
-        <div className="relative z-10 flex max-w-[400px] w-full flex-col items-center rounded-3xl border border-white/10 bg-[#141414] p-8 shadow-[0_25px_60px_rgba(0,0,0,0.8)]">
+        <div className="relative z-10 flex max-w-[440px] w-full flex-col items-center rounded-3xl border border-white/10 bg-[#141414] p-8 md:p-10 shadow-[0_25px_60px_rgba(0,0,0,0.8)]">
           <img 
             src="/logo-white.png" 
             alt="Misty Visuals" 
-            style={{ height: '3.5rem', width: 'auto', objectFit: 'contain', marginBottom: '2rem' }} 
+            style={{ height: '3.5rem', width: 'auto', objectFit: 'contain', marginBottom: '1.75rem' }} 
           />
 
-          <div className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[10px] font-medium tracking-wider uppercase text-neutral-300">
-            <span>✨ App Exclusive</span>
+          <div className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1 text-[11px] font-medium tracking-wider uppercase text-amber-300">
+            <span>{isDownloadBlocked ? '🔒 Download Protection Enabled' : '✨ App Exclusive'}</span>
           </div>
 
-          <h1 className="font-lora text-2xl font-semibold tracking-wide text-white mb-3">
+          <h1 className="font-lora text-2xl md:text-3xl font-semibold tracking-wide text-white mb-3">
             View in Misty Visuals App
           </h1>
 
-          <p className="text-xs text-neutral-400 leading-relaxed mb-8 px-2">
-            Enjoy full high-resolution browsing, instant Facial Recognition search to find all your photos, and one-tap saves directly to your device.
+          <p className="text-xs text-neutral-400 leading-relaxed mb-6 px-2">
+            {isDownloadBlocked
+              ? 'Downloads and screenshots are disabled for this gallery. To protect original photos from being captured, this gallery can only be viewed in the Misty Visuals app where screenshotting is disabled.'
+              : 'Enjoy full high-resolution browsing, instant Facial Recognition search to find all your photos, and one-tap saves directly to your device.'}
           </p>
 
-          <button
-            onClick={handleOpenAppFromGate}
-            className="w-full rounded-full bg-white py-3.5 text-black font-sans text-xs font-semibold uppercase tracking-widest shadow-lg transition-all hover:bg-neutral-200 active:scale-[0.98] cursor-pointer"
-          >
-            Open in Misty Visuals App
-          </button>
+          {isMobileDevice ? (
+            <button
+              onClick={handleOpenAppFromGate}
+              className="w-full rounded-full bg-white py-3.5 text-black font-sans text-xs font-semibold uppercase tracking-widest shadow-lg transition-all hover:bg-neutral-200 active:scale-[0.98] cursor-pointer"
+            >
+              Open in Misty Visuals App
+            </button>
+          ) : (
+            <div className="flex w-full flex-col gap-3">
+              <a
+                href="https://apps.apple.com/app/id6796633077"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full rounded-full bg-white py-3.5 text-black font-sans text-xs font-semibold uppercase tracking-widest shadow-lg transition-all hover:bg-neutral-200 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                style={{ textDecoration: 'none' }}
+              >
+                <span> Download on App Store</span>
+              </a>
+              <a
+                href={`https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle&referrer=slug%3D${encodeURIComponent(slug)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full rounded-full border border-white/20 bg-white/5 py-3.5 text-white font-sans text-xs font-semibold uppercase tracking-widest transition-all hover:bg-white/10 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                style={{ textDecoration: 'none' }}
+              >
+                <span>▶ Get on Google Play</span>
+              </a>
+
+              {/* QR Code for phone scan */}
+              <div className="mt-4 pt-4 border-t border-white/10 flex flex-col items-center">
+                <div className="bg-white p-2 rounded-xl shadow-md">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=0&data=${encodeURIComponent(`https://mycircle.mistyvisuals.com/${slug}/gallery`)}`}
+                    alt="Scan with your phone to open in app"
+                    className="w-28 h-28"
+                  />
+                </div>
+                <p className="text-[11px] text-neutral-400 mt-2">
+                  Scan with your phone camera to view in the app
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )

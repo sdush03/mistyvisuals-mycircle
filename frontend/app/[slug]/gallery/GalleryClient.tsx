@@ -100,13 +100,13 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                 setExistingToken(token)
                 setExistingProfile(localGuest)
                 
-                // Only bypass if both are complete and not on mobile
-                if (!isMobile && localGuest.phoneNumber && localGuest.hasSelfie) {
+                // Only bypass if both are complete and not on mobile and downloads are allowed
+                if (data.allowDownloads !== false && !isMobile && localGuest.phoneNumber && localGuest.hasSelfie) {
                   localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(localGuest))
                   setGuest(localGuest)
                   router.push(`/${slug}/gallery/photos`)
                   return
-                } else if (!isMobile) {
+                } else if (!isMobile && data.allowDownloads !== false) {
                   // Incomplete profile: force open login modal to prompt mobile/selfie completion on desktop
                   setShowLoginModal(true)
                 }
@@ -145,12 +145,12 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                   setExistingToken(exchangeData.token)
                   setExistingProfile(localGuest)
                   
-                  if (!isMobile && localGuest.phoneNumber && localGuest.hasSelfie) {
+                  if (data.allowDownloads !== false && !isMobile && localGuest.phoneNumber && localGuest.hasSelfie) {
                     localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(localGuest))
                     setGuest(localGuest)
                     router.push(`/${slug}/gallery/photos`)
                     return
-                  } else if (!isMobile) {
+                  } else if (!isMobile && data.allowDownloads !== false) {
                     // Incomplete profile: force open login modal to prompt mobile/selfie completion on desktop
                     setShowLoginModal(true)
                   }
@@ -211,13 +211,18 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
       const androidIntentUrl = `intent://${slug}${inviteCode ? `?code=${encodeURIComponent(inviteCode)}` : ''}#Intent;scheme=mycircle;package=com.mistyvisuals.mycircle;S.market_referrer=${playStoreReferrer};end;`
       window.location.href = androidIntentUrl
     } else {
-      setShowLoginModal(true)
+      if (event?.allowDownloads === false) {
+        // For download-blocked galleries, redirect desktop guests to photos page which shows the App Exclusive gate
+        router.push(`/${slug}/gallery/photos`)
+      } else {
+        setShowLoginModal(true)
+      }
     }
   }
 
   const handleEnterGallery = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
-    if (isMobileDevice) {
+    if (isMobileDevice || event?.allowDownloads === false) {
       handleOpenApp(e)
     } else {
       setShowLoginModal(true)
@@ -419,8 +424,20 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
           onClick={handleEnterGallery}
           className="cover-cta"
         >
-          Enter Gallery
+          {event?.allowDownloads === false ? 'View in App' : 'Enter Gallery'}
         </button>
+        {event?.allowDownloads === false && (
+          <p style={{
+            fontFamily: 'var(--font-sans)',
+            fontSize: '0.6875rem',
+            color: 'rgba(255,255,255,0.7)',
+            marginTop: '0.85rem',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase'
+          }}>
+            🔒 Protected Gallery — App Exclusive
+          </p>
+        )}
       </div>
 
       {/* Brand Footer Logo */}

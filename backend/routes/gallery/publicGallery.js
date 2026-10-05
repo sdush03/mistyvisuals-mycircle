@@ -3,7 +3,7 @@ const path = require('path');
 const { prisma } = require('../../prisma');
 const qdrant = require('../../utils/qdrant');
 const faceRecManager = require('../../utils/faceRecManager');
-const { checkPreviewToken, getDerivedThumbnail, verifyGuestAuth } = require('./galleryCommon');
+const { checkPreviewToken, getDerivedThumbnail, verifyGuestAuth, isMobileAppRequest } = require('./galleryCommon');
 
 function purgeOrphanedFacesBackground(log) {
   setTimeout(() => {
@@ -263,6 +263,26 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
 
       if (!event || (!event.active && !isPreview)) {
         return reply.code(404).send({ error: 'Gallery not found or inactive' });
+      }
+
+      if (event.allowDownloads === false && !isPreview) {
+        let isAdmin = false;
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+          try {
+            const rawToken = authHeader.split(' ')[1];
+            const decoded = fastify.jwt.verify(rawToken);
+            if (decoded.role === 'admin' || (decoded.roles && decoded.roles.includes('admin'))) {
+              isAdmin = true;
+            }
+          } catch (_) {}
+        }
+        if (!isAdmin && !isMobileAppRequest(req)) {
+          return reply.code(403).send({
+            error: 'This gallery has download protection enabled and can only be viewed in the Misty Visuals mobile app.',
+            code: 'APP_ONLY_GALLERY'
+          });
+        }
       }
 
       let guestId = null;
@@ -640,6 +660,26 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         return reply.code(404).send({ error: 'Gallery not found' });
       }
 
+      if (event.allowDownloads === false && !isPreview) {
+        let isAdmin = false;
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+          try {
+            const token = authHeader.split(' ')[1];
+            const decoded = fastify.jwt.verify(token);
+            if (decoded.role === 'admin' || (decoded.roles && decoded.roles.includes('admin'))) {
+              isAdmin = true;
+            }
+          } catch (_) {}
+        }
+        if (!isAdmin && !isMobileAppRequest(req)) {
+          return reply.code(403).send({
+            error: 'This gallery has download protection enabled and can only be viewed in the Misty Visuals mobile app.',
+            code: 'APP_ONLY_GALLERY'
+          });
+        }
+      }
+
       let guestId = null;
       let hasFullAccess = !!isPreview;
       let isBrideOrGroom = false;
@@ -906,6 +946,13 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       const event = await prisma.galleryEvent.findUnique({ where: { slug } });
       if (!event) {
         return reply.code(404).send({ error: 'Gallery not found' });
+      }
+
+      if (event.allowDownloads === false && !req.guest?.isPreviewMode && !isMobileAppRequest(req)) {
+        return reply.code(403).send({
+          error: 'This gallery has download protection enabled and can only be viewed in the Misty Visuals mobile app.',
+          code: 'APP_ONLY_GALLERY'
+        });
       }
 
       const likes = await prisma.photoLike.findMany({
