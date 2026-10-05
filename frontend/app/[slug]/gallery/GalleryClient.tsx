@@ -12,6 +12,7 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
   const [error, setError] = useState('')
   const [guest, setGuest] = useState<any>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const [showAppPromptModal, setShowAppPromptModal] = useState(false)
   const [inviteCode, setInviteCode] = useState<string | undefined>(undefined)
   const [existingToken, setExistingToken] = useState<string | undefined>(undefined)
   const [existingProfile, setExistingProfile] = useState<any>(null)
@@ -24,10 +25,11 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
   useEffect(() => {
     // Detect mobile platform
     const ua = typeof window !== 'undefined' ? (navigator.userAgent || navigator.vendor || (window as any).opera || '') : ''
-    const isMobile = /iPad|iPhone|iPod|android/i.test(ua) && !(window as any).MSStream
+    const isTouchMac = /Macintosh/.test(ua) && (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1)
+    const isMobile = (/iPad|iPhone|iPod|android/i.test(ua) || isTouchMac) && !(window as any).MSStream
     if (isMobile) {
       setIsMobileDevice(true)
-      if (/iPad|iPhone|iPod/.test(ua)) setDevicePlatform('ios')
+      if (/iPad|iPhone|iPod/.test(ua) || isTouchMac) setDevicePlatform('ios')
       else if (/android/i.test(ua)) setDevicePlatform('android')
     }
 
@@ -202,18 +204,13 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
     const playStoreUrl = `https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle&referrer=${playStoreReferrer}`
 
     if (devicePlatform === 'ios') {
-      // On iOS, if the app is installed, Universal Links opens it directly from the link.
-      // If the user is on the web page, the app is not installed, so open App Store directly.
       window.location.href = appStoreUrl
     } else if (devicePlatform === 'android') {
-      // Official Android Intent: opens the app directly if installed;
-      // if not installed, opens the native Google Play Store app with the referrer payload attached.
       const androidIntentUrl = `intent://${slug}${inviteCode ? `?code=${encodeURIComponent(inviteCode)}` : ''}#Intent;scheme=mycircle;package=com.mistyvisuals.mycircle;S.market_referrer=${playStoreReferrer};end;`
       window.location.href = androidIntentUrl
     } else {
       if (event?.allowDownloads === false) {
-        // For download-blocked galleries, redirect desktop guests to photos page which shows the App Exclusive gate
-        router.push(`/${slug}/gallery/photos`)
+        setShowAppPromptModal(true)
       } else {
         setShowLoginModal(true)
       }
@@ -222,8 +219,10 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
 
   const handleEnterGallery = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
-    if (isMobileDevice || event?.allowDownloads === false) {
+    if (isMobileDevice) {
       handleOpenApp(e)
+    } else if (event?.allowDownloads === false) {
+      setShowAppPromptModal(true)
     } else {
       setShowLoginModal(true)
     }
@@ -466,6 +465,88 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
               style={{ height: '4rem', width: 'auto', objectFit: 'contain' }} 
             />
           </a>
+        </div>
+      )}
+
+      {/* Download Blocked Desktop App Prompt Modal */}
+      {showAppPromptModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          onClick={() => setShowAppPromptModal(false)}
+        >
+          <div
+            className="relative flex max-w-[440px] w-full flex-col items-center rounded-3xl border border-white/10 bg-[#141414] p-8 md:p-10 text-center shadow-[0_25px_60px_rgba(0,0,0,0.8)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowAppPromptModal(false)}
+              className="absolute top-5 right-5 text-neutral-400 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+              aria-label="Close"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <img 
+              src="/logo-white.png" 
+              alt="Misty Visuals" 
+              style={{ height: '3rem', width: 'auto', objectFit: 'contain', marginBottom: '1.5rem' }} 
+            />
+
+            <div className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1 text-[11px] font-medium tracking-wider uppercase text-amber-300">
+              <span>🔒 Download Protection Enabled</span>
+            </div>
+
+            <h2 className="font-lora text-2xl font-semibold tracking-wide text-white mb-2">
+              View on Mobile Phone
+            </h2>
+
+            {event?.title && (
+              <p className="font-sans text-xs uppercase tracking-widest text-neutral-400 mb-3">
+                {event.title}
+              </p>
+            )}
+
+            <p className="text-xs text-neutral-400 leading-relaxed mb-6 px-2">
+              Downloads and screenshots are disabled for this gallery. To protect original photos from being captured, this gallery can only be viewed in the Misty Visuals app where screenshotting is disabled.
+            </p>
+
+            <div className="flex w-full flex-col gap-3">
+              <a
+                href="https://apps.apple.com/app/id6796633077"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full rounded-full bg-white py-3.5 text-black font-sans text-xs font-semibold uppercase tracking-widest shadow-lg transition-all hover:bg-neutral-200 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                style={{ textDecoration: 'none' }}
+              >
+                <span> Download on App Store</span>
+              </a>
+              <a
+                href={`https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle&referrer=slug%3D${encodeURIComponent(slug)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full rounded-full border border-white/20 bg-white/5 py-3.5 text-white font-sans text-xs font-semibold uppercase tracking-widest transition-all hover:bg-white/10 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                style={{ textDecoration: 'none' }}
+              >
+                <span>▶ Get on Google Play</span>
+              </a>
+
+              {/* QR Code for phone scan */}
+              <div className="mt-4 pt-4 border-t border-white/10 flex flex-col items-center">
+                <div className="bg-white p-2.5 rounded-2xl shadow-md">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=0&data=${encodeURIComponent(`https://mycircle.mistyvisuals.com/${slug}/gallery`)}`}
+                    alt="Scan with your phone to open in app"
+                    className="w-32 h-32"
+                  />
+                </div>
+                <p className="text-[11px] text-neutral-400 mt-2 font-medium">
+                  Scan with your phone camera to view in the app
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

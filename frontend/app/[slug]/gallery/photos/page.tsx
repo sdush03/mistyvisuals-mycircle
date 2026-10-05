@@ -20,6 +20,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
   
   const [event, setEvent] = useState<any>(null)
+  const [loadingEvent, setLoadingEvent] = useState<boolean>(true)
   const [guest, setGuest] = useState<any>(null)
   const [isProfileSynced, setIsProfileSynced] = useState(false)
   const [photos, setPhotos] = useState<any[]>([])
@@ -32,7 +33,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const ua = navigator.userAgent || navigator.vendor || (window as any).opera || ''
-      if (/iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream) {
+      const isTouchMac = /Macintosh/.test(ua) && (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1)
+      if ((/iPad|iPhone|iPod/.test(ua) || isTouchMac) && !(window as any).MSStream) {
         setIsMobileDevice(true)
         setDevicePlatform('ios')
       } else if (/android/i.test(ua)) {
@@ -567,77 +569,20 @@ export default function GuestGalleryPhotos({ params }: Props) {
   }, [event, guest])
 
   useEffect(() => {
-    // Check authentication
-    const token = localStorage.getItem(`mv_gallery_token_${slug}`)
-    const savedGuest = localStorage.getItem(`mv_gallery_guest_${slug}`)
-    
-    if (!token || !savedGuest) {
-      router.push(`/${slug}/gallery`)
-      return
-    }
-
-    const parsedGuest = JSON.parse(savedGuest)
-    if (!parsedGuest.phoneNumber || !parsedGuest.hasSelfie) {
-      router.push(`/${slug}/gallery`)
-      return
-    }
-
-    setGuest(parsedGuest)
-    if (parsedGuest.hasSelfie) {
-      fetchAuthenticatedSelfie(parsedGuest.id)
-    }
-
-    // Auto-upgrade if they landed directly with a code query parameter
-    const searchParams = new URLSearchParams(window.location.search)
-    const code = searchParams.get('code')
-
-    if (code && !parsedGuest.hasFullAccess) {
-      fetch(`${apiUrl}/api/gallery/public/events/${slug}/upgrade`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ code })
-      })
-        .then(res => {
-          if (!res.ok) throw new Error('Passcode verification failed')
-          return res.json()
-        })
-        .then(data => {
-          localStorage.setItem(`mv_gallery_token_${slug}`, data.token)
-          const updatedGuest = {
-            ...parsedGuest,
-            hasFullAccess: true
-          }
-          localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(updatedGuest))
-          setGuest(updatedGuest)
-          setViewMode('all')
-          loadAllPhotos('')
-        })
-        .catch(err => {
-          console.warn('Auto-upgrade from URL parameter failed:', err.message)
-        })
-    }
-
-    if (parsedGuest.hasFullAccess || (code && !parsedGuest.hasFullAccess)) {
-      setViewMode('all')
-    } else {
-      setViewMode('matched')
-    }
-
-    // Fetch public event details
+    // 1. Fetch public event details first
     fetch(`${apiUrl}/api/gallery/public/events/${slug}`)
       .then(res => {
         if (!res.ok) throw new Error('Gallery not found')
         return res.json()
       })
-      .then(data => {
-        setEvent(data)
-        if (data && data.allowDownloads === false && !data.isPreviewMode) {
-          // If downloads are blocked, guests must not view photos in browser (only app)
+      .then(eventData => {
+        setEvent(eventData)
+        setLoadingEvent(false)
+
+        // If download protection is enabled, web browsers (mobile and desktop) cannot view photos
+        if (eventData && eventData.allowDownloads === false && !eventData.isPreviewMode) {
           const ua = typeof window !== 'undefined' ? (navigator.userAgent || '') : ''
-          const isTouchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1
+          const isTouchMac = /Macintosh/.test(ua) && (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1)
           const isIOS = /iPad|iPhone|iPod/.test(ua) || isTouchMac
           const isAndroid = /Android/i.test(ua)
           if (isIOS) {
@@ -646,67 +591,129 @@ export default function GuestGalleryPhotos({ params }: Props) {
             const playStoreReferrer = `slug%3D${encodeURIComponent(slug)}`
             window.location.href = `https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle&referrer=${playStoreReferrer}`
           }
+          // On desktop: do not proceed to auth check or photo loading.
+          // The component will render the dedicated Desktop Mobile App Prompt Gate.
           return
         }
+
+        // 2. If downloads are allowed, proceed with normal guest auth & photo loading
+        const token = localStorage.getItem(`mv_gallery_token_${slug}`)
+        const savedGuest = localStorage.getItem(`mv_gallery_guest_${slug}`)
+        
+        if (!token || !savedGuest) {
+          router.push(`/${slug}/gallery`)
+          return
+        }
+
+        const parsedGuest = JSON.parse(savedGuest)
+        if (!parsedGuest.phoneNumber || !parsedGuest.hasSelfie) {
+          router.push(`/${slug}/gallery`)
+          return
+        }
+
+        setGuest(parsedGuest)
+        if (parsedGuest.hasSelfie) {
+          fetchAuthenticatedSelfie(parsedGuest.id)
+        }
+
+        // Auto-upgrade if they landed directly with a code query parameter
+        const searchParams = new URLSearchParams(window.location.search)
+        const code = searchParams.get('code')
+
+        if (code && !parsedGuest.hasFullAccess) {
+          fetch(`${apiUrl}/api/gallery/public/events/${slug}/upgrade`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ code })
+          })
+            .then(res => {
+              if (!res.ok) throw new Error('Passcode verification failed')
+              return res.json()
+            })
+            .then(upgradeData => {
+              localStorage.setItem(`mv_gallery_token_${slug}`, upgradeData.token)
+              const updatedGuest = {
+                ...parsedGuest,
+                hasFullAccess: true
+              }
+              localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(updatedGuest))
+              setGuest(updatedGuest)
+              setViewMode('all')
+              loadAllPhotos('')
+            })
+            .catch(err => {
+              console.warn('Auto-upgrade from URL parameter failed:', err.message)
+            })
+        }
+
+        if (parsedGuest.hasFullAccess || (code && !parsedGuest.hasFullAccess)) {
+          setViewMode('all')
+        } else {
+          setViewMode('matched')
+        }
+
         // Background-load the first page of photos (empty tab = all tabs)
         loadAllPhotos('')
         // Load matched photos
         loadMatchedPhotos()
-      })
-      .catch(() => {
-        localStorage.removeItem(`mv_gallery_token_${slug}`)
-        localStorage.removeItem(`mv_gallery_guest_${slug}`)
-        router.push(`/${slug}/gallery`)
-      })
 
-    // Sync profile source of truth from database
-    fetch(`${apiUrl}/api/gallery/public/events/${slug}/profile`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    })
-      .then(res => {
-        if (!res.ok) {
-          throw new Error('Session invalid on server')
-        }
-        return res.json()
-      })
-      .then(data => {
-        if (data && data.profile) {
-          const updatedGuest = {
-            ...parsedGuest,
-            name: data.profile.name,
-            phoneNumber: data.profile.phoneNumber,
-            hasSelfie: data.profile.hasSelfie,
-            hasFullAccess: data.profile.hasFullAccess
+        // Sync profile source of truth from database
+        fetch(`${apiUrl}/api/gallery/public/events/${slug}/profile`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
           }
-          localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(updatedGuest))
-          setGuest(updatedGuest)
-          
-          if (data.profile.selfieGuestId) {
-            fetchAuthenticatedSelfie(data.profile.selfieGuestId)
-          }
+        })
+          .then(res => {
+            if (!res.ok) {
+              throw new Error('Session invalid on server')
+            }
+            return res.json()
+          })
+          .then(profileData => {
+            if (profileData && profileData.profile) {
+              const updatedGuest = {
+                ...parsedGuest,
+                name: profileData.profile.name,
+                phoneNumber: profileData.profile.phoneNumber,
+                hasSelfie: profileData.profile.hasSelfie,
+                hasFullAccess: profileData.profile.hasFullAccess
+              }
+              localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(updatedGuest))
+              setGuest(updatedGuest)
+              
+              if (profileData.profile.selfieGuestId) {
+                fetchAuthenticatedSelfie(profileData.profile.selfieGuestId)
+              }
 
-          // Strictly enforce incomplete profile redirect (must have both phone and selfie)
-          if (!data.profile.phoneNumber || !data.profile.hasSelfie) {
-            console.warn('Guest profile incomplete (missing phone or selfie), redirecting to gallery splash')
+              // Strictly enforce incomplete profile redirect (must have both phone and selfie)
+              if (!profileData.profile.phoneNumber || !profileData.profile.hasSelfie) {
+                console.warn('Guest profile incomplete (missing phone or selfie), redirecting to gallery splash')
+                localStorage.removeItem(`mv_gallery_token_${slug}`)
+                localStorage.removeItem(`mv_gallery_guest_${slug}`)
+                router.push(`/${slug}/gallery`)
+                return
+              }
+
+              if (parsedGuest.hasFullAccess !== profileData.profile.hasFullAccess) {
+                setViewMode(profileData.profile.hasFullAccess ? 'all' : 'matched')
+              }
+            }
+            loadFavoritesList()
+            setIsProfileSynced(true)
+          })
+          .catch(err => {
+            console.error('Failed to sync guest profile, logging out:', err)
             localStorage.removeItem(`mv_gallery_token_${slug}`)
             localStorage.removeItem(`mv_gallery_guest_${slug}`)
             router.push(`/${slug}/gallery`)
-            return
-          }
-
-          if (parsedGuest.hasFullAccess !== data.profile.hasFullAccess) {
-            setViewMode(data.profile.hasFullAccess ? 'all' : 'matched')
-          }
-        }
-        loadFavoritesList()
-        setIsProfileSynced(true)
+          })
       })
-      .catch(err => {
-        console.error('Failed to sync guest profile, logging out:', err)
-        localStorage.removeItem(`mv_gallery_token_${slug}`)
-        localStorage.removeItem(`mv_gallery_guest_${slug}`)
+      .catch((err) => {
+        console.error('Failed to fetch event:', err)
+        setLoadingEvent(false)
         router.push(`/${slug}/gallery`)
       })
   }, [slug, router, apiUrl, loadFavoritesList])
@@ -1284,15 +1291,25 @@ export default function GuestGalleryPhotos({ params }: Props) {
     </div>
   );
 
+  if (loadingEvent) {
+    return (
+      <div 
+        className="force-light flex min-h-screen w-full flex-col items-center justify-center bg-[#111111] text-white select-none"
+        style={{ colorScheme: 'light', background: '#111111' }}
+      >
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-white/20 border-t-white mb-4"></div>
+        <p className="font-sans text-xs tracking-widest uppercase text-neutral-400">Loading gallery...</p>
+      </div>
+    )
+  }
+
   const isDownloadBlocked = Boolean(event && event.allowDownloads === false && !event.isPreviewMode);
 
   if (isMobileDevice || isDownloadBlocked) {
     const handleOpenAppFromGate = () => {
-      const deepLinkUrl = `mycircle://${slug}`
       const appStoreUrl = 'https://apps.apple.com/app/id6796633077'
       const playStoreReferrer = `slug%3D${encodeURIComponent(slug)}`
       const androidIntentUrl = `intent://${slug}#Intent;scheme=mycircle;package=com.mistyvisuals.mycircle;S.market_referrer=${playStoreReferrer};end;`
-      const playStoreUrl = `https://play.google.com/store/apps/details?id=com.mistyvisuals.mycircle&referrer=${playStoreReferrer}`
 
       if (devicePlatform === 'ios') {
         window.location.href = appStoreUrl
@@ -1313,7 +1330,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
           fontFamily: 'var(--font-sans)',
         }}
       >
-        <div className="relative z-10 flex max-w-[440px] w-full flex-col items-center rounded-3xl border border-white/10 bg-[#141414] p-8 md:p-10 shadow-[0_25px_60px_rgba(0,0,0,0.8)]">
+        <div className="relative z-10 flex max-w-[460px] w-full flex-col items-center rounded-3xl border border-white/10 bg-[#141414] p-8 md:p-10 shadow-[0_25px_60px_rgba(0,0,0,0.8)]">
           <img 
             src="/logo-white.png" 
             alt="Misty Visuals" 
@@ -1324,9 +1341,15 @@ export default function GuestGalleryPhotos({ params }: Props) {
             <span>{isDownloadBlocked ? '🔒 Download Protection Enabled' : '✨ App Exclusive'}</span>
           </div>
 
-          <h1 className="font-lora text-2xl md:text-3xl font-semibold tracking-wide text-white mb-3">
-            View in Misty Visuals App
+          <h1 className="font-lora text-2xl md:text-3xl font-semibold tracking-wide text-white mb-2">
+            View on Mobile Phone
           </h1>
+
+          {event?.title && (
+            <p className="font-sans text-xs uppercase tracking-widest text-neutral-400 mb-2">
+              {event.title} {event.photoCount ? `• ${event.photoCount.toLocaleString()} Photos` : ''}
+            </p>
+          )}
 
           <p className="text-xs text-neutral-400 leading-relaxed mb-6 px-2">
             {isDownloadBlocked
@@ -1364,17 +1387,24 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
               {/* QR Code for phone scan */}
               <div className="mt-4 pt-4 border-t border-white/10 flex flex-col items-center">
-                <div className="bg-white p-2 rounded-xl shadow-md">
+                <div className="bg-white p-2.5 rounded-2xl shadow-md">
                   <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=0&data=${encodeURIComponent(`https://mycircle.mistyvisuals.com/${slug}/gallery`)}`}
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=0&data=${encodeURIComponent(`https://mycircle.mistyvisuals.com/${slug}/gallery`)}`}
                     alt="Scan with your phone to open in app"
-                    className="w-28 h-28"
+                    className="w-32 h-32"
                   />
                 </div>
-                <p className="text-[11px] text-neutral-400 mt-2">
+                <p className="text-[11px] text-neutral-400 mt-2 font-medium">
                   Scan with your phone camera to view in the app
                 </p>
               </div>
+
+              <button
+                onClick={() => router.push(`/${slug}/gallery`)}
+                className="mt-2 text-xs text-neutral-400 hover:text-white transition-colors underline cursor-pointer"
+              >
+                ← Return to Gallery Cover
+              </button>
             </div>
           )}
         </div>
@@ -2263,9 +2293,13 @@ export default function GuestGalleryPhotos({ params }: Props) {
               </>
             ) : (
               <div className="text-center py-16">
-                <p className="font-lora text-lg text-neutral-600 mb-2">No photos in this gallery yet</p>
+                <p className="font-lora text-lg text-neutral-600 mb-2">
+                  {event?.allowDownloads === false && !event?.isPreviewMode ? 'App-Only Protected Gallery' : 'No photos in this gallery yet'}
+                </p>
                 <p className="font-sans text-xs text-neutral-400">
-                  Photos from this event will appear here once published.
+                  {event?.allowDownloads === false && !event?.isPreviewMode
+                    ? 'This gallery can only be viewed in the Misty Visuals mobile app.'
+                    : 'Photos from this event will appear here once published.'}
                 </p>
               </div>
             )}
