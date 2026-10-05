@@ -359,7 +359,32 @@ export default function GuestGalleryPhotos({ params }: Props) {
   
   // Masonry layout and Lightbox navigation states
   const [cols, setCols] = useState(4)
-  const [aspects, setAspects] = useState<Record<string, number>>({})
+  const [aspects, setAspects] = useState<Record<string, number>>(() => {
+    if (typeof window === 'undefined') return {}
+    try {
+      const saved = sessionStorage.getItem(`mv_aspects_${slug}`)
+      return saved ? JSON.parse(saved) : {}
+    } catch {
+      return {}
+    }
+  })
+
+  const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>, photo: any) => {
+    const img = e.currentTarget
+    img.classList.add('loaded')
+    if (img.naturalWidth && img.naturalHeight) {
+      const key = String(photo.id || photo.r2Url || photo.filename)
+      const ratio = img.naturalWidth / img.naturalHeight
+      setAspects(prev => {
+        if (prev[key] && Math.abs(prev[key] - ratio) < 0.005) return prev
+        const next = { ...prev, [key]: ratio }
+        try {
+          sessionStorage.setItem(`mv_aspects_${slug}`, JSON.stringify(next))
+        } catch {}
+        return next
+      })
+    }
+  }, [slug])
   const [activePhotoIndex, setActivePhotoIndex] = useState<number | null>(null)
   const [highResLoaded, setHighResLoaded] = useState(false)
   const [zoomScale, setZoomScale] = useState(1)
@@ -614,27 +639,49 @@ export default function GuestGalleryPhotos({ params }: Props) {
     const colHeights = Array(cols).fill(0)
 
     photosList.forEach((photo, index) => {
-      const id = photo.id || photo.r2Url
-      const exactAspect = (photo.width && photo.height)
-        ? (photo.width / photo.height)
-        : aspects[id]
+      const id = String(photo.id || photo.r2Url || photo.filename)
+      const isVideo = isVideoItem(photo)
 
-      let gridAspect = '2/3'
-      if (exactAspect) {
-        gridAspect = `${photo.width || 1000}/${photo.height || 1500}`
-      } else {
-        const isLandscape = exactAspect ? (exactAspect > 1.1) : false
-        if (isLandscape) {
-          gridAspect = '3/2'
-        } else {
-          const cycle = index % 3
-          if (cycle === 0) gridAspect = '2/3'
-          else if (cycle === 1) gridAspect = '3/4'
-          else gridAspect = '4/5'
+      // 1. Measured aspect ratio of rendered thumbnail/cover takes top priority
+      let exactAspect = aspects[id]
+
+      // 2. If not yet measured from DOM:
+      if (!exactAspect) {
+        if (!isVideo && photo.width && photo.height) {
+          exactAspect = photo.width / photo.height
+        } else if (isVideo) {
+          if (photo.exif?.coverWidth && photo.exif?.coverHeight) {
+            exactAspect = photo.exif.coverWidth / photo.exif.coverHeight
+          } else if (photo.exif?.posterWidth && photo.exif?.posterHeight) {
+            exactAspect = photo.exif.posterWidth / photo.exif.posterHeight
+          } else if (photo.cinemaCategory === 'Reel' || /reel/i.test(photo.title || photo.filename || '')) {
+            exactAspect = 9 / 16
+          } else if (photo.width && photo.height && photo.width < photo.height) {
+            exactAspect = photo.width / photo.height
+          } else {
+            // Standard cinema cover poster in Poster Studio is 3:4 portrait (1080x1440)
+            exactAspect = 3 / 4
+          }
         }
       }
 
-      const numAspect = exactAspect || (gridAspect === '2/3' ? 2/3 : (gridAspect === '3/4' ? 3/4 : 4/5))
+      let gridAspect: string | number = '2/3'
+      if (exactAspect) {
+        if (!isVideo && photo.width && photo.height && !aspects[id]) {
+          gridAspect = `${photo.width}/${photo.height}`
+        } else {
+          gridAspect = exactAspect
+        }
+      } else {
+        const cycle = index % 3
+        if (cycle === 0) gridAspect = '2/3'
+        else if (cycle === 1) gridAspect = '3/4'
+        else gridAspect = '4/5'
+      }
+
+      const numAspect = typeof gridAspect === 'number'
+        ? gridAspect
+        : (exactAspect || (gridAspect === '2/3' ? 2/3 : (gridAspect === '3/4' ? 3/4 : 4/5)))
       const heightContribution = 1 / numAspect
 
       let shortestIdx = 0
@@ -2070,7 +2117,15 @@ export default function GuestGalleryPhotos({ params }: Props) {
                           key={p.r2Url}
                           onClick={() => setActivePhotoIndex(globalIdx)}
                           onContextMenu={(e) => e.preventDefault()}
-                          style={{ cursor: 'pointer', overflow: 'hidden', lineHeight: 0, aspectRatio: p._gridAspect || '2/3', position: 'relative', userSelect: 'none', WebkitTouchCallout: 'none' }}
+                          style={{
+                            cursor: 'pointer',
+                            overflow: 'hidden',
+                            lineHeight: 0,
+                            aspectRatio: aspects[String(p.id || p.r2Url || p.filename)] || p._gridAspect || '2/3',
+                            position: 'relative',
+                            userSelect: 'none',
+                            WebkitTouchCallout: 'none'
+                          }}
                           className="gallery-item group observed-photo"
                           data-photo-id={p.id}
                         >
@@ -2078,11 +2133,18 @@ export default function GuestGalleryPhotos({ params }: Props) {
                             src={getThumbnailUrl(p, 600)}
                             alt=""
                             loading="lazy"
-                            onLoad={(e) => e.currentTarget.classList.add('loaded')}
+                            onLoad={(e) => handleImageLoad(e, p)}
                             onError={(e) => handleImageError(e, p)}
                             onDragStart={(e) => e.preventDefault()}
                             className="pointer-events-none select-none"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: isVideoItem(p) ? 'contain' : 'cover',
+                              display: 'block',
+                              imageOrientation: 'none',
+                              backgroundColor: isVideoItem(p) ? '#000' : 'transparent',
+                            }}
                           />
                           {/* ▶ Play badge for videos */}
                           {isVideoItem(p) && (
@@ -2212,7 +2274,15 @@ export default function GuestGalleryPhotos({ params }: Props) {
                           key={p.r2Url}
                           onClick={() => setActivePhotoIndex(globalIdx)}
                           onContextMenu={(e) => e.preventDefault()}
-                          style={{ cursor: 'pointer', overflow: 'hidden', lineHeight: 0, aspectRatio: p._gridAspect || '2/3', position: 'relative', userSelect: 'none', WebkitTouchCallout: 'none' }}
+                          style={{
+                            cursor: 'pointer',
+                            overflow: 'hidden',
+                            lineHeight: 0,
+                            aspectRatio: aspects[String(p.id || p.r2Url || p.filename)] || p._gridAspect || '2/3',
+                            position: 'relative',
+                            userSelect: 'none',
+                            WebkitTouchCallout: 'none'
+                          }}
                           className="gallery-item group observed-photo"
                           data-photo-id={p.id}
                         >
@@ -2220,11 +2290,18 @@ export default function GuestGalleryPhotos({ params }: Props) {
                             src={getThumbnailUrl(p, 600)}
                             alt=""
                             loading="lazy"
-                            onLoad={(e) => e.currentTarget.classList.add('loaded')}
+                            onLoad={(e) => handleImageLoad(e, p)}
                             onError={(e) => handleImageError(e, p)}
                             onDragStart={(e) => e.preventDefault()}
                             className="pointer-events-none select-none"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: isVideoItem(p) ? 'contain' : 'cover',
+                              display: 'block',
+                              imageOrientation: 'none',
+                              backgroundColor: isVideoItem(p) ? '#000' : 'transparent',
+                            }}
                           />
                           {/* ▶ Play badge for videos */}
                           {isVideoItem(p) && (
@@ -2359,7 +2436,15 @@ export default function GuestGalleryPhotos({ params }: Props) {
                             key={p.r2Url}
                             onClick={() => setActivePhotoIndex(globalIdx)}
                             onContextMenu={(e) => e.preventDefault()}
-                            style={{ cursor: 'pointer', overflow: 'hidden', lineHeight: 0, aspectRatio: p._gridAspect || '2/3', position: 'relative', userSelect: 'none', WebkitTouchCallout: 'none' }}
+                            style={{
+                              cursor: 'pointer',
+                              overflow: 'hidden',
+                              lineHeight: 0,
+                              aspectRatio: aspects[String(p.id || p.r2Url || p.filename)] || p._gridAspect || '2/3',
+                              position: 'relative',
+                              userSelect: 'none',
+                              WebkitTouchCallout: 'none'
+                            }}
                             className="gallery-item group observed-photo"
                             data-photo-id={p.id}
                           >
@@ -2367,11 +2452,18 @@ export default function GuestGalleryPhotos({ params }: Props) {
                               src={getThumbnailUrl(p, 600)}
                               alt=""
                               loading="lazy"
-                              onLoad={(e) => e.currentTarget.classList.add('loaded')}
+                              onLoad={(e) => handleImageLoad(e, p)}
                               onError={(e) => handleImageError(e, p)}
                               onDragStart={(e) => e.preventDefault()}
                               className="pointer-events-none select-none"
-                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageOrientation: 'none' }}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: isVideoItem(p) ? 'contain' : 'cover',
+                                display: 'block',
+                                imageOrientation: 'none',
+                                backgroundColor: isVideoItem(p) ? '#000' : 'transparent',
+                              }}
                             />
                             {/* ▶ Play badge for videos */}
                             {isVideoItem(p) && (
