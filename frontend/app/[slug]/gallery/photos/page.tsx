@@ -1427,6 +1427,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
           backgroundColor: '#0a0a0a',
           color: '#ffffff',
           fontFamily: '"Montserrat", system-ui, sans-serif',
+          cursor: 'default'
         }}
       >
         {/* Full-bleed Cover Photo in background */}
@@ -1446,7 +1447,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
         {/* Subtle dark overlay with backdrop blur */}
         <div 
           className="absolute inset-0 bg-black/60 backdrop-blur-md"
-          style={{ zIndex: 1 }}
+          style={{ zIndex: 1, cursor: 'default' }}
         />
 
         {/* Small Dialog Box (Matching selfie dialog box style) */}
@@ -1459,14 +1460,27 @@ export default function GuestGalleryPhotos({ params }: Props) {
             borderRadius: '0px',
             border: '1px solid rgba(255, 255, 255, 0.12)',
             boxShadow: '0 40px 80px rgba(0, 0, 0, 0.55)',
-            padding: '2.5rem 1.75rem 2rem'
+            padding: '2.5rem 1.75rem 2rem',
+            cursor: 'default'
           }}
         >
+          {/* Close 'X' Button returning to cover */}
+          <button
+            onClick={() => router.push(`/${slug}/gallery`)}
+            className="absolute top-4 right-4 text-neutral-400 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
+            style={{ cursor: 'pointer' }}
+            aria-label="Close"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
           {/* Brand Logo */}
           <img 
             src="/logo-white.png" 
             alt="Misty Visuals" 
-            style={{ height: '3.25rem', width: 'auto', objectFit: 'contain', marginBottom: '1.25rem' }} 
+            style={{ height: '3.25rem', width: 'auto', objectFit: 'contain', marginBottom: '1.25rem', cursor: 'default' }} 
           />
 
           {/* Option 2A: Pre-heading text */}
@@ -1478,7 +1492,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
             color: 'rgba(255, 255, 255, 0.75)',
             textAlign: 'center',
             marginBottom: '0.6rem',
-            maxWidth: '300px'
+            maxWidth: '300px',
+            cursor: 'default'
           }}>
             This is an app-exclusive gallery. Continue on mobile to view all photos.
           </p>
@@ -1493,7 +1508,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
             textAlign: 'center',
             marginBottom: '1.25rem',
             color: '#ffffff',
-            lineHeight: 1.4
+            lineHeight: 1.4,
+            cursor: 'default'
           }}>
             Download the My Circle App
           </h2>
@@ -1527,12 +1543,13 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 padding: '10px',
                 borderRadius: '12px',
                 boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-                marginBottom: '0.65rem'
+                marginBottom: '0.65rem',
+                cursor: 'default'
               }}>
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=0&data=${encodeURIComponent(`https://mycircle.mistyvisuals.com/${slug}/gallery`)}`}
                   alt="Scan with your phone"
-                  style={{ width: '130px', height: '130px', display: 'block' }}
+                  style={{ width: '130px', height: '130px', display: 'block', cursor: 'default' }}
                 />
               </div>
 
@@ -1544,7 +1561,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 color: 'rgba(255, 255, 255, 0.65)',
                 textAlign: 'center',
                 marginBottom: '1.5rem',
-                maxWidth: '280px'
+                maxWidth: '280px',
+                cursor: 'default'
               }}>
                 Scan the QR with your phone camera to download &amp; view the gallery in the app
               </p>
@@ -1556,7 +1574,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '0.75rem',
-                width: '100%'
+                width: '100%',
+                cursor: 'default'
               }}>
                 {/* Apple App Store Badge */}
                 <a
@@ -1564,12 +1583,12 @@ export default function GuestGalleryPhotos({ params }: Props) {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:opacity-90 active:scale-95 transition-all inline-block"
-                  style={{ textDecoration: 'none' }}
+                  style={{ textDecoration: 'none', cursor: 'pointer' }}
                 >
                   <img
                     src="/app-store-badge.svg"
                     alt="Download on the App Store"
-                    style={{ height: '38px', width: 'auto', display: 'block' }}
+                    style={{ height: '38px', width: 'auto', display: 'block', cursor: 'pointer' }}
                   />
                 </a>
 
@@ -1579,12 +1598,12 @@ export default function GuestGalleryPhotos({ params }: Props) {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:opacity-90 active:scale-95 transition-all inline-block"
-                  style={{ textDecoration: 'none' }}
+                  style={{ textDecoration: 'none', cursor: 'pointer' }}
                 >
                   <img
                     src="/google-play-badge.svg"
                     alt="Get it on Google Play"
-                    style={{ height: '38px', width: 'auto', display: 'block' }}
+                    style={{ height: '38px', width: 'auto', display: 'block', cursor: 'pointer' }}
                   />
                 </a>
               </div>

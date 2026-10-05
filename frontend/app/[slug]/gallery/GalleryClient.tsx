@@ -347,10 +347,10 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
         minHeight: '560px',
         overflow: 'hidden',
         background: '#111',
-        cursor: showLoginModal ? 'default' : 'pointer'
+        cursor: (showLoginModal || showAppPromptModal || event?.allowDownloads === false) ? 'default' : 'pointer'
       }}
       onClick={() => {
-        if (!showLoginModal) {
+        if (!showLoginModal && !showAppPromptModal && event?.allowDownloads !== false) {
           handleEnterGallery()
         }
       }}
@@ -440,7 +440,7 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
       </div>
 
       {/* Brand Footer Logo */}
-      {!showLoginModal && (
+      {!showLoginModal && !showAppPromptModal && (
         <div style={{
           position: 'absolute',
           bottom: '2rem',
@@ -472,6 +472,7 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
       {showAppPromptModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md"
+          style={{ cursor: 'default' }}
           onClick={() => setShowAppPromptModal(false)}
         >
           <div
@@ -482,13 +483,15 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
               WebkitBackdropFilter: 'blur(30px)',
               borderRadius: '0px',
               border: '1px solid rgba(255, 255, 255, 0.12)',
-              padding: '2.5rem 1.75rem 2rem'
+              padding: '2.5rem 1.75rem 2rem',
+              cursor: 'default'
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setShowAppPromptModal(false)}
-              className="absolute top-4 right-4 text-neutral-400 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+              className="absolute top-4 right-4 text-neutral-400 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
+              style={{ cursor: 'pointer' }}
               aria-label="Close"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -500,7 +503,7 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
             <img 
               src="/logo-white.png" 
               alt="Misty Visuals" 
-              style={{ height: '3.25rem', width: 'auto', objectFit: 'contain', marginBottom: '1.25rem' }} 
+              style={{ height: '3.25rem', width: 'auto', objectFit: 'contain', marginBottom: '1.25rem', cursor: 'default' }} 
             />
 
             {/* Option 2A: Pre-heading text */}
@@ -512,7 +515,8 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
               color: 'rgba(255, 255, 255, 0.75)',
               textAlign: 'center',
               marginBottom: '0.6rem',
-              maxWidth: '300px'
+              maxWidth: '300px',
+              cursor: 'default'
             }}>
               This is an app-exclusive gallery. Continue on mobile to view all photos.
             </p>
@@ -527,7 +531,8 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
               textAlign: 'center',
               marginBottom: '1.25rem',
               color: '#ffffff',
-              lineHeight: 1.4
+              lineHeight: 1.4,
+              cursor: 'default'
             }}>
               Download the My Circle App
             </h2>
@@ -538,12 +543,13 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
               padding: '10px',
               borderRadius: '12px',
               boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-              marginBottom: '0.65rem'
+              marginBottom: '0.65rem',
+              cursor: 'default'
             }}>
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=0&data=${encodeURIComponent(`https://mycircle.mistyvisuals.com/${slug}/gallery`)}`}
                 alt="Scan with your phone"
-                style={{ width: '130px', height: '130px', display: 'block' }}
+                style={{ width: '130px', height: '130px', display: 'block', cursor: 'default' }}
               />
             </div>
 
@@ -555,7 +561,8 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
               color: 'rgba(255, 255, 255, 0.65)',
               textAlign: 'center',
               marginBottom: '1.5rem',
-              maxWidth: '280px'
+              maxWidth: '280px',
+              cursor: 'default'
             }}>
               Scan the QR with your phone camera to download &amp; view the gallery in the app
             </p>
@@ -567,7 +574,8 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
               alignItems: 'center',
               justifyContent: 'center',
               gap: '0.75rem',
-              width: '100%'
+              width: '100%',
+              cursor: 'default'
             }}>
               {/* Apple App Store Badge */}
               <a
@@ -575,12 +583,12 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:opacity-90 active:scale-95 transition-all inline-block"
-                style={{ textDecoration: 'none' }}
+                style={{ textDecoration: 'none', cursor: 'pointer' }}
               >
                 <img
                   src="/app-store-badge.svg"
                   alt="Download on the App Store"
-                  style={{ height: '38px', width: 'auto', display: 'block' }}
+                  style={{ height: '38px', width: 'auto', display: 'block', cursor: 'pointer' }}
                 />
               </a>
 
@@ -590,12 +598,12 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:opacity-90 active:scale-95 transition-all inline-block"
-                style={{ textDecoration: 'none' }}
+                style={{ textDecoration: 'none', cursor: 'pointer' }}
               >
                 <img
                   src="/google-play-badge.svg"
                   alt="Get it on Google Play"
-                  style={{ height: '38px', width: 'auto', display: 'block' }}
+                  style={{ height: '38px', width: 'auto', display: 'block', cursor: 'pointer' }}
                 />
               </a>
             </div>
