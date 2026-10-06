@@ -430,15 +430,29 @@ export default function GuestGalleryPhotos({ params }: Props) {
   }, [slug, apiUrl])
 
   useEffect(() => {
-    // Pause any playing video when navigating or closing the lightbox
-    if (lightboxVideoRef.current) {
-      lightboxVideoRef.current.pause()
-      lightboxVideoRef.current.currentTime = 0
+    // When closing lightbox or navigating to a non-video item, ensure previous video is paused
+    if (activePhotoIndex === null || !isVideoItem(activePhotosList[activePhotoIndex])) {
+      if (lightboxVideoRef.current) {
+        lightboxVideoRef.current.pause()
+        lightboxVideoRef.current.currentTime = 0
+      }
+    } else {
+      // When opening or switching to a video, auto-play immediately!
+      const video = lightboxVideoRef.current
+      if (video) {
+        const p = video.play()
+        if (p !== undefined) {
+          p.catch(() => {
+            video.muted = true
+            video.play().catch(() => {})
+          })
+        }
+      }
     }
     setHighResLoaded(false)
     setZoomScale(1)
     setZoomPosition({ x: 0, y: 0 })
-  }, [activePhotoIndex])
+  }, [activePhotoIndex, activePhotosList, isVideoItem])
 
   useEffect(() => {
     const updateCols = () => {
@@ -2725,13 +2739,47 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 /* Native video player — no zoom/swipe overlay so browser controls work */
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <video
-                    ref={lightboxVideoRef}
+                    ref={(el) => {
+                      lightboxVideoRef.current = el
+                      if (el) {
+                        const p = el.play()
+                        if (p !== undefined) {
+                          p.catch(() => {
+                            el.muted = true
+                            el.play().catch(() => {})
+                          })
+                        }
+                      }
+                    }}
                     key={activePhotosList[activePhotoIndex].r2Url}
                     src={activePhotosList[activePhotoIndex].r2Url}
                     poster={getThumbnailUrl(activePhotosList[activePhotoIndex], 1200)}
                     controls
                     autoPlay
                     playsInline
+                    preload="auto"
+                    onLoadedMetadata={(e) => {
+                      const v = e.currentTarget
+                      const p = v.play()
+                      if (p !== undefined) {
+                        p.catch(() => {
+                          v.muted = true
+                          v.play().catch(() => {})
+                        })
+                      }
+                    }}
+                    onCanPlay={(e) => {
+                      const v = e.currentTarget
+                      if (v.paused) {
+                        const p = v.play()
+                        if (p !== undefined) {
+                          p.catch(() => {
+                            v.muted = true
+                            v.play().catch(() => {})
+                          })
+                        }
+                      }
+                    }}
                     onClick={e => e.stopPropagation()}
                     onContextMenu={e => e.preventDefault()}
                     style={{
