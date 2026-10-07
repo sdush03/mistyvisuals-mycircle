@@ -314,6 +314,7 @@ fastify.addHook('onRequest', async (req, reply) => {
   if (path.startsWith('/api/photos/file/') || path.startsWith('/photos/file/')) return
   if (path.startsWith('/api/videos/file/') || path.startsWith('/videos/file/')) return
   if (path === '/api/gallery/resize') return
+  if (path.startsWith('/api/user/push-')) return
   const auth = getAuthFromRequest(req)
   if (auth) req.auth = auth
   if (!auth) {
