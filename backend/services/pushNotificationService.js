@@ -104,7 +104,7 @@ async function sendExpoPushNotifications(messages) {
  * @param {number[]} [options.userIds] Optional filter by specific userIds
  */
 async function getEventGuestTokens(eventId, options = {}) {
-  const { emails, userIds } = options;
+  const { emails, userIds, requireFullAccess = false, excludeEmails = [] } = options;
 
   const emailFilter = emails && emails.length > 0 ? [...new Set([
     ...emails,
@@ -112,21 +112,28 @@ async function getEventGuestTokens(eventId, options = {}) {
     ...emails.map(e => e.trim())
   ])] : null;
 
+  const excludeSet = new Set((excludeEmails || []).map(e => String(e).toLowerCase().trim()));
+
   const guests = await prisma.guest.findMany({
     where: {
       eventId,
       isBlocked: false,
+      ...(requireFullAccess ? { hasFullAccess: true } : {}),
       ...(emailFilter ? { email: { in: emailFilter } } : {}),
     },
     select: { id: true, email: true, circleUser: { select: { id: true } } },
   });
 
+  const eligibleGuests = excludeSet.size > 0
+    ? guests.filter(g => !g.email || !excludeSet.has(g.email.toLowerCase().trim()))
+    : guests;
+
   const guestEmails = [...new Set([
-    ...guests.map(g => g.email).filter(Boolean),
-    ...guests.map(g => g.email?.toLowerCase()).filter(Boolean),
+    ...eligibleGuests.map(g => g.email).filter(Boolean),
+    ...eligibleGuests.map(g => g.email?.toLowerCase()).filter(Boolean),
   ])];
-  const guestUserIds = guests.map(g => g.circleUser?.id).filter(Boolean);
-  const guestIds = guests.map(g => g.id).filter(Boolean);
+  const guestUserIds = eligibleGuests.map(g => g.circleUser?.id).filter(Boolean);
+  const guestIds = eligibleGuests.map(g => g.id).filter(Boolean);
 
   const orConditions = [
     ...(guestEmails.length > 0 ? [{ email: { in: guestEmails } }] : []),
@@ -146,6 +153,10 @@ async function getEventGuestTokens(eventId, options = {}) {
     },
     select: { token: true, email: true, userId: true },
   });
+
+  if (excludeSet.size > 0) {
+    return tokenRecords.filter(t => !t.email || !excludeSet.has(t.email.toLowerCase().trim()));
+  }
 
   return tokenRecords;
 }
@@ -187,13 +198,15 @@ async function notifyNewFaceMatches({ eventId, email, count = 1 }) {
 /**
  * 2A. New Ceremony / Tab Added (Option A)
  * Fired when a brand new ceremony tab (Sangeet, Haldi, Reception) is published
+ * Note: Only Full Access guests receive notifications for ceremony tabs they can access.
  */
-async function notifyNewCeremonyTab({ eventId, ceremonyName }) {
+async function notifyNewCeremonyTab({ eventId, ceremonyName, excludeEmails = [] }) {
   const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
   if (!event || !ceremonyName) return;
   const couple = formatCoupleNames(event.title);
 
-  const tokens = await getEventGuestTokens(eventId);
+  const isHighlights = String(ceremonyName || '').trim().toLowerCase() === 'highlights';
+  const tokens = await getEventGuestTokens(eventId, { requireFullAccess: !isHighlights, excludeEmails });
   if (tokens.length === 0) return;
 
   const messages = tokens.map((t) => ({
@@ -215,13 +228,15 @@ async function notifyNewCeremonyTab({ eventId, ceremonyName }) {
 /**
  * 2B. More Photos Added to an Existing Album (Option B + Ceremony name)
  * Fired when more photos are uploaded to an existing ceremony/album
+ * Note: Only Full Access guests receive notifications for ceremony tabs they can access.
  */
-async function notifyMorePhotosAdded({ eventId, ceremonyName = 'celebration' }) {
+async function notifyMorePhotosAdded({ eventId, ceremonyName = 'celebration', excludeEmails = [] }) {
   const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
   if (!event) return;
   const couple = formatCoupleNames(event.title);
 
-  const tokens = await getEventGuestTokens(eventId);
+  const isHighlights = String(ceremonyName || '').trim().toLowerCase() === 'highlights';
+  const tokens = await getEventGuestTokens(eventId, { requireFullAccess: !isHighlights, excludeEmails });
   if (tokens.length === 0) return;
 
   const messages = tokens.map((t) => ({
@@ -243,12 +258,12 @@ async function notifyMorePhotosAdded({ eventId, ceremonyName = 'celebration' }) 
 /**
  * 3A. Cinematic Highlight / Trailer Premiere (Option B)
  */
-async function notifyCinemaHighlight({ eventId }) {
+async function notifyCinemaHighlight({ eventId, excludeEmails = [] }) {
   const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
   if (!event) return;
   const couple = formatCoupleNames(event.title);
 
-  const tokens = await getEventGuestTokens(eventId);
+  const tokens = await getEventGuestTokens(eventId, { excludeEmails });
   if (tokens.length === 0) return;
 
   const messages = tokens.map((t) => ({
@@ -271,12 +286,12 @@ async function notifyCinemaHighlight({ eventId }) {
 /**
  * 3B. Reels & Candid Diaries (Option B with Popcorn emoji 🍿)
  */
-async function notifyCandidReels({ eventId }) {
+async function notifyCandidReels({ eventId, excludeEmails = [] }) {
   const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
   if (!event) return;
   const couple = formatCoupleNames(event.title);
 
-  const tokens = await getEventGuestTokens(eventId);
+  const tokens = await getEventGuestTokens(eventId, { excludeEmails });
   if (tokens.length === 0) return;
 
   const messages = tokens.map((t) => ({
@@ -299,11 +314,11 @@ async function notifyCandidReels({ eventId }) {
 /**
  * 3C. Stage & Spotlight / Dance Performances (Option A)
  */
-async function notifyDancePerformances({ eventId }) {
+async function notifyDancePerformances({ eventId, excludeEmails = [] }) {
   const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
   if (!event) return;
 
-  const tokens = await getEventGuestTokens(eventId);
+  const tokens = await getEventGuestTokens(eventId, { excludeEmails });
   if (tokens.length === 0) return;
 
   const messages = tokens.map((t) => ({
@@ -325,12 +340,13 @@ async function notifyDancePerformances({ eventId }) {
 
 /**
  * 3D. The Extended Cuts / Full Ceremony Chapters (Option B)
+ * Note: Only Full Access guests receive notifications for Extended Cuts.
  */
-async function notifyExtendedCuts({ eventId }) {
+async function notifyExtendedCuts({ eventId, excludeEmails = [] }) {
   const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
   if (!event) return;
 
-  const tokens = await getEventGuestTokens(eventId);
+  const tokens = await getEventGuestTokens(eventId, { requireFullAccess: true, excludeEmails });
   if (tokens.length === 0) return;
 
   const messages = tokens.map((t) => ({
@@ -353,12 +369,12 @@ async function notifyExtendedCuts({ eventId }) {
 /**
  * 3E. "Coming Soon" Teaser Poster Drop (Option A)
  */
-async function notifyComingSoonTeaser({ eventId }) {
+async function notifyComingSoonTeaser({ eventId, excludeEmails = [] }) {
   const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
   if (!event) return;
   const couple = formatCoupleNames(event.title);
 
-  const tokens = await getEventGuestTokens(eventId);
+  const tokens = await getEventGuestTokens(eventId, { excludeEmails });
   if (tokens.length === 0) return;
 
   const messages = tokens.map((t) => ({
@@ -381,11 +397,15 @@ async function notifyComingSoonTeaser({ eventId }) {
  * 3F. Universal Updated Video Version (Option 1)
  * Fired when a newly edited version of any video (trailer, reel, dance, or film) is uploaded
  */
-async function notifyUpdatedVideoVersion({ eventId, videoTitle = 'the video', videoId }) {
+async function notifyUpdatedVideoVersion({ eventId, videoTitle = 'the video', videoId, category, excludeEmails = [] }) {
   const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
   if (!event) return;
 
-  const tokens = await getEventGuestTokens(eventId);
+  const isExtended = String(category || '').toLowerCase().includes('extended') ||
+                     String(videoTitle || '').toLowerCase().includes('extended') ||
+                     String(videoTitle || '').toLowerCase().includes('full film');
+
+  const tokens = await getEventGuestTokens(eventId, { requireFullAccess: isExtended, excludeEmails });
   if (tokens.length === 0) return;
 
   const messages = tokens.map((t) => ({
@@ -409,12 +429,12 @@ async function notifyUpdatedVideoVersion({ eventId, videoTitle = 'the video', vi
  * 4. Initial Gallery Launch (Option C)
  * Fired when the very first photos of the wedding go live
  */
-async function notifyInitialGalleryLaunch({ eventId }) {
+async function notifyInitialGalleryLaunch({ eventId, excludeEmails = [] }) {
   const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
   if (!event) return;
   const couple = formatCoupleNames(event.title);
 
-  const tokens = await getEventGuestTokens(eventId);
+  const tokens = await getEventGuestTokens(eventId, { excludeEmails });
   if (tokens.length === 0) return;
 
   const messages = tokens.map((t) => ({

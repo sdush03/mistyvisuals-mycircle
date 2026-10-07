@@ -923,7 +923,8 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
             await pushService.notifyUpdatedVideoVersion({
               eventId,
               videoTitle: updatedExif.title || photo.filename,
-              videoId: photoId
+              videoId: photoId,
+              category: cat
             });
           } else if (prevWasComingSoon) {
             // Converted from Coming Soon -> Dispatch corresponding category notification
@@ -1542,6 +1543,7 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
           if (remainingGuests.length > 0 && tabCounts.length > 0) {
             const primaryTab = tabCounts[0]?.tabName;
             const isCinema = String(primaryTab || '').toUpperCase() === 'CINEMA';
+            const excluded = Array.from(notifiedGuestEmails);
 
             // Check if this is the very first batch of photos ever uploaded to the celebration (Scenario 4)
             const totalEventPhotos = await prisma.photo.count({ where: { eventId } });
@@ -1550,14 +1552,14 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
 
             if (isInitialGalleryLaunch && !isCinema) {
               // 4: Initial Gallery Launch
-              await pushService.notifyInitialGalleryLaunch({ eventId });
+              await pushService.notifyInitialGalleryLaunch({ eventId, excludeEmails: excluded });
             } else if (isCinema) {
               const comingSoonCount = await prisma.photo.count({
                 where: { ...where, tabName: 'CINEMA', exif: { path: ['isComingSoon'], equals: true } }
               });
               if (comingSoonCount > 0) {
                 // 3E: Teaser poster
-                await pushService.notifyComingSoonTeaser({ eventId });
+                await pushService.notifyComingSoonTeaser({ eventId, excludeEmails: excluded });
               } else {
                 // Actual video release uploaded via desktop uploader
                 const firstVideo = await prisma.photo.findFirst({
@@ -1566,13 +1568,13 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
                 });
                 const cat = String(firstVideo?.exif?.cinemaCategory || '').toUpperCase();
                 if (cat.includes('CANDID') || cat.includes('REEL') || cat.includes('DIAR')) {
-                  await pushService.notifyCandidReels({ eventId });
+                  await pushService.notifyCandidReels({ eventId, excludeEmails: excluded });
                 } else if (cat.includes('STAGE') || cat.includes('SPOTLIGHT') || cat.includes('PERFORMANCE') || cat.includes('DANCE')) {
-                  await pushService.notifyDancePerformances({ eventId });
+                  await pushService.notifyDancePerformances({ eventId, excludeEmails: excluded });
                 } else if (cat.includes('EXTENDED') || cat.includes('CUTS') || cat.includes('CHAPTER')) {
-                  await pushService.notifyExtendedCuts({ eventId });
+                  await pushService.notifyExtendedCuts({ eventId, excludeEmails: excluded });
                 } else {
-                  await pushService.notifyCinemaHighlight({ eventId });
+                  await pushService.notifyCinemaHighlight({ eventId, excludeEmails: excluded });
                 }
               }
             } else {
@@ -1584,13 +1586,15 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
                 // 2A: Brand new ceremony tab
                 await pushService.notifyNewCeremonyTab({
                   eventId,
-                  ceremonyName: primaryTab || 'Celebration'
+                  ceremonyName: primaryTab || 'Celebration',
+                  excludeEmails: excluded,
                 });
               } else {
                 // 2B: More photos added to existing album
                 await pushService.notifyMorePhotosAdded({
                   eventId,
-                  ceremonyName: primaryTab || 'celebration'
+                  ceremonyName: primaryTab || 'celebration',
+                  excludeEmails: excluded,
                 });
               }
             }
