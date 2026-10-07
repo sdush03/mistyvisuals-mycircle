@@ -937,6 +937,168 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
     }
   });
 
+  // Get indexed timeline filmstrip keyframes across the entire tab (for Spatial Film Loupe)
+  fastify.get('/api/gallery/public/events/:slug/filmstrip', async (req, reply) => {
+    const slug = req.params.slug.toLowerCase().trim();
+    try {
+      const isPreview = checkPreviewToken(fastify, req);
+      const event = await prisma.galleryEvent.findUnique({ where: { slug } });
+      if (!event || (!event.active && !isPreview)) {
+        return reply.code(404).send({ error: 'Gallery not found' });
+      }
+
+      if (event.allowDownloads === false && !isPreview) {
+        let isAdmin = false;
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+          try {
+            const token = authHeader.split(' ')[1];
+            const decoded = fastify.jwt.verify(token);
+            if (decoded.role === 'admin' || (decoded.roles && decoded.roles.includes('admin'))) {
+              isAdmin = true;
+            }
+          } catch (_) {}
+        }
+        if (!isAdmin && !isMobileAppRequest(req)) {
+          return reply.code(403).send({
+            error: 'This gallery has download protection enabled and can only be viewed in the Misty Visuals mobile app.',
+            code: 'APP_ONLY_GALLERY'
+          });
+        }
+      }
+
+      let guestId = null;
+      let hasFullAccess = !!isPreview;
+      let isBrideOrGroom = false;
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+          const token = authHeader.split(' ')[1];
+          const decoded = fastify.jwt.verify(token);
+          if (decoded.role === 'admin' || (decoded.roles && decoded.roles.includes('admin'))) {
+            hasFullAccess = true;
+          } else if (decoded.isAdminPreview && decoded.slug.toLowerCase().trim() === slug) {
+            hasFullAccess = true;
+          } else if (decoded.role === 'guest') {
+            const eventIdMatches = decoded.eventId != null && String(decoded.eventId) === String(event.id);
+            const slugMatches = decoded.slug && decoded.slug.toLowerCase().trim() === slug;
+            if (eventIdMatches || slugMatches || decoded.guestId) {
+              const dbGuest = await prisma.guest.findFirst({
+                where: { id: decoded.guestId, eventId: event.id }
+              });
+              if (dbGuest && !dbGuest.isBlocked) {
+                guestId = dbGuest.id;
+                hasFullAccess = dbGuest.hasFullAccess;
+                const guestRole = (dbGuest.displayRole || '').toString().trim().toUpperCase();
+                isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(guestRole);
+              }
+            }
+          } else if (decoded.role === 'family') {
+            hasFullAccess = true;
+          }
+        } catch (_) {}
+      }
+
+      const tabFilter = (req.query.tab || 'ALL').trim();
+      const isAllTab = tabFilter.toUpperCase() === 'ALL';
+
+      const whereClause = {
+        eventId: event.id,
+        ...(!isBrideOrGroom ? { isPrivate: false } : {}),
+      };
+
+      if (!hasFullAccess) {
+        let actualTab = 'Highlights';
+        if (event.tabs && Array.isArray(event.tabs)) {
+          const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === 'highlights');
+          if (matchedTab) actualTab = matchedTab;
+        }
+        whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+      } else if (!isAllTab) {
+        let actualTab = tabFilter;
+        if (event.tabs && Array.isArray(event.tabs)) {
+          const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === tabFilter.toLowerCase());
+          if (matchedTab) actualTab = matchedTab;
+        }
+        whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+      } else {
+        const activeTabs = event.tabs || [];
+        if (activeTabs.length > 0) {
+          whereClause.OR = [
+            { tabName: { in: activeTabs } },
+            { tabName: null }
+          ];
+        }
+      }
+
+      const total = await prisma.photo.count({ where: whereClause });
+      if (total === 0) {
+        return reply.send({
+          total: 0,
+          step: isAllTab ? 100 : 50,
+          tab: tabFilter,
+          keyframes: []
+        });
+      }
+
+      // Step configuration:
+      // ALL tab: index every 100 photos (e.g. 4000 photos -> 40 keyframes)
+      // Ceremony / event tab: index every 50 photos (e.g. 2000 photos -> 40 keyframes)
+      const targetStep = isAllTab ? 100 : 50;
+      const step = total > targetStep ? targetStep : Math.max(1, Math.floor(total / 30));
+
+      // Fast, lightweight query selecting only milestone fields
+      const photos = await prisma.photo.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          r2Url: true,
+          thumbnailUrl: true,
+          tabName: true,
+          capturedAt: true
+        },
+        orderBy: [
+          { capturedAt: 'asc' },
+          { id: 'asc' }
+        ]
+      });
+
+      const keyframes = [];
+      for (let i = 0; i < photos.length; i += step) {
+        const p = photos[i];
+        keyframes.push({
+          index: i,
+          id: p.id,
+          r2Url: p.r2Url,
+          thumbnailUrl: getDerivedThumbnail(p.thumbnailUrl, p.r2Url),
+          tabName: p.tabName
+        });
+      }
+
+      // Ensure the very last photo is always present to anchor the end of the timeline
+      if (photos.length > 1 && (photos.length - 1) % step !== 0) {
+        const lastP = photos[photos.length - 1];
+        keyframes.push({
+          index: photos.length - 1,
+          id: lastP.id,
+          r2Url: lastP.r2Url,
+          thumbnailUrl: getDerivedThumbnail(lastP.thumbnailUrl, lastP.r2Url),
+          tabName: lastP.tabName
+        });
+      }
+
+      return reply.send({
+        total,
+        step,
+        tab: tabFilter,
+        keyframes
+      });
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to retrieve filmstrip keyframes' });
+    }
+  });
+
   // Get guest's favorite/liked photos (public guest endpoint)
   fastify.get('/api/gallery/public/events/:slug/favorites', { preHandler: verifyGuestAuth }, async (req, reply) => {
     const slug = req.params.slug.toLowerCase().trim();
