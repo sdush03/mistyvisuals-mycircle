@@ -1034,6 +1034,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           total: 0,
           step: isAllTab ? 100 : 50,
           tab: tabFilter,
+          debug: { isAllTab, hasFullAccess, eventId: event.id, whereClause },
           keyframes: []
         });
       }
