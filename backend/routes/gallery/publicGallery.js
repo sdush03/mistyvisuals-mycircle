@@ -980,6 +980,9 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           } else if (decoded.isAdminPreview && decoded.slug.toLowerCase().trim() === slug) {
             hasFullAccess = true;
           } else if (decoded.role === 'guest') {
+            if (decoded.hasFullAccess === true) {
+              hasFullAccess = true;
+            }
             const eventIdMatches = decoded.eventId != null && String(decoded.eventId) === String(event.id);
             const slugMatches = decoded.slug && decoded.slug.toLowerCase().trim() === slug;
             if (eventIdMatches || slugMatches || decoded.guestId) {
@@ -988,7 +991,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
               });
               if (dbGuest && !dbGuest.isBlocked) {
                 guestId = dbGuest.id;
-                hasFullAccess = dbGuest.hasFullAccess;
+                hasFullAccess = dbGuest.hasFullAccess || hasFullAccess;
                 const guestRole = (dbGuest.displayRole || '').toString().trim().toUpperCase();
                 isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(guestRole);
               }
@@ -997,6 +1000,10 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
             hasFullAccess = true;
           }
         } catch (_) {}
+      }
+
+      if (!event.fullCode && !event.partialCode) {
+        hasFullAccess = true;
       }
 
       const tabFilter = (req.query.tab || 'ALL').trim();
@@ -1042,10 +1049,27 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       }
 
       // Step configuration:
-      // ALL tab: index every 100 photos (e.g. 4000 photos -> 40 keyframes)
-      // Ceremony / event tab: index every 50 photos (e.g. 2000 photos -> 40 keyframes)
-      const targetStep = isAllTab ? 100 : 50;
-      const step = total > targetStep ? targetStep : Math.max(1, Math.floor(total / 30));
+      // ALL tab: index every 100 photos for large albums (>=500), 50 for medium (>=200), 25 for small
+      // Ceremony / event tab: index every 50 photos for large albums (>=250), 25 for medium (>=100), 15 for small
+      let step;
+      if (isAllTab) {
+        if (total >= 500) {
+          step = 100;
+        } else if (total >= 200) {
+          step = 50;
+        } else {
+          step = Math.max(15, Math.floor(total / 6));
+        }
+      } else {
+        if (total >= 250) {
+          step = 50;
+        } else if (total >= 100) {
+          step = 25;
+        } else {
+          step = Math.max(10, Math.floor(total / 6));
+        }
+      }
+      step = Math.max(5, step);
 
       // Fast, lightweight query selecting only milestone fields
       const photos = await prisma.photo.findMany({
