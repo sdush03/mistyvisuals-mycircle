@@ -1412,3 +1412,20 @@ model SavedPhoto {
   @@map("saved_photos")
 }
 
+model UserPushToken {
+  id         Int       @id @default(autoincrement())
+  userId     Int?      @map("user_id")
+  guestId    Int?      @map("guest_id")
+  email      String?   @db.VarChar(255)
+  token      String    @unique @db.VarChar(255)
+  platform   String?   @db.VarChar(50)
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt  DateTime  @default(now()) @map("updated_at") @db.Timestamp(6)
+
+  @@index([userId], map: "idx_push_tokens_user_id")
+  @@index([guestId], map: "idx_push_tokens_guest_id")
+  @@index([email], map: "idx_push_tokens_email")
+  @@map("user_push_tokens")
+}
+

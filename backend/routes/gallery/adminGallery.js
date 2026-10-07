@@ -911,6 +911,37 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
         }
       });
 
+      // Dispatch push notification for video releases (Coming Soon conversion or re-edit version update)
+      setImmediate(async () => {
+        try {
+          const pushService = require('../../services/pushNotificationService');
+          const prevWasComingSoon = Boolean(currentExif.isComingSoon || (photo.tabName === 'CINEMA' && !isOldVideo));
+          const cat = String(currentExif.cinemaCategory || '').toUpperCase();
+
+          if (isOldVideo && photo.r2Url !== r2Url) {
+            // 3F: Updated Version / Re-upload on the same poster
+            await pushService.notifyUpdatedVideoVersion({
+              eventId,
+              videoTitle: updatedExif.title || photo.filename,
+              videoId: photoId
+            });
+          } else if (prevWasComingSoon) {
+            // Converted from Coming Soon -> Dispatch corresponding category notification
+            if (cat.includes('CANDID') || cat.includes('REEL') || cat.includes('DIAR')) {
+              await pushService.notifyCandidReels({ eventId });
+            } else if (cat.includes('STAGE') || cat.includes('SPOTLIGHT') || cat.includes('PERFORMANCE') || cat.includes('DANCE')) {
+              await pushService.notifyDancePerformances({ eventId });
+            } else if (cat.includes('EXTENDED') || cat.includes('CUTS') || cat.includes('CHAPTER')) {
+              await pushService.notifyExtendedCuts({ eventId });
+            } else {
+              await pushService.notifyCinemaHighlight({ eventId });
+            }
+          }
+        } catch (pushErr) {
+          req.log.warn('Video release push notification error:', pushErr?.message || pushErr);
+        }
+      });
+
       return {
         success: true,
         photo: {
@@ -1434,6 +1465,117 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
     } catch (err) {
       req.log.error(err);
       return reply.code(500).send({ error: 'Failed to update guest access' });
+    }
+  });
+
+  // Integrity check & automated post-upload notification dispatch
+  fastify.post('/api/gallery/events/:id/integrity-check', async (req, reply) => {
+    const auth = requireAdmin(req, reply);
+    if (!auth) return;
+
+    const eventId = parseInt(req.params.id, 10);
+    const { photoIds = [] } = req.body || {};
+
+    try {
+      const where = photoIds.length > 0
+        ? { id: { in: photoIds.map(Number) }, eventId }
+        : { eventId };
+
+      const [total, facesUnscanned, tabCounts] = await Promise.all([
+        prisma.photo.count({ where }),
+        prisma.photo.count({ where: { ...where, facesScanned: false } }),
+        prisma.photo.groupBy({
+          by: ['tabName'],
+          where,
+          _count: { _all: true }
+        })
+      ]);
+
+      // Dispatch automated post-upload notifications asynchronously
+      setImmediate(async () => {
+        try {
+          const pushService = require('../../services/pushNotificationService');
+          const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
+          if (!event || !event.active) return;
+
+          // Find active guests for this event
+          const guests = await prisma.guest.findMany({
+            where: { eventId, isBlocked: false },
+            include: { circleUser: { select: { id: true, selfieVector: true } } }
+          });
+          if (guests.length === 0) return;
+
+          const notifiedGuestEmails = new Set();
+
+          // 1. Check AI face matches in Qdrant for guests who have a selfie
+          if (photoIds.length > 0) {
+            for (const g of guests) {
+              const vector = g.circleUser?.selfieVector;
+              if (vector && Array.isArray(vector)) {
+                try {
+                  const matchRes = await qdrant.searchSimilarFaces(eventId, vector, 0.55, 50);
+                  const matchedNewPhotos = (matchRes || []).filter(m => photoIds.includes(m.photoId || m.id));
+                  if (matchedNewPhotos.length > 0) {
+                    notifiedGuestEmails.add(g.email);
+                    await pushService.notifyNewFaceMatches({
+                      eventId,
+                      email: g.email,
+                      count: matchedNewPhotos.length
+                    });
+                  }
+                } catch (_) {}
+              }
+            }
+          }
+
+          // 2. For guests not notified of personal matches, notify about the ceremony/batch
+          const remainingGuests = guests.filter(g => !notifiedGuestEmails.has(g.email));
+          if (remainingGuests.length > 0 && tabCounts.length > 0) {
+            const primaryTab = tabCounts[0]?.tabName;
+            const isCinema = String(primaryTab || '').toUpperCase() === 'CINEMA';
+
+            if (isCinema) {
+              const comingSoonCount = await prisma.photo.count({
+                where: { ...where, tabName: 'CINEMA', exif: { path: ['isComingSoon'], equals: true } }
+              });
+              if (comingSoonCount > 0) {
+                await pushService.notifyComingSoonTeaser({ eventId });
+              }
+            } else {
+              const allTabPhotosCount = await prisma.photo.count({
+                where: { eventId, tabName: primaryTab }
+              });
+
+              if (allTabPhotosCount <= (tabCounts[0]?._count?._all || 0) + 10) {
+                // 2A: Brand new ceremony tab
+                await pushService.notifyNewCeremonyTab({
+                  eventId,
+                  ceremonyName: primaryTab || 'Celebration'
+                });
+              } else {
+                // 2B: More photos added to existing album
+                await pushService.notifyMorePhotosAdded({
+                  eventId,
+                  ceremonyName: primaryTab || 'celebration'
+                });
+              }
+            }
+          }
+        } catch (notifErr) {
+          req.log.warn('Post-upload notification error:', notifErr?.message || notifErr);
+        }
+      });
+
+      return {
+        status: 'success',
+        registered: total,
+        expected: photoIds.length || total,
+        facesUnscanned,
+        tabCounts: tabCounts.map(t => ({ tabName: t.tabName || 'Uncategorized', count: t._count._all }))
+      };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Integrity check failed' });
     }
   });
 };

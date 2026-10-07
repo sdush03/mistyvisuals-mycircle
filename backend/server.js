@@ -512,6 +512,7 @@ fastify.register(require('./routes/analytics'), {
 fastify.register(require('./routes/saves'), {
     pool, requireAdmin, requireAuth
 })
+fastify.register(require('./routes/pushTokens'))
 // Removed /* ===================== PUBLIC WEBSITE ===================== */
 
 // Removed apiRoutes registration
@@ -622,6 +623,10 @@ fastify.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
   // Auto-sync past selfies to Cloudflare R2 on boot if R2 is enabled
   const { syncPastSelfiesToR2 } = require('./scripts/sync_past_selfies_to_r2');
   syncPastSelfiesToR2().catch(err => console.warn('[R2 Sync] Startup selfie sync skipped/failed:', err?.message || err));
+
+  // Initialize automated celebration push notifications & maintenance scheduler
+  const { startDailyNotificationJobs } = require('./cron/dailyNotificationJobs');
+  startDailyNotificationJobs();
 
   // Admin-only background jobs (metrics, smart notifications, Facebook leads polling)
   // are disabled on the MyCircle guest portal backend. They are handled by the main OS server.

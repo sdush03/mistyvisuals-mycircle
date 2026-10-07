@@ -457,6 +457,34 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         guestAnchors[guestKey] = { anchorVector: res.vector, extraVectors: [] };
       }
 
+      // Check if existing photos already match this newly registered selfie (Scenario 7)
+      setImmediate(async () => {
+        try {
+          const matchRes = await qdrant.searchSimilarFaces(eventId, res.vector, 0.55, 50);
+          if (matchRes && matchRes.length > 0) {
+            const pushTokens = await prisma.userPushToken.findMany({
+              where: { email: req.guest.email, isActive: true },
+              select: { token: true }
+            });
+            if (pushTokens.length > 0) {
+              const pushService = require('../../services/pushNotificationService');
+              const eventRecord = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
+              const couple = pushService.formatCoupleNames(eventRecord?.title);
+              for (const pt of pushTokens) {
+                await pushService.notifyInstantFaceMatches({
+                  token: pt.token,
+                  count: matchRes.length,
+                  slug: req.params.slug,
+                  coupleNames: couple
+                });
+              }
+            }
+          }
+        } catch (notifErr) {
+          req.log.warn('Instant match push notification error:', notifErr?.message || notifErr);
+        }
+      });
+
       return { status: 'success', selfieUrl };
     } catch (err) {
       req.log.error('Selfie upload failed:', err.message);
