@@ -1025,22 +1025,6 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         const hasHighlights = event.tabs && Array.isArray(event.tabs) && event.tabs.some(t => t.trim().toLowerCase() === 'highlights');
         if (hasHighlights) {
           whereClause.tabName = { equals: 'Highlights', mode: 'insensitive' };
-        } else {
-          const activeTabs = event.tabs || [];
-          if (activeTabs.length > 0) {
-            whereClause.OR = [
-              { tabName: { in: activeTabs } },
-              { tabName: null }
-            ];
-          }
-        }
-      } else {
-        const activeTabs = event.tabs || [];
-        if (activeTabs.length > 0) {
-          whereClause.OR = [
-            { tabName: { in: activeTabs } },
-            { tabName: null }
-          ];
         }
       }
 
