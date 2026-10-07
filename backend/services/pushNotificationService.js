@@ -106,29 +106,43 @@ async function sendExpoPushNotifications(messages) {
 async function getEventGuestTokens(eventId, options = {}) {
   const { emails, userIds } = options;
 
-  let guestEmails = emails;
-  if (!guestEmails || guestEmails.length === 0) {
-    const guests = await prisma.guest.findMany({
-      where: {
-        eventId,
-        isBlocked: false,
-      },
-      select: { email: true, circleUser: { select: { id: true } } },
-    });
-    guestEmails = guests.map((g) => g.email).filter(Boolean);
-  }
+  const emailFilter = emails && emails.length > 0 ? [...new Set([
+    ...emails,
+    ...emails.map(e => e.toLowerCase()),
+    ...emails.map(e => e.trim())
+  ])] : null;
 
-  if (guestEmails.length === 0 && (!userIds || userIds.length === 0)) {
+  const guests = await prisma.guest.findMany({
+    where: {
+      eventId,
+      isBlocked: false,
+      ...(emailFilter ? { email: { in: emailFilter } } : {}),
+    },
+    select: { id: true, email: true, circleUser: { select: { id: true } } },
+  });
+
+  const guestEmails = [...new Set([
+    ...guests.map(g => g.email).filter(Boolean),
+    ...guests.map(g => g.email?.toLowerCase()).filter(Boolean),
+  ])];
+  const guestUserIds = guests.map(g => g.circleUser?.id).filter(Boolean);
+  const guestIds = guests.map(g => g.id).filter(Boolean);
+
+  const orConditions = [
+    ...(guestEmails.length > 0 ? [{ email: { in: guestEmails } }] : []),
+    ...(guestUserIds.length > 0 ? [{ userId: { in: guestUserIds } }] : []),
+    ...(guestIds.length > 0 ? [{ guestId: { in: guestIds } }] : []),
+    ...(userIds && userIds.length > 0 ? [{ userId: { in: userIds } }] : []),
+  ];
+
+  if (orConditions.length === 0) {
     return [];
   }
 
   const tokenRecords = await prisma.userPushToken.findMany({
     where: {
       isActive: true,
-      OR: [
-        ...(guestEmails.length > 0 ? [{ email: { in: guestEmails } }] : []),
-        ...(userIds && userIds.length > 0 ? [{ userId: { in: userIds } }] : []),
-      ],
+      OR: orConditions,
     },
     select: { token: true, email: true, userId: true },
   });

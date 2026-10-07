@@ -1509,12 +1509,19 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
 
           // 1. Check AI face matches in Qdrant for guests who have a selfie
           if (photoIds.length > 0) {
+            const numericPhotoIds = new Set(photoIds.map(Number));
             for (const g of guests) {
-              const vector = g.circleUser?.selfieVector;
-              if (vector && Array.isArray(vector)) {
+              let vector = g.circleUser?.selfieVector;
+              if (typeof vector === 'string') {
+                try { vector = JSON.parse(vector); } catch (_) {}
+              }
+              if (Array.isArray(vector) && vector.length > 0) {
                 try {
-                  const matchRes = await qdrant.searchSimilarFaces(eventId, vector, 0.55, 50);
-                  const matchedNewPhotos = (matchRes || []).filter(m => photoIds.includes(m.photoId || m.id));
+                  const matchRes = await qdrant.searchVectors(eventId, vector, 100, 0.35);
+                  const matchedNewPhotos = (matchRes || []).filter(m => {
+                    const pId = Number(m.photo_id || m.photoId || m.id);
+                    return numericPhotoIds.has(pId);
+                  });
                   if (matchedNewPhotos.length > 0) {
                     notifiedGuestEmails.add(g.email);
                     await pushService.notifyNewFaceMatches({
@@ -1523,7 +1530,9 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
                       count: matchedNewPhotos.length
                     });
                   }
-                } catch (_) {}
+                } catch (matchErr) {
+                  console.warn('[IntegrityCheck Push] Face match search error:', matchErr?.message || matchErr);
+                }
               }
             }
           }
