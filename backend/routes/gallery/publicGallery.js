@@ -1014,20 +1014,26 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         ...(!isBrideOrGroom ? { isPrivate: false } : {}),
       };
 
-      if (!hasFullAccess) {
-        let actualTab = 'Highlights';
-        if (event.tabs && Array.isArray(event.tabs)) {
-          const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === 'highlights');
-          if (matchedTab) actualTab = matchedTab;
-        }
-        whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
-      } else if (!isAllTab) {
+      if (!isAllTab) {
         let actualTab = tabFilter;
         if (event.tabs && Array.isArray(event.tabs)) {
           const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === tabFilter.toLowerCase());
           if (matchedTab) actualTab = matchedTab;
         }
         whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+      } else if (!hasFullAccess) {
+        const hasHighlights = event.tabs && Array.isArray(event.tabs) && event.tabs.some(t => t.trim().toLowerCase() === 'highlights');
+        if (hasHighlights) {
+          whereClause.tabName = { equals: 'Highlights', mode: 'insensitive' };
+        } else {
+          const activeTabs = event.tabs || [];
+          if (activeTabs.length > 0) {
+            whereClause.OR = [
+              { tabName: { in: activeTabs } },
+              { tabName: null }
+            ];
+          }
+        }
       } else {
         const activeTabs = event.tabs || [];
         if (activeTabs.length > 0) {
