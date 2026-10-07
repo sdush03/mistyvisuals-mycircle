@@ -166,11 +166,13 @@ async function notifyNewFaceMatches({ eventId, email, count = 1 }) {
   const tokens = await getEventGuestTokens(eventId, { emails: [email] });
   if (tokens.length === 0) return;
 
+  const photoText = count === 1 ? '1 photo' : `${count} photos`;
+
   const messages = tokens.map((t) => ({
     to: t.token,
     sound: 'default',
     title: 'Look who we spotted! ✨',
-    body: `We just found some wonderful photos of you from ${couple}’s celebration. Tap to see them!`,
+    body: `New moments just arrived in ${couple}’s celebration, and we spotted ${photoText} of you! Tap to see them.`,
     data: {
       url: `mycircle://celebration/${event.slug}?tab=matched`,
       slug: event.slug,
