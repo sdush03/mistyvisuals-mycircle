@@ -1021,11 +1021,6 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           if (matchedTab) actualTab = matchedTab;
         }
         whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
-      } else if (!hasFullAccess) {
-        const hasHighlights = event.tabs && Array.isArray(event.tabs) && event.tabs.some(t => t.trim().toLowerCase() === 'highlights');
-        if (hasHighlights) {
-          whereClause.tabName = { equals: 'Highlights', mode: 'insensitive' };
-        }
       }
 
       const total = await prisma.photo.count({ where: whereClause });
@@ -1034,7 +1029,6 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           total: 0,
           step: isAllTab ? 100 : 50,
           tab: tabFilter,
-          debug: { isAllTab, hasFullAccess, eventId: event.id, whereClause },
           keyframes: []
         });
       }
