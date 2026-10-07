@@ -269,6 +269,19 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const allPhotos = tabCache[activeAllTab]?.photos || []
   const hasMore = tabCache[activeAllTab]?.hasMore ?? true
 
+  // Track currently active list of photos for dynamic preload & lightbox
+  // With pagination, allPhotos is already tab-filtered (fetched with ?tab=) so no client-side filter needed
+  const activePhotosList = useMemo(() => {
+    if (viewMode === 'matched') {
+      return photos || []
+    } else if (viewMode === 'all') {
+      return allPhotos
+    } else if (viewMode === 'favorites') {
+      return favoritesList
+    }
+    return []
+  }, [viewMode, photos, allPhotos, favoritesList])
+
   // Sentinel ref for IntersectionObserver (infinite scroll trigger)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
@@ -359,15 +372,17 @@ export default function GuestGalleryPhotos({ params }: Props) {
   
   // Masonry layout and Lightbox navigation states
   const [cols, setCols] = useState(4)
-  const [aspects, setAspects] = useState<Record<string, number>>(() => {
-    if (typeof window === 'undefined') return {}
+  const [aspects, setAspects] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
     try {
       const saved = sessionStorage.getItem(`mv_aspects_${slug}`)
-      return saved ? JSON.parse(saved) : {}
-    } catch {
-      return {}
-    }
-  })
+      if (saved) {
+        setAspects(JSON.parse(saved))
+      }
+    } catch {}
+  }, [slug])
 
   const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>, photo: any) => {
     const img = e.currentTarget
@@ -431,7 +446,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
   useEffect(() => {
     // When closing lightbox or navigating to a non-video item, ensure previous video is paused
-    if (activePhotoIndex === null || !isVideoItem(activePhotosList[activePhotoIndex])) {
+    if (activePhotoIndex === null || !activePhotosList?.[activePhotoIndex] || !isVideoItem(activePhotosList[activePhotoIndex])) {
       if (lightboxVideoRef.current) {
         lightboxVideoRef.current.pause()
         lightboxVideoRef.current.currentTime = 0
@@ -466,21 +481,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
     window.addEventListener('resize', updateCols)
     return () => window.removeEventListener('resize', updateCols)
   }, [])
-
-  // Track currently active list of photos for dynamic preload & lightbox
-  // With pagination, allPhotos is already tab-filtered (fetched with ?tab=) so no client-side filter needed
-  const activePhotosList = useMemo(() => {
-    if (viewMode === 'matched') {
-      return photos || []
-    } else if (viewMode === 'all') {
-      return allPhotos
-    } else if (viewMode === 'favorites') {
-      return favoritesList
-    }
-    return []
-  }, [viewMode, photos, allPhotos, favoritesList])
-
-
 
   const getTabCount = useCallback((tabName: string) => {
     if (!event?.tabCounts || !tabName || typeof tabName !== 'string') return null
