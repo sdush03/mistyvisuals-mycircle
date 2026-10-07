@@ -460,10 +460,19 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
       // Check if existing photos already match this newly registered selfie (Scenario 7)
       setImmediate(async () => {
         try {
-          const matchRes = await qdrant.searchSimilarFaces(eventId, res.vector, 0.55, 50);
+          const matchRes = await qdrant.searchVectors(eventId, res.vector, 100, 0.35);
           if (matchRes && matchRes.length > 0) {
+            const guestEmail = req.guest.email || '';
+            const emailVariants = [guestEmail, guestEmail.toLowerCase()].filter(Boolean);
             const pushTokens = await prisma.userPushToken.findMany({
-              where: { email: req.guest.email, isActive: true },
+              where: {
+                OR: [
+                  { email: { in: emailVariants } },
+                  ...(req.guest.id ? [{ guestId: req.guest.id }] : []),
+                  ...(userRecord?.id ? [{ userId: userRecord.id }] : []),
+                ],
+                isActive: true,
+              },
               select: { token: true }
             });
             if (pushTokens.length > 0) {

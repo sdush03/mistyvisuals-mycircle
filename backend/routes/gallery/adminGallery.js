@@ -1543,12 +1543,37 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
             const primaryTab = tabCounts[0]?.tabName;
             const isCinema = String(primaryTab || '').toUpperCase() === 'CINEMA';
 
-            if (isCinema) {
+            // Check if this is the very first batch of photos ever uploaded to the celebration (Scenario 4)
+            const totalEventPhotos = await prisma.photo.count({ where: { eventId } });
+            const currentBatchTotal = photoIds.length || total;
+            const isInitialGalleryLaunch = totalEventPhotos <= currentBatchTotal + 5;
+
+            if (isInitialGalleryLaunch && !isCinema) {
+              // 4: Initial Gallery Launch
+              await pushService.notifyInitialGalleryLaunch({ eventId });
+            } else if (isCinema) {
               const comingSoonCount = await prisma.photo.count({
                 where: { ...where, tabName: 'CINEMA', exif: { path: ['isComingSoon'], equals: true } }
               });
               if (comingSoonCount > 0) {
+                // 3E: Teaser poster
                 await pushService.notifyComingSoonTeaser({ eventId });
+              } else {
+                // Actual video release uploaded via desktop uploader
+                const firstVideo = await prisma.photo.findFirst({
+                  where: { ...where, tabName: 'CINEMA' },
+                  select: { exif: true }
+                });
+                const cat = String(firstVideo?.exif?.cinemaCategory || '').toUpperCase();
+                if (cat.includes('CANDID') || cat.includes('REEL') || cat.includes('DIAR')) {
+                  await pushService.notifyCandidReels({ eventId });
+                } else if (cat.includes('STAGE') || cat.includes('SPOTLIGHT') || cat.includes('PERFORMANCE') || cat.includes('DANCE')) {
+                  await pushService.notifyDancePerformances({ eventId });
+                } else if (cat.includes('EXTENDED') || cat.includes('CUTS') || cat.includes('CHAPTER')) {
+                  await pushService.notifyExtendedCuts({ eventId });
+                } else {
+                  await pushService.notifyCinemaHighlight({ eventId });
+                }
               }
             } else {
               const allTabPhotosCount = await prisma.photo.count({
