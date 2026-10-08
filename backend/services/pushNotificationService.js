@@ -196,17 +196,16 @@ async function notifyNewFaceMatches({ eventId, email, count = 1 }) {
 }
 
 /**
- * 2A. New Ceremony / Tab Added (Option A)
- * Fired when a brand new ceremony tab (Sangeet, Haldi, Reception) is published
- * Note: Only Full Access guests receive notifications for ceremony tabs they can access.
+ * 2A. New Ceremony Tab Added (Option A)
+ * Fired when a brand new ceremony tab (Sangeet, Haldi, Reception) is published.
+ * Note: Haldi, Sangeet, etc. are ceremony tabs and require Full Access.
  */
 async function notifyNewCeremonyTab({ eventId, ceremonyName, excludeEmails = [] }) {
   const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
   if (!event || !ceremonyName) return;
   const couple = formatCoupleNames(event.title);
 
-  const isHighlights = String(ceremonyName || '').trim().toLowerCase() === 'highlights';
-  const tokens = await getEventGuestTokens(eventId, { requireFullAccess: !isHighlights, excludeEmails });
+  const tokens = await getEventGuestTokens(eventId, { requireFullAccess: true, excludeEmails });
   if (tokens.length === 0) return;
 
   const messages = tokens.map((t) => ({
@@ -226,17 +225,16 @@ async function notifyNewCeremonyTab({ eventId, ceremonyName, excludeEmails = [] 
 }
 
 /**
- * 2B. More Photos Added to an Existing Album (Option B + Ceremony name)
- * Fired when more photos are uploaded to an existing ceremony/album
- * Note: Only Full Access guests receive notifications for ceremony tabs they can access.
+ * 2B. More Photos Added to an Existing Ceremony Album (Option B + Ceremony name)
+ * Fired when more photos are uploaded to an existing ceremony album.
+ * Note: Only Full Access guests receive notifications for ceremony tabs.
  */
 async function notifyMorePhotosAdded({ eventId, ceremonyName = 'celebration', excludeEmails = [] }) {
   const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
   if (!event) return;
   const couple = formatCoupleNames(event.title);
 
-  const isHighlights = String(ceremonyName || '').trim().toLowerCase() === 'highlights';
-  const tokens = await getEventGuestTokens(eventId, { requireFullAccess: !isHighlights, excludeEmails });
+  const tokens = await getEventGuestTokens(eventId, { requireFullAccess: true, excludeEmails });
   if (tokens.length === 0) return;
 
   const messages = tokens.map((t) => ({
@@ -249,6 +247,45 @@ async function notifyMorePhotosAdded({ eventId, ceremonyName = 'celebration', ex
       slug: event.slug,
       tab: ceremonyName,
       type: 'more_photos',
+    },
+  }));
+
+  return sendExpoPushNotifications(messages);
+}
+
+/**
+ * 2C. Curated Highlights Drop (Option 2 - Warm & Heartfelt)
+ * Fired when master-edited Highlights photos are published.
+ * Highlights is NOT an event—it is the curated collection of retouched master edits,
+ * accessible to ALL users (Partial, Full Access, Bridal Crew, Family).
+ */
+async function notifyHighlightsDrop({ eventId, isFirstBatch = true, excludeEmails = [] }) {
+  const event = await prisma.galleryEvent.findUnique({ where: { id: eventId } });
+  if (!event) return;
+  const couple = formatCoupleNames(event.title);
+
+  // Available to ALL users (requireFullAccess: false)
+  const tokens = await getEventGuestTokens(eventId, { requireFullAccess: false, excludeEmails });
+  if (tokens.length === 0) return;
+
+  const title = isFirstBatch
+    ? `The best of ${couple}’s celebration 🤍`
+    : 'More curated moments are in ✨';
+
+  const body = isFirstBatch
+    ? `All the magic, smiles, and favorite memories—curated and beautifully edited. Tap to view the Highlights!`
+    : `Our editors just added more of our favorite moments to ${couple}’s Highlights. Tap to view!`;
+
+  const messages = tokens.map((t) => ({
+    to: t.token,
+    sound: 'default',
+    title,
+    body,
+    data: {
+      url: `mycircle://celebration/${event.slug}?tab=Highlights`,
+      slug: event.slug,
+      tab: 'Highlights',
+      type: 'highlights_drop',
     },
   }));
 
@@ -544,6 +581,7 @@ module.exports = {
   notifyNewFaceMatches,
   notifyNewCeremonyTab,
   notifyMorePhotosAdded,
+  notifyHighlightsDrop,
   notifyCinemaHighlight,
   notifyCandidReels,
   notifyDancePerformances,
