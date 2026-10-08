@@ -1034,27 +1034,12 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       }
 
       // Step configuration:
-      // ALL tab: index every 100 photos for large albums (>=500), 50 for medium (>=200), 25 for small
-      // Ceremony / event tab: index every 50 photos for large albums (>=250), 25 for medium (>=100), 15 for small
-      let step;
-      if (isAllTab) {
-        if (total >= 500) {
-          step = 100;
-        } else if (total >= 200) {
-          step = 50;
-        } else {
-          step = Math.max(15, Math.floor(total / 6));
-        }
-      } else {
-        if (total >= 250) {
-          step = 50;
-        } else if (total >= 100) {
-          step = 25;
-        } else {
-          step = Math.max(10, Math.floor(total / 6));
-        }
-      }
-      step = Math.max(5, step);
+      // Dynamically target ~50-70 keyframes for smooth, continuous timeline scrubbing
+      const requestedTarget = parseInt(req.query.target, 10);
+      const targetCount = Number.isFinite(requestedTarget) && requestedTarget >= 15 && requestedTarget <= 100
+        ? requestedTarget
+        : Math.min(65, Math.max(20, Math.floor(total / 3)));
+      const step = Math.max(1, Math.floor(total / targetCount));
 
       // Fast, lightweight query selecting only milestone fields
       const photos = await prisma.photo.findMany({
