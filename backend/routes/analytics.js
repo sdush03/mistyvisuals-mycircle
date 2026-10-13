@@ -186,30 +186,86 @@ module.exports = async function analyticsRoutes(fastify, opts) {
         orderBy: { impressions: 'desc' }
       });
 
-      // Query video analytics events for this event
+      // Query video analytics events for this event (ordered chronologically)
       const videoEvents = await prisma.galleryAnalyticsEvent.findMany({
         where: { eventId, eventType: 'VIDEO_PLAYBACK' },
         select: {
+          id: true,
           mediaId: true,
           mediaUrl: true,
           action: true,
           watchTimeSeconds: true,
+          totalDurationSeconds: true,
           completionRatio: true,
           guestEmail: true,
-          guestName: true
-        }
+          guestName: true,
+          createdAt: true
+        },
+        orderBy: { createdAt: 'asc' }
       });
 
+      // Fetch photos in this gallery to match titles and thumbnails
+      const galleryPhotos = await prisma.photo.findMany({
+        where: { eventId },
+        select: {
+          id: true,
+          filename: true,
+          r2Url: true,
+          thumbnailUrl: true,
+          tabName: true,
+          exif: true
+        }
+      });
+      const photoMap = new Map();
+      galleryPhotos.forEach((p) => {
+        photoMap.set(String(p.id), p);
+        if (p.r2Url) photoMap.set(p.r2Url, p);
+      });
+
+      // Also fetch any numeric mediaIds that weren't in galleryPhotos
+      const missingNumericIds = [];
+      videoEvents.forEach((ve) => {
+        if (ve.mediaId && /^\d+$/.test(String(ve.mediaId))) {
+          const numId = parseInt(ve.mediaId, 10);
+          if (!photoMap.has(String(numId)) && !missingNumericIds.includes(numId)) {
+            missingNumericIds.push(numId);
+          }
+        }
+      });
+      if (missingNumericIds.length > 0) {
+        try {
+          const extraPhotos = await prisma.photo.findMany({
+            where: { id: { in: missingNumericIds } },
+            select: {
+              id: true,
+              filename: true,
+              r2Url: true,
+              thumbnailUrl: true,
+              tabName: true,
+              exif: true
+            }
+          });
+          extraPhotos.forEach((p) => {
+            photoMap.set(String(p.id), p);
+            if (p.r2Url) photoMap.set(p.r2Url, p);
+          });
+        } catch (e) {
+          console.warn('Failed to fetch extra photos for video analytics:', e);
+        }
+      }
+
       let totalVideoPlays = 0;
-      let totalWatchTimeSec = 0;
       let completedVideoCount = 0;
       const videoStatsMap = {};
       const guestVideoStatsMap = {};
+      // Active sessions keyed by `${guestEmail || 'anonymous'}_${videoKey}`
+      const activeSessions = new Map();
 
       videoEvents.forEach((ve) => {
         const watchSec = Number(ve.watchTimeSeconds || 0);
         const key = ve.mediaId || ve.mediaUrl || 'Unknown Video';
-        const gEmail = ve.guestEmail?.toLowerCase?.();
+        const gEmail = (ve.guestEmail || 'anonymous').toLowerCase().trim();
+        const sKey = `${gEmail}_${key}`;
 
         if (!videoStatsMap[key]) {
           videoStatsMap[key] = {
@@ -223,48 +279,96 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           };
         }
 
+        if (gEmail && !guestVideoStatsMap[gEmail]) {
+          guestVideoStatsMap[gEmail] = {
+            watchedMediaIds: new Set(),
+            totalWatchTimeSec: 0
+          };
+        }
+
         if (ve.action === 'START') {
           totalVideoPlays++;
           videoStatsMap[key].plays++;
-          if (gEmail) videoStatsMap[key].viewerEmails.add(gEmail);
+          if (gEmail) {
+            videoStatsMap[key].viewerEmails.add(gEmail);
+            guestVideoStatsMap[gEmail].watchedMediaIds.add(key);
+          }
         } else if (ve.action === 'REPLAY') {
           videoStatsMap[key].replays++;
+          if (gEmail) {
+            videoStatsMap[key].viewerEmails.add(gEmail);
+            guestVideoStatsMap[gEmail].watchedMediaIds.add(key);
+          }
         } else if (ve.action === 'COMPLETE') {
           completedVideoCount++;
           videoStatsMap[key].completions++;
         }
 
-        videoStatsMap[key].totalWatchSec += watchSec;
-        totalWatchTimeSec += watchSec;
-
-        if (gEmail) {
-          if (!guestVideoStatsMap[gEmail]) {
-            guestVideoStatsMap[gEmail] = {
-              watchedMediaIds: new Set(),
-              totalWatchTimeSec: 0
-            };
+        // Session delimited by START or REPLAY
+        let curSession = activeSessions.get(sKey);
+        if (ve.action === 'START' || ve.action === 'REPLAY' || !curSession) {
+          if (curSession) {
+            videoStatsMap[key].totalWatchSec += curSession.maxWatch;
+            if (gEmail && guestVideoStatsMap[gEmail]) {
+              guestVideoStatsMap[gEmail].totalWatchTimeSec += curSession.maxWatch;
+            }
           }
-          if (ve.mediaId) {
-            guestVideoStatsMap[gEmail].watchedMediaIds.add(ve.mediaId);
-          }
-          guestVideoStatsMap[gEmail].totalWatchTimeSec += watchSec;
+          curSession = { maxWatch: watchSec };
+          activeSessions.set(sKey, curSession);
+        } else {
+          curSession.maxWatch = Math.max(curSession.maxWatch, watchSec);
         }
       });
 
-      const videoPerformance = Object.values(videoStatsMap).map((v) => ({
-        mediaId: v.mediaId,
-        mediaUrl: v.mediaUrl,
-        plays: v.plays,
-        replays: v.replays,
-        completions: v.completions,
-        uniqueViewers: v.viewerEmails.size,
-        totalWatchSec: Math.round(v.totalWatchSec)
-      }));
+      // Commit remaining active sessions
+      for (const [sKey, curSession] of activeSessions.entries()) {
+        const lastUnderscore = sKey.lastIndexOf('_');
+        const gEmail = sKey.substring(0, lastUnderscore);
+        const key = sKey.substring(lastUnderscore + 1);
+        if (videoStatsMap[key]) {
+          videoStatsMap[key].totalWatchSec += curSession.maxWatch;
+        }
+        if (gEmail && guestVideoStatsMap[gEmail]) {
+          guestVideoStatsMap[gEmail].totalWatchTimeSec += curSession.maxWatch;
+        }
+      }
+
+      let totalWatchTimeSec = 0;
+      const videoPerformance = Object.values(videoStatsMap).map((v) => {
+        totalWatchTimeSec += v.totalWatchSec;
+        const photo = photoMap.get(String(v.mediaId)) || (v.mediaUrl ? photoMap.get(v.mediaUrl) : null);
+        let rawTitle = photo?.exif?.title || photo?.filename || (v.mediaId ? `Video #${v.mediaId}` : 'Cinema Video');
+        if (typeof rawTitle === 'string' && (rawTitle.startsWith('http://') || rawTitle.startsWith('https://'))) {
+          try {
+            const parsed = new URL(rawTitle);
+            rawTitle = decodeURIComponent(parsed.pathname.split('/').pop() || rawTitle);
+          } catch {}
+        }
+        const displayTitle = typeof rawTitle === 'string'
+          ? rawTitle.replace(/\.(mp4|mov|m4v|webm)$/i, '')
+          : (v.mediaId ? `Video #${v.mediaId}` : 'Cinema Video');
+
+        return {
+          mediaId: v.mediaId,
+          mediaUrl: v.mediaUrl || photo?.r2Url || null,
+          title: displayTitle,
+          filename: photo?.filename || null,
+          thumbnailUrl: photo?.thumbnailUrl || null,
+          tabName: photo?.tabName || 'Cinema',
+          plays: v.plays,
+          replays: v.replays,
+          completions: v.completions,
+          completionRate: v.plays > 0 ? Math.round((v.completions / v.plays) * 100) : 0,
+          uniqueViewers: v.viewerEmails.size,
+          totalWatchSec: Math.round(v.totalWatchSec),
+          avgWatchSec: v.plays > 0 ? Math.round(v.totalWatchSec / v.plays) : 0
+        };
+      });
 
       // Return stored matchCount immediately (updated when guests visit matched-photos).
       // Trigger background refresh for guests whose count may be stale (<=100 from old HNSW cap).
       const mappedGuests = guests.map(g => {
-        const gEmail = g.email?.toLowerCase?.();
+        const gEmail = g.email?.toLowerCase()?.trim();
         const vStats = guestVideoStatsMap[gEmail] || { watchedMediaIds: new Set(), totalWatchTimeSec: 0 };
         return {
           id: g.id,
