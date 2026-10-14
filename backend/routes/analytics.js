@@ -323,14 +323,13 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           }
         });
 
-        const hasAppFootprint = hasPushToken || g.provider === 'app' || hasAppEvent;
-        const isWeb = hasWebEvent;
-        const isApp = hasAppFootprint || !hasWebEvent;
+        const isApp = hasPushToken || hasAppEvent || (g.provider === 'app' && (g.impressions > 0 || g.downloadCount > 0));
+        const isWeb = hasWebEvent || (g.provider === 'web' && (g.impressions > 0 || g.downloadCount > 0));
 
-        let platform = 'WEB';
-        let platformLabel = 'Web Browser';
-        let platformIcon = '🌐';
-        let platformOS = 'web';
+        let platform = 'NONE';
+        let platformLabel = 'Not Active Yet';
+        let platformIcon = '—';
+        let platformOS = 'none';
 
         if (isApp && isWeb) {
           platform = 'BOTH';
@@ -350,7 +349,7 @@ module.exports = async function analyticsRoutes(fastify, opts) {
             platformOS = 'app';
           }
           platformIcon = '📱';
-        } else {
+        } else if (isWeb) {
           platform = 'WEB';
           platformLabel = 'Web Browser';
           platformIcon = '🌐';
@@ -705,12 +704,12 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           (cuEmail && guestPlatformMap.get(cuEmail)) ||
           guestPlatformMap.get(`id_${g.id}`) ||
           (g.circleUser?.id && guestPlatformMap.get(`user_${g.circleUser.id}`)) || {
-          platform: 'WEB',
-          platformLabel: 'Web Browser',
-          platformIcon: '🌐',
-          platformOS: 'web',
+          platform: 'NONE',
+          platformLabel: 'Not Active Yet',
+          platformIcon: '—',
+          platformOS: 'none',
           isApp: false,
-          isWeb: true
+          isWeb: false
         };
 
         if (pInfo.platform === 'APP') {
@@ -743,17 +742,20 @@ module.exports = async function analyticsRoutes(fastify, opts) {
 
       const appPeopleCount = appOnlyCount + bothPeopleCount;
       const webPeopleCount = webOnlyCount + bothPeopleCount;
+      const activePeopleCount = appOnlyCount + webOnlyCount + bothPeopleCount;
       const totalPeople = mappedGuests.length || registeredUsers || 0;
+      const inactiveCount = Math.max(0, totalPeople - activePeopleCount);
 
-      const appPeoplePercentage = totalPeople > 0 ? Math.round((appPeopleCount / totalPeople) * 100) : 0;
-      const webPeoplePercentage = totalPeople > 0
-        ? (bothPeopleCount === 0 ? (100 - appPeoplePercentage) : Math.round((webPeopleCount / totalPeople) * 100))
+      const denominator = activePeopleCount > 0 ? activePeopleCount : totalPeople;
+      const appPeoplePercentage = denominator > 0 ? Math.round((appPeopleCount / denominator) * 100) : 0;
+      const webPeoplePercentage = denominator > 0
+        ? (bothPeopleCount === 0 ? (100 - appPeoplePercentage) : Math.round((webPeopleCount / denominator) * 100))
         : 0;
-      const bothPeoplePercentage = totalPeople > 0 ? Math.round((bothPeopleCount / totalPeople) * 100) : 0;
+      const bothPeoplePercentage = denominator > 0 ? Math.round((bothPeopleCount / denominator) * 100) : 0;
 
-      const appOnlyPercentage = totalPeople > 0 ? Math.round((appOnlyCount / totalPeople) * 100) : 0;
+      const appOnlyPercentage = denominator > 0 ? Math.round((appOnlyCount / denominator) * 100) : 0;
       const bothPercentage = bothPeoplePercentage;
-      const webOnlyPercentage = totalPeople > 0 ? Math.max(0, 100 - appOnlyPercentage - bothPercentage) : 0;
+      const webOnlyPercentage = denominator > 0 ? Math.max(0, 100 - appOnlyPercentage - bothPercentage) : 0;
 
       const totalEngagementTimeSec = totalAppWatchTimeSec + totalWebWatchTimeSec;
       const appTimePercentage = totalEngagementTimeSec > 0
@@ -764,20 +766,20 @@ module.exports = async function analyticsRoutes(fastify, opts) {
         : 0;
 
       let comparisonInsight = '';
-      if (totalEngagementTimeSec > 0 && totalPeople > 0) {
+      if (totalEngagementTimeSec > 0 && activePeopleCount > 0) {
         if (webPeoplePercentage >= appPeoplePercentage && appTimePercentage > webTimePercentage) {
-          comparisonInsight = `${webPeoplePercentage}% of people use Web, but ${appTimePercentage}% of time spent is on the Mobile App.`;
+          comparisonInsight = `${webPeoplePercentage}% of active people use Web, but ${appTimePercentage}% of time spent is on the Mobile App.`;
         } else if (appPeoplePercentage >= webPeoplePercentage && webTimePercentage > appTimePercentage) {
-          comparisonInsight = `${appPeoplePercentage}% of people use the Mobile App, but ${webTimePercentage}% of time spent is on Web.`;
+          comparisonInsight = `${appPeoplePercentage}% of active people use the Mobile App, but ${webTimePercentage}% of time spent is on Web.`;
         } else if (appTimePercentage >= 60) {
-          comparisonInsight = `${appTimePercentage}% of engagement time happens on the Mobile App (${appPeoplePercentage}% of participants).`;
+          comparisonInsight = `${appTimePercentage}% of engagement time happens on the Mobile App (${appPeoplePercentage}% of active participants).`;
         } else if (webTimePercentage >= 60) {
-          comparisonInsight = `${webTimePercentage}% of engagement time happens on Web (${webPeoplePercentage}% of participants).`;
+          comparisonInsight = `${webTimePercentage}% of engagement time happens on Web (${webPeoplePercentage}% of active participants).`;
         } else {
           comparisonInsight = `Audience engagement is balanced: ${appTimePercentage}% on Mobile App vs ${webTimePercentage}% on Web.`;
         }
-      } else if (totalPeople > 0) {
-        comparisonInsight = `${appPeoplePercentage}% of participants are on the Mobile App and ${webPeoplePercentage}% are on Web.`;
+      } else if (activePeopleCount > 0) {
+        comparisonInsight = `${appPeopleCount} active on Mobile App, ${webPeopleCount} on Web (${inactiveCount} not active yet).`;
       } else {
         comparisonInsight = 'No audience platform activity recorded yet.';
       }
@@ -787,6 +789,8 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           appCount: appPeopleCount,
           webCount: webPeopleCount,
           bothCount: bothPeopleCount,
+          activeCount: activePeopleCount,
+          inactiveCount,
           appOnlyCount,
           webOnlyCount,
           totalCount: totalPeople,
