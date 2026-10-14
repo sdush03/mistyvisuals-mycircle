@@ -227,20 +227,24 @@ module.exports = async function analyticsRoutes(fastify, opts) {
 
       const guestEmails = guests.map(g => g.email?.toLowerCase()?.trim()).filter(Boolean);
       const guestIds = guests.map(g => g.id).filter(Boolean);
+      const circleUserIds = guests.map(g => g.circleUser?.id).filter(Boolean);
+      const circleUserEmails = guests.map(g => g.circleUser?.email?.toLowerCase()?.trim()).filter(Boolean);
+      const allLookupEmails = Array.from(new Set([...guestEmails, ...circleUserEmails]));
 
-      // Fetch active push tokens to identify iOS/Android mobile app users
-      const pushTokens = (guestEmails.length > 0 || guestIds.length > 0)
+      // Fetch push tokens to identify iOS/Android mobile app users (even if notifications are toggled off)
+      const pushTokens = (allLookupEmails.length > 0 || guestIds.length > 0 || circleUserIds.length > 0)
         ? await prisma.userPushToken.findMany({
             where: {
               OR: [
-                ...(guestEmails.length > 0 ? [{ email: { in: guestEmails, mode: 'insensitive' } }] : []),
-                ...(guestIds.length > 0 ? [{ guestId: { in: guestIds } }] : [])
-              ],
-              isActive: true
+                ...(allLookupEmails.length > 0 ? [{ email: { in: allLookupEmails, mode: 'insensitive' } }] : []),
+                ...(guestIds.length > 0 ? [{ guestId: { in: guestIds } }] : []),
+                ...(circleUserIds.length > 0 ? [{ userId: { in: circleUserIds } }] : [])
+              ]
             },
             select: {
-              email: true,
+              userId: true,
               guestId: true,
+              email: true,
               platform: true
             }
           }).catch(() => [])
@@ -270,6 +274,11 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           if (!pushTokenMap.has(gKey)) pushTokenMap.set(gKey, new Set());
           pushTokenMap.get(gKey).add(platform);
         }
+        if (pt.userId) {
+          const uKey = `user_${pt.userId}`;
+          if (!pushTokenMap.has(uKey)) pushTokenMap.set(uKey, new Set());
+          pushTokenMap.get(uKey).add(platform);
+        }
       });
 
       const guestSourcesMap = new Map();
@@ -287,21 +296,27 @@ module.exports = async function analyticsRoutes(fastify, opts) {
       guests.forEach(g => {
         const gEmail = g.email?.toLowerCase()?.trim();
         const gIdKey = `id_${g.id}`;
+        const uKey = g.circleUser?.id ? `user_${g.circleUser.id}` : null;
+        const cuEmail = g.circleUser?.email?.toLowerCase()?.trim();
+
         const userTokens = new Set([
-          ...(pushTokenMap.get(gEmail) || []),
-          ...(pushTokenMap.get(gIdKey) || [])
+          ...(gEmail ? pushTokenMap.get(gEmail) || [] : []),
+          ...(cuEmail ? pushTokenMap.get(cuEmail) || [] : []),
+          ...(pushTokenMap.get(gIdKey) || []),
+          ...(uKey ? pushTokenMap.get(uKey) || [] : [])
         ]);
         const hasPushToken = userTokens.size > 0;
 
         const allSources = new Set([
-          ...(guestSourcesMap.get(gEmail) || []),
+          ...(gEmail ? guestSourcesMap.get(gEmail) || [] : []),
+          ...(cuEmail ? guestSourcesMap.get(cuEmail) || [] : []),
           ...(guestSourcesMap.get(gIdKey) || [])
         ]);
 
         let hasAppEvent = false;
         let hasWebEvent = false;
         allSources.forEach(src => {
-          if (src.startsWith('WEB')) {
+          if (src.startsWith('WEB') || src.startsWith('DESKTOP') || src.startsWith('PORTAL')) {
             hasWebEvent = true;
           } else {
             hasAppEvent = true;
@@ -309,7 +324,7 @@ module.exports = async function analyticsRoutes(fastify, opts) {
         });
 
         const isApp = hasPushToken || g.provider === 'app' || hasAppEvent;
-        const isWeb = hasWebEvent || (g.provider !== 'app' && (g.impressions > 0 || g.downloadCount > 0 || !isApp));
+        const isWeb = hasWebEvent || !isApp;
 
         let platform = 'WEB';
         let platformLabel = 'Web Browser';
@@ -343,7 +358,9 @@ module.exports = async function analyticsRoutes(fastify, opts) {
 
         const info = { platform, platformLabel, platformIcon, platformOS, isApp, isWeb };
         if (gEmail) guestPlatformMap.set(gEmail, info);
+        if (cuEmail) guestPlatformMap.set(cuEmail, info);
         guestPlatformMap.set(gIdKey, info);
+        if (uKey) guestPlatformMap.set(uKey, info);
       });
 
       // Fetch photos in this gallery to match titles and thumbnails
@@ -668,21 +685,25 @@ module.exports = async function analyticsRoutes(fastify, opts) {
         };
       });
 
-      let appPeopleCount = 0;
-      let webPeopleCount = 0;
+      let appOnlyCount = 0;
+      let webOnlyCount = 0;
       let bothPeopleCount = 0;
 
       // Return stored matchCount immediately (updated when guests visit matched-photos).
       // Trigger background refresh for guests whose count may be stale (<=100 from old HNSW cap).
       const mappedGuests = guests.map(g => {
         const gEmail = g.email?.toLowerCase()?.trim();
-        const vStats = guestVideoStatsMap[gEmail] || {
+        const cuEmail = g.circleUser?.email?.toLowerCase()?.trim();
+        const vStats = (gEmail && guestVideoStatsMap[gEmail]) || (cuEmail && guestVideoStatsMap[cuEmail]) || {
           watchedMediaIds: new Set(),
           totalWatchTimeSec: 0,
           appWatchTimeSec: 0,
           webWatchTimeSec: 0
         };
-        const pInfo = guestPlatformMap.get(gEmail) || {
+        const pInfo = (gEmail && guestPlatformMap.get(gEmail)) ||
+          (cuEmail && guestPlatformMap.get(cuEmail)) ||
+          guestPlatformMap.get(`id_${g.id}`) ||
+          (g.circleUser?.id && guestPlatformMap.get(`user_${g.circleUser.id}`)) || {
           platform: 'WEB',
           platformLabel: 'Web Browser',
           platformIcon: '🌐',
@@ -692,12 +713,10 @@ module.exports = async function analyticsRoutes(fastify, opts) {
         };
 
         if (pInfo.platform === 'APP') {
-          appPeopleCount++;
+          appOnlyCount++;
         } else if (pInfo.platform === 'WEB') {
-          webPeopleCount++;
+          webOnlyCount++;
         } else if (pInfo.platform === 'BOTH') {
-          appPeopleCount++;
-          webPeopleCount++;
           bothPeopleCount++;
         }
 
@@ -721,17 +740,26 @@ module.exports = async function analyticsRoutes(fastify, opts) {
         };
       });
 
+      const appPeopleCount = appOnlyCount + bothPeopleCount;
+      const webPeopleCount = webOnlyCount + bothPeopleCount;
       const totalPeople = mappedGuests.length || registeredUsers || 0;
+
       const appPeoplePercentage = totalPeople > 0 ? Math.round((appPeopleCount / totalPeople) * 100) : 0;
-      const webPeoplePercentage = totalPeople > 0 ? Math.round((webPeopleCount / totalPeople) * 100) : 0;
+      const webPeoplePercentage = totalPeople > 0
+        ? (bothPeopleCount === 0 ? (100 - appPeoplePercentage) : Math.round((webPeopleCount / totalPeople) * 100))
+        : 0;
       const bothPeoplePercentage = totalPeople > 0 ? Math.round((bothPeopleCount / totalPeople) * 100) : 0;
+
+      const appOnlyPercentage = totalPeople > 0 ? Math.round((appOnlyCount / totalPeople) * 100) : 0;
+      const bothPercentage = bothPeoplePercentage;
+      const webOnlyPercentage = totalPeople > 0 ? Math.max(0, 100 - appOnlyPercentage - bothPercentage) : 0;
 
       const totalEngagementTimeSec = totalAppWatchTimeSec + totalWebWatchTimeSec;
       const appTimePercentage = totalEngagementTimeSec > 0
         ? Math.round((totalAppWatchTimeSec / totalEngagementTimeSec) * 100)
         : 0;
       const webTimePercentage = totalEngagementTimeSec > 0
-        ? Math.round((totalWebWatchTimeSec / totalEngagementTimeSec) * 100)
+        ? (100 - appTimePercentage)
         : 0;
 
       let comparisonInsight = '';
@@ -758,10 +786,14 @@ module.exports = async function analyticsRoutes(fastify, opts) {
           appCount: appPeopleCount,
           webCount: webPeopleCount,
           bothCount: bothPeopleCount,
+          appOnlyCount,
+          webOnlyCount,
           totalCount: totalPeople,
           appPercentage: appPeoplePercentage,
           webPercentage: webPeoplePercentage,
-          bothPercentage: bothPeoplePercentage
+          bothPercentage: bothPeoplePercentage,
+          appOnlyPercentage,
+          webOnlyPercentage
         },
         timeSpent: {
           appTimeSec: Math.round(totalAppWatchTimeSec),
