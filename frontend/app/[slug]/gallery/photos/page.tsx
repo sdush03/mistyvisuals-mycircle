@@ -415,6 +415,46 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const swipeStartYRef = useRef<number | null>(null)
   const gesturePreventLikeRef = useRef(false)
   const lightboxVideoRef = useRef<HTMLVideoElement | null>(null)
+  const trackedVideoMilestonesRef = useRef<Set<string>>(new Set())
+  const activeVideoPhotoRef = useRef<any>(null)
+
+  const sendVideoAnalytics = useCallback((action: string, cur: number, dur: number, photo: any) => {
+    if (!slug || !photo) return
+    const ratio = dur > 0 ? cur / dur : 0
+    let user = null
+    try {
+      const savedGuest = localStorage.getItem(`mv_gallery_guest_${slug}`)
+      if (savedGuest) user = JSON.parse(savedGuest)
+    } catch {}
+
+    const payload = {
+      events: [{
+        eventType: 'VIDEO_PLAYBACK',
+        mediaId: String(photo.id),
+        mediaType: 'VIDEO',
+        mediaUrl: photo.r2Url || null,
+        action,
+        source: 'WEB_LIGHTBOX',
+        metrics: {
+          watchTimeSeconds: cur,
+          totalDurationSeconds: dur,
+          completionRatio: ratio
+        }
+      }],
+      user: user ? {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phoneNumber || user.phone
+      } : null
+    }
+
+    fetch(`${apiUrl}/api/gallery/public/events/${slug}/analytics/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(() => {})
+  }, [slug, apiUrl])
 
   const loadFavoritesList = useCallback(async () => {
     if (event && event.allowDownloads === false && !event.isPreviewMode) {
@@ -445,13 +485,34 @@ export default function GuestGalleryPhotos({ params }: Props) {
   }, [slug, apiUrl])
 
   useEffect(() => {
-    // When closing lightbox or navigating to a non-video item, ensure previous video is paused
-    if (activePhotoIndex === null || !activePhotosList?.[activePhotoIndex] || !isVideoItem(activePhotosList[activePhotoIndex])) {
+    // When closing lightbox or navigating to a non-video item, ensure previous video is paused and progress logged
+    const activePhoto = activePhotoIndex !== null ? activePhotosList?.[activePhotoIndex] : null
+    const isVideo = activePhoto && isVideoItem(activePhoto)
+
+    if (!isVideo) {
       if (lightboxVideoRef.current) {
+        const cur = lightboxVideoRef.current.currentTime || 0
+        const dur = lightboxVideoRef.current.duration || 0
+        if (cur > 1.0 && !trackedVideoMilestonesRef.current.has('COMPLETE') && activeVideoPhotoRef.current) {
+          sendVideoAnalytics('PROGRESS', cur, dur, activeVideoPhotoRef.current)
+        }
         lightboxVideoRef.current.pause()
         lightboxVideoRef.current.currentTime = 0
       }
+      trackedVideoMilestonesRef.current.clear()
+      activeVideoPhotoRef.current = null
     } else {
+      if (activeVideoPhotoRef.current?.id !== activePhoto.id) {
+        if (lightboxVideoRef.current && activeVideoPhotoRef.current) {
+          const cur = lightboxVideoRef.current.currentTime || 0
+          const dur = lightboxVideoRef.current.duration || 0
+          if (cur > 1.0 && !trackedVideoMilestonesRef.current.has('COMPLETE')) {
+            sendVideoAnalytics('PROGRESS', cur, dur, activeVideoPhotoRef.current)
+          }
+        }
+        trackedVideoMilestonesRef.current.clear()
+        activeVideoPhotoRef.current = activePhoto
+      }
       // When opening or switching to a video, auto-play immediately!
       const video = lightboxVideoRef.current
       if (video) {
@@ -467,7 +528,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
     setHighResLoaded(false)
     setZoomScale(1)
     setZoomPosition({ x: 0, y: 0 })
-  }, [activePhotoIndex, activePhotosList, isVideoItem])
+  }, [activePhotoIndex, activePhotosList, isVideoItem, sendVideoAnalytics])
 
   useEffect(() => {
     const updateCols = () => {
@@ -2778,6 +2839,43 @@ export default function GuestGalleryPhotos({ params }: Props) {
                             v.play().catch(() => {})
                           })
                         }
+                      }
+                    }}
+                    onPlay={(e) => {
+                      const v = e.currentTarget
+                      const activePhoto = activePhotosList?.[activePhotoIndex]
+                      if (activePhoto && !trackedVideoMilestonesRef.current.has('START')) {
+                        trackedVideoMilestonesRef.current.add('START')
+                        sendVideoAnalytics('START', v.currentTime || 0, v.duration || 0, activePhoto)
+                      }
+                    }}
+                    onTimeUpdate={(e) => {
+                      const v = e.currentTarget
+                      const activePhoto = activePhotosList?.[activePhotoIndex]
+                      const cur = v.currentTime || 0
+                      const dur = v.duration || 0
+                      if (activePhoto && dur > 0 && cur > 0) {
+                        const ratio = cur / dur
+                        if (ratio >= 0.25 && !trackedVideoMilestonesRef.current.has('25')) {
+                          trackedVideoMilestonesRef.current.add('25')
+                          sendVideoAnalytics('MILESTONE_25', cur, dur, activePhoto)
+                        }
+                        if (ratio >= 0.50 && !trackedVideoMilestonesRef.current.has('50')) {
+                          trackedVideoMilestonesRef.current.add('50')
+                          sendVideoAnalytics('MILESTONE_50', cur, dur, activePhoto)
+                        }
+                        if (ratio >= 0.75 && !trackedVideoMilestonesRef.current.has('75')) {
+                          trackedVideoMilestonesRef.current.add('75')
+                          sendVideoAnalytics('MILESTONE_75', cur, dur, activePhoto)
+                        }
+                      }
+                    }}
+                    onEnded={(e) => {
+                      const v = e.currentTarget
+                      const activePhoto = activePhotosList?.[activePhotoIndex]
+                      if (activePhoto && !trackedVideoMilestonesRef.current.has('COMPLETE')) {
+                        trackedVideoMilestonesRef.current.add('COMPLETE')
+                        sendVideoAnalytics('COMPLETE', v.duration || 0, v.duration || 0, activePhoto)
                       }
                     }}
                     onClick={e => e.stopPropagation()}
