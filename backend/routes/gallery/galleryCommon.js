@@ -29,12 +29,18 @@ function getDerivedThumbnail(thumbnailUrl, r2Url) {
   };
 
   // 1. If a valid image thumbnail already exists, use it directly (Priority 1)
-  if (thumbnailUrl && !isVideo(thumbnailUrl) && !thumbnailUrl.startsWith('/api/gallery/resize')) {
+  if (thumbnailUrl && !isVideo(thumbnailUrl)) {
     return thumbnailUrl;
   }
 
-  // If r2Url is a video, never route to image resize service
+  // If r2Url is a video, check if standard thumbnail path exists
   if (isVideo(r2Url)) {
+    if (r2Url && typeof r2Url === 'string' && r2Url.includes('/videos/')) {
+      const clean = r2Url.split('?')[0];
+      const fn = clean.substring(clean.lastIndexOf('/') + 1);
+      const base = fn.replace(/\.[^/.]+$/, '');
+      return clean.replace('/videos/' + fn, `/thumbnails/thumb_${base}.jpg`);
+    }
     return null;
   }
 

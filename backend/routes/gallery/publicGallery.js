@@ -827,15 +827,15 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
         }
       } else {
-        const activeTabs = event.tabs || [];
-        if (activeTabs.length > 0) {
-          whereClause.OR = [
-            { tabName: { in: activeTabs } },
-            { tabName: null }
-          ];
-        }
-        if (tabFilter) {
-          delete whereClause.OR;
+        const isCinemaRequest = tabFilter && tabFilter.trim().toLowerCase() === 'cinema';
+        if (isCinemaRequest) {
+          let actualTab = 'Cinema';
+          if (event.tabs && Array.isArray(event.tabs)) {
+            const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === 'cinema');
+            if (matchedTab) actualTab = matchedTab;
+          }
+          whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+        } else if (tabFilter) {
           let actualTab = tabFilter;
           if (event.tabs && Array.isArray(event.tabs)) {
             const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === tabFilter.toLowerCase());
@@ -844,6 +844,22 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
             }
           }
           whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+        } else {
+          // Tab is 'ALL': include all ceremony tabs, but strictly exclude Cinema videos
+          const nonCinemaTabs = (event.tabs || []).filter(t => t.trim().toLowerCase() !== 'cinema');
+          if (nonCinemaTabs.length > 0) {
+            whereClause.OR = [
+              { tabName: { in: nonCinemaTabs } },
+              { tabName: null }
+            ];
+          }
+          whereClause.NOT = [
+            { tabName: { equals: 'Cinema', mode: 'insensitive' } },
+            { filename: { endsWith: '.mp4' } },
+            { filename: { endsWith: '.mov' } },
+            { filename: { endsWith: '.m4v' } },
+            { filename: { endsWith: '.webm' } }
+          ];
         }
       }
 
@@ -894,10 +910,14 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         const isPhotoOnlyCinema = isCinemaTab && !isVideoExt;
         const isComingSoon = Boolean(p.exif?.isComingSoon || p.exif?.comingSoon || isPhotoOnlyCinema);
 
+        const posterUrl = p.exif?.posterUrl || p.exif?.coverUrl || p.exif?.coverPhotoUrl || null;
+
         return {
           id: p.id,
           r2Url: p.r2Url,
-          thumbnailUrl: getDerivedThumbnail(p.thumbnailUrl, p.r2Url),
+          thumbnailUrl: getDerivedThumbnail(p.thumbnailUrl || posterUrl, p.r2Url),
+          posterUrl,
+          coverUrl: posterUrl,
           filename: p.filename,
           originalSize: p.originalFileSize,
           tabName: p.tabName,

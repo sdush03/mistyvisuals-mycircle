@@ -122,12 +122,18 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
       // If no explicit thumbnail URL, derive standard R2 thumbnail path from r2Url
       const videoSrc = photo.r2Url || photo.url || photo.file_url || ''
-      if (videoSrc && typeof videoSrc === 'string' && videoSrc.includes('/photos/')) {
+      if (videoSrc && typeof videoSrc === 'string' && (videoSrc.includes('/photos/') || videoSrc.includes('/videos/'))) {
         const clean = videoSrc.split('?')[0]
         const fn = photo.filename || clean.substring(clean.lastIndexOf('/') + 1)
         const baseName = fn.replace(/\.[^/.]+$/, '')
-        const derivedThumb = clean.replace('/photos/' + fn, `/thumbnails/thumb_${baseName}.jpg`)
+        const derivedThumb = videoSrc.includes('/videos/')
+          ? clean.replace('/videos/' + fn, `/thumbnails/thumb_${baseName}.jpg`)
+          : clean.replace('/photos/' + fn, `/thumbnails/thumb_${baseName}.jpg`)
         return `/api/gallery/resize?url=${encodeURIComponent(derivedThumb)}&w=${width}&q=75`
+      }
+
+      if (event?.coverPhotoMobileUrl || event?.coverPhotoUrl) {
+        return event.coverPhotoMobileUrl || event.coverPhotoUrl
       }
 
       return ''
