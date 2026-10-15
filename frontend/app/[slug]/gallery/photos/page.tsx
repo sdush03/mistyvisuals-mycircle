@@ -480,6 +480,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const lightboxVideoRef = useRef<HTMLVideoElement | null>(null)
   const trackedVideoMilestonesRef = useRef<Set<string>>(new Set())
   const activeVideoPhotoRef = useRef<any>(null)
+  const lastActivePhotoKeyRef = useRef<string | null>(null)
 
   const sendVideoAnalytics = useCallback((action: string, cur: number, dur: number, photo: any) => {
     if (!slug || !photo) return
@@ -550,6 +551,15 @@ export default function GuestGalleryPhotos({ params }: Props) {
   useEffect(() => {
     // When closing lightbox or navigating to a non-video item, ensure previous video is paused and progress logged
     const activePhoto = activePhotoIndex !== null ? activePhotosList?.[activePhotoIndex] : null
+    const photoKey = activePhoto ? String(activePhoto.id || activePhoto.r2Url || activePhoto.filename || '') : null
+
+    // If the active photo did not change (e.g. liking/unliking the photo updates activePhotosList),
+    // do NOT reset highResLoaded or zoom, otherwise the photo will turn into the blurred placeholder!
+    if (photoKey && photoKey === lastActivePhotoKeyRef.current) {
+      return
+    }
+    lastActivePhotoKeyRef.current = photoKey
+
     const isVideo = activePhoto && isVideoItem(activePhoto)
 
     if (!isVideo) {
@@ -3075,6 +3085,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                   {/* Blurred thumbnail placeholder visible while high-res loads */}
                   {!highResLoaded && (
                     <img
+                      key={`placeholder-${activePhotosList[activePhotoIndex].id || activePhotosList[activePhotoIndex].r2Url}`}
                       src={getThumbnailUrl(activePhotosList[activePhotoIndex], 600)}
                       alt=""
                       onError={(e) => handleImageError(e, activePhotosList[activePhotoIndex])}
@@ -3128,6 +3139,12 @@ export default function GuestGalleryPhotos({ params }: Props) {
                       }}
                     />
                     <img
+                      ref={(el) => {
+                        if (el && el.complete && el.naturalWidth > 0 && !highResLoaded) {
+                          setHighResLoaded(true)
+                        }
+                      }}
+                      key={`main-${activePhotosList[activePhotoIndex].id || activePhotosList[activePhotoIndex].r2Url}`}
                       src={activePhotosList[activePhotoIndex].r2Url}
                       alt=""
                       onLoad={() => setHighResLoaded(true)}
