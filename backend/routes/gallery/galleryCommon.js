@@ -28,8 +28,8 @@ function getDerivedThumbnail(thumbnailUrl, r2Url) {
     return clean.endsWith('.mp4') || clean.endsWith('.mov') || clean.endsWith('.m4v') || clean.endsWith('.webm');
   };
 
-  // If a valid image thumbnail already exists (e.g. video poster or custom cover), use it directly!
-  if (thumbnailUrl && !isVideo(thumbnailUrl)) {
+  // 1. If a valid image thumbnail already exists, use it directly (never route to resize)
+  if (thumbnailUrl && !isVideo(thumbnailUrl) && !thumbnailUrl.startsWith('/api/gallery/resize')) {
     return thumbnailUrl;
   }
 
@@ -38,9 +38,14 @@ function getDerivedThumbnail(thumbnailUrl, r2Url) {
     return null;
   }
 
-  const source = r2Url || thumbnailUrl;
-  if (!source) return null;
-  return `/api/gallery/resize?url=${encodeURIComponent(source)}&w=400&q=75`;
+  // 2. Derive direct pre-generated R2 thumbnail from standard /photos/ path so clients load straight from CDN
+  if (r2Url && typeof r2Url === 'string' && r2Url.includes('/photos/')) {
+    const clean = r2Url.split('?')[0];
+    const fn = clean.substring(clean.lastIndexOf('/') + 1);
+    return clean.replace('/photos/' + fn, `/thumbnails/thumb_${fn}`);
+  }
+
+  return thumbnailUrl || r2Url || null;
 }
 
 function getArchiver() {

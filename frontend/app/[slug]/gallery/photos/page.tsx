@@ -130,7 +130,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
     // Normal photos (images) — check for pre-generated R2 thumbnail first.
     // Photos uploaded after the thumb-upload rollout have thumbnailUrl pointing
-    // directly to a 400px JPEG on R2; return it straight without the resize proxy.
+    // directly to a 600px JPEG on R2; return it straight without the resize proxy.
     const r2Thumb = photo.thumbnailUrl
     if (r2Thumb && typeof r2Thumb === 'string') {
       const t = r2Thumb.trim()
@@ -138,20 +138,21 @@ export default function GuestGalleryPhotos({ params }: Props) {
         t &&
         !t.startsWith('/api/gallery/resize') &&
         !t.startsWith('file:') &&
-        !t.startsWith('data:') &&
-        (t.includes('.r2.dev/') || t.includes('/thumbnails/') || t.includes('/thumbs/'))
+        !t.startsWith('data:')
       ) {
         return t
       }
     }
 
-    // Fallback: on-the-fly resize for photos without a pre-generated thumb (old uploads)
-    const source = photo.r2Url || photo.url || photo.file_url || photo.thumbnailUrl || ''
-    if (!source) return ''
-    if (source.startsWith('/api/gallery/resize')) {
-      return source
+    // Direct pre-generated thumbnail derived from R2 photos path:
+    const r2Src = photo.r2Url || photo.url || photo.file_url || ''
+    if (r2Src && typeof r2Src === 'string' && r2Src.includes('/photos/')) {
+      const clean = r2Src.split('?')[0]
+      const fn = clean.substring(clean.lastIndexOf('/') + 1)
+      return clean.replace('/photos/' + fn, `/thumbnails/thumb_${fn}`)
     }
-    return `/api/gallery/resize?url=${encodeURIComponent(source)}&w=${width}&q=75`
+
+    return r2Src || ''
   }, [isVideoItem, isVideoUrl])
 
   const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>, photo: any) => {
