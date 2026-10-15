@@ -28,7 +28,7 @@ function getDerivedThumbnail(thumbnailUrl, r2Url) {
     return clean.endsWith('.mp4') || clean.endsWith('.mov') || clean.endsWith('.m4v') || clean.endsWith('.webm');
   };
 
-  // 1. If a valid image thumbnail already exists, use it directly (never route to resize)
+  // 1. If a valid image thumbnail already exists, use it directly (Priority 1)
   if (thumbnailUrl && !isVideo(thumbnailUrl) && !thumbnailUrl.startsWith('/api/gallery/resize')) {
     return thumbnailUrl;
   }
@@ -38,14 +38,17 @@ function getDerivedThumbnail(thumbnailUrl, r2Url) {
     return null;
   }
 
-  // 2. Derive direct pre-generated R2 thumbnail from standard /photos/ path so clients load straight from CDN
+  // 2. Derive direct pre-generated R2 thumbnail from standard /photos/ path (Priority 1)
   if (r2Url && typeof r2Url === 'string' && r2Url.includes('/photos/')) {
     const clean = r2Url.split('?')[0];
     const fn = clean.substring(clean.lastIndexOf('/') + 1);
     return clean.replace('/photos/' + fn, `/thumbnails/thumb_${fn}`);
   }
 
-  return thumbnailUrl || r2Url || null;
+  // 3. Fallback: On-the-fly resize (Priority 2) for photos without pre-generated CDN thumbs
+  const source = r2Url || thumbnailUrl;
+  if (!source) return null;
+  return `/api/gallery/resize?url=${encodeURIComponent(source)}&w=400&q=75`;
 }
 
 function getArchiver() {
@@ -90,18 +93,36 @@ function isMobileAppRequest(req) {
 
 const guestAnchors = {};
 
-const checkUserSelfie = async (userId) => {
-  if (!userId) return false;
+const checkUserSelfie = async (userId, guestId) => {
+  if (!userId && !guestId) return false;
   try {
-    const user = await prisma.circleUser.findUnique({
-      where: { id: userId },
-      select: { selfieUrl: true, selfieVector: true }
-    });
-    if (user?.selfieUrl || user?.selfieVector) return true;
+    if (userId) {
+      const user = await prisma.circleUser.findUnique({
+        where: { id: userId },
+        select: { selfieUrl: true, selfieVector: true }
+      });
+      if (user?.selfieUrl || user?.selfieVector) return true;
+    }
+
+    if (guestId) {
+      const guest = await prisma.guest.findUnique({
+        where: { id: guestId },
+        select: { selfieUrl: true }
+      });
+      if (guest?.selfieUrl) return true;
+    }
 
     const selfiesDir = path.join(__dirname, '..', '..', 'uploads', 'photos', 'selfies');
-    if (fs.existsSync(path.join(selfiesDir, `user_${userId}.jpg`)) || fs.existsSync(path.join(selfiesDir, `user_${userId}.json`))) {
-      return true;
+    const ids = [userId, guestId].filter(Boolean);
+    for (const id of ids) {
+      if (
+        fs.existsSync(path.join(selfiesDir, `user_${id}.jpg`)) ||
+        fs.existsSync(path.join(selfiesDir, `user_${id}.json`)) ||
+        fs.existsSync(path.join(selfiesDir, `guest_${id}.jpg`)) ||
+        fs.existsSync(path.join(selfiesDir, `guest_${id}.json`))
+      ) {
+        return true;
+      }
     }
     return false;
   } catch (e) {

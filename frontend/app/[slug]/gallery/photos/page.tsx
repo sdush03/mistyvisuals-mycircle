@@ -152,7 +152,12 @@ export default function GuestGalleryPhotos({ params }: Props) {
       return clean.replace('/photos/' + fn, `/thumbnails/thumb_${fn}`)
     }
 
-    return r2Src || ''
+    // Priority 2: On-the-fly resize fallback for photos without standard /photos/ path
+    if (r2Src) {
+      return `/api/gallery/resize?url=${encodeURIComponent(r2Src)}&w=${width}&q=75`
+    }
+
+    return ''
   }, [isVideoItem, isVideoUrl])
 
   const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>, photo: any) => {
@@ -199,7 +204,21 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
     // Normal photo fallback
     const fallback = photo.r2Url || photo.url || photo.file_url
-    if (fallback && target.src !== fallback) {
+    if (!fallback) {
+      target.classList.add('loaded')
+      return
+    }
+
+    const resizeUrl = `/api/gallery/resize?url=${encodeURIComponent(fallback)}&w=400&q=75`
+
+    // Priority 2: If direct CDN thumbnail 404s, try on-the-fly resize first to save 99% user bandwidth!
+    if (target.src !== resizeUrl && !target.src.includes('/api/gallery/resize')) {
+      target.src = resizeUrl
+      return
+    }
+
+    // Priority 3: Only if resize also fails, fall back to high-res original
+    if (target.src !== fallback) {
       target.src = fallback
     } else {
       target.classList.add('loaded')
@@ -986,11 +1005,17 @@ export default function GuestGalleryPhotos({ params }: Props) {
             if (!profileData) return
 
             if (profileData && profileData.profile) {
+              const resolvedHasSelfie = Boolean(
+                profileData.profile.hasSelfie || 
+                parsedGuest.hasSelfie || 
+                profileData.profile.selfieUrl || 
+                parsedGuest.selfieUrl
+              )
               const updatedGuest = {
                 ...parsedGuest,
                 name: profileData.profile.name || parsedGuest.name,
                 phoneNumber: profileData.profile.phoneNumber || parsedGuest.phoneNumber,
-                hasSelfie: profileData.profile.hasSelfie ?? parsedGuest.hasSelfie,
+                hasSelfie: resolvedHasSelfie,
                 hasFullAccess: profileData.profile.hasFullAccess ?? parsedGuest.hasFullAccess,
                 selfieUrl: profileData.profile.selfieUrl || parsedGuest.selfieUrl,
                 selfieGuestId: profileData.profile.selfieGuestId || parsedGuest.selfieGuestId
@@ -1005,7 +1030,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
               }
 
               // Strictly enforce incomplete profile redirect (must have both phone and selfie)
-              if (!profileData.profile.phoneNumber || !profileData.profile.hasSelfie) {
+              if (!updatedGuest.phoneNumber || !resolvedHasSelfie) {
                 console.warn('Guest profile incomplete (missing phone or selfie), redirecting to gallery splash')
                 localStorage.removeItem(`mv_gallery_token_${slug}`)
                 localStorage.removeItem(`mv_gallery_guest_${slug}`)

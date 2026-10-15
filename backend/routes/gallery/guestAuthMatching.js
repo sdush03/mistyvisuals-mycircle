@@ -142,7 +142,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
       }
 
       await ensureUserSelfieMigrated(fastify, user.id, verifiedEmail);
-      const hasSelfie = await checkUserSelfie(user.id);
+      const hasSelfie = await checkUserSelfie(user.id, guest.id);
 
       const sessionToken = fastify.jwt.sign({
         guestId: guest.id,
@@ -267,7 +267,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
       if (user) {
         await ensureUserSelfieMigrated(fastify, user.id, decoded.email);
       }
-      const hasSelfie = user ? await checkUserSelfie(user.id) : false;
+      const hasSelfie = await checkUserSelfie(user?.id, guest?.id);
 
       let resolvedDisplayRole = (guest.displayRole || '').toString().trim().toUpperCase() || null;
 
@@ -375,7 +375,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
           email: updatedGuest.email,
           phoneNumber: updatedGuest.phoneNumber,
           hasFullAccess: true,
-          hasSelfie: await checkUserSelfie(req.guest.userId)
+          hasSelfie: await checkUserSelfie(req.guest.userId, req.guest.guestId)
         }
       };
     } catch (err) {

@@ -694,7 +694,7 @@ module.exports = async function familyRoutes(fastify, opts) {
           email: guest.email,
           phoneNumber: user.phoneNumber,
           hasFullAccess: guest.hasFullAccess,
-          hasSelfie: await checkUserSelfie(user.id),
+          hasSelfie: await checkUserSelfie(user.id, guest.id),
           selfieGuestId: user.id,
           selfieUrl: user.selfieUrl || null
         }
