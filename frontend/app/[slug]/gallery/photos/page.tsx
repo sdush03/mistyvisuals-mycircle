@@ -94,11 +94,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const getThumbnailUrl = useCallback((photo: any, width = 400) => {
     if (!photo) return ''
 
-    const photoKey = String(photo.id || photo.r2Url || photo.filename)
-    if (!imageStartTimesRef.current.has(photoKey)) {
-      imageStartTimesRef.current.set(photoKey, performance.now())
-    }
-
     const isVideo = isVideoItem(photo)
 
     if (isVideo) {
@@ -222,49 +217,19 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
     const resizeUrl = `/api/gallery/resize?url=${encodeURIComponent(fallback)}&w=400&q=75`
 
-    perfCountersRef.current.err++
-    setPerfStats(prev => ({ ...prev, errorCount: perfCountersRef.current.err }))
-
     // Priority 2: If direct CDN thumbnail 404s, try on-the-fly resize first to save 99% user bandwidth!
     if (target.src !== resizeUrl && !target.src.includes('/api/gallery/resize')) {
-      console.warn(
-        `%c[PERF ⚠️ P1 404/FAIL Photo #${photo.id || 'N/A'}] %c${target.src} failed! Switching to PRIORITY 2 (Resize): ${resizeUrl}`,
-        'font-weight:bold; color: #f97316;',
-        'color: #fbbf24;'
-      )
       target.src = resizeUrl
       return
     }
 
     // Priority 3: Only if resize also fails, fall back to high-res original
     if (target.src !== fallback) {
-      console.warn(
-        `%c[PERF 🚨 P2 RESIZE FAIL Photo #${photo.id || 'N/A'}] %cResize failed! Switching to PRIORITY 3 (Full-res original): ${fallback}`,
-        'font-weight:bold; color: #ef4444;',
-        'color: #f87171;'
-      )
       target.src = fallback
     } else {
       target.classList.add('loaded')
     }
   }, [isVideoItem, isVideoUrl])
-
-  // Diagnostic Performance Tracking States & Refs
-  const [perfStats, setPerfStats] = useState({
-    eventMs: 0,
-    profileMs: 0,
-    allPhotosMs: 0,
-    matchedMs: 0,
-    p1CdnCount: 0,
-    p2ResizeCount: 0,
-    p3FullResCount: 0,
-    errorCount: 0,
-    avgImageMs: 0,
-    totalImagesLoaded: 0
-  })
-  const [showPerfHud, setShowPerfHud] = useState(true)
-  const imageStartTimesRef = useRef<Map<string, number>>(new Map())
-  const perfCountersRef = useRef({ p1: 0, p2: 0, p3: 0, err: 0, times: [] as number[] })
 
   // Profile states
   const [showProfileModal, setShowProfileModal] = useState(false)
@@ -484,39 +449,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>, photo: any) => {
     const img = e.currentTarget
     img.classList.add('loaded')
-
-    const photoKey = String(photo.id || photo.r2Url || photo.filename)
-    const t0 = imageStartTimesRef.current.get(photoKey)
-    const loadDuration = t0 ? Math.round(performance.now() - t0) : 0
-
-    const isResize = img.src.includes('/api/gallery/resize')
-    const isCdnThumb = !isResize && (img.src.includes('/thumbnails/') || img.src.includes('/thumbs/'))
-    const isFullRes = !isCdnThumb && !isResize
-
-    if (isCdnThumb) perfCountersRef.current.p1++
-    else if (isResize) perfCountersRef.current.p2++
-    else if (isFullRes) perfCountersRef.current.p3++
-
-    if (loadDuration > 0) perfCountersRef.current.times.push(loadDuration)
-
-    const totalTimes = perfCountersRef.current.times
-    const avg = totalTimes.length > 0 ? Math.round(totalTimes.reduce((a, b) => a + b, 0) / totalTimes.length) : 0
-
-    setPerfStats(prev => ({
-      ...prev,
-      p1CdnCount: perfCountersRef.current.p1,
-      p2ResizeCount: perfCountersRef.current.p2,
-      p3FullResCount: perfCountersRef.current.p3,
-      avgImageMs: avg,
-      totalImagesLoaded: totalTimes.length
-    }))
-
-    console.log(
-      `%c[PERF 📸 Photo #${photo.id || photoKey}] %c${isCdnThumb ? 'PRIORITY 1 (Direct CDN 600px)' : isResize ? 'PRIORITY 2 (On-The-Fly Resize)' : 'PRIORITY 3 (Full-Res Original)'} %cloaded in ${loadDuration}ms`,
-      'font-weight:bold; color: #fff; background: #333; padding: 2px 4px; border-radius: 3px;',
-      isCdnThumb ? 'color: #10b981; font-weight:bold;' : isResize ? 'color: #f59e0b; font-weight:bold;' : 'color: #ef4444; font-weight:bold;',
-      'color: #9ca3af;'
-    )
 
     if (img.naturalWidth && img.naturalHeight) {
       const key = String(photo.id || photo.r2Url || photo.filename)
@@ -922,16 +854,12 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
   useEffect(() => {
     // 1. Fetch public event details first
-    const tStartEvent = performance.now()
     fetch(`${apiUrl}/api/gallery/public/events/${slug}`)
       .then(res => {
         if (!res.ok) throw new Error('Gallery not found')
         return res.json()
       })
       .then(eventData => {
-        const dur = Math.round(performance.now() - tStartEvent)
-        setPerfStats(prev => ({ ...prev, eventMs: dur }))
-        console.log(`%c[PERF ⏱️ GET /events/${slug}] %ctook ${dur}ms`, 'color: #3b82f6; font-weight: bold;', 'color: #93c5fd;')
         setEvent(eventData)
         setLoadingEvent(false)
 
@@ -1064,7 +992,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
         }
 
         // Sync profile source of truth from database
-        const tStartProfile = performance.now()
         fetch(`${apiUrl}/api/gallery/public/events/${slug}/profile`, {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -1082,9 +1009,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
             return res.json()
           })
           .then(profileData => {
-            const dur = Math.round(performance.now() - tStartProfile)
-            setPerfStats(prev => ({ ...prev, profileMs: dur }))
-            console.log(`%c[PERF ⏱️ GET /profile] %ctook ${dur}ms`, 'color: #3b82f6; font-weight: bold;', 'color: #93c5fd;')
             if (!profileData) return
 
             if (profileData && profileData.profile) {
@@ -1173,7 +1097,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
     const savedGuest = localStorage.getItem(`mv_gallery_guest_${slug}`)
     const parsedGuest = savedGuest ? JSON.parse(savedGuest) : null
 
-    const tStartMatched = performance.now()
     try {
       const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/matched-photos`, {
         headers: {
@@ -1182,9 +1105,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
       })
       if (!res.ok) throw new Error('Failed to load matched photos')
       const data = await res.json()
-      const dur = Math.round(performance.now() - tStartMatched)
-      setPerfStats(prev => ({ ...prev, matchedMs: dur }))
-      console.log(`%c[PERF ⏱️ GET /matched-photos] %ctook ${dur}ms (found ${data.photos?.length || 0} matched photos)`, 'color: #a855f7; font-weight: bold;', 'color: #d8b4fe;')
       const matchedPhotos = data.photos || []
       setPhotos(matchedPhotos)
       setHasSearched(true)
@@ -1346,7 +1266,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
     loadingMoreRef.current = true
     setLoadingMore(true)
     const token = localStorage.getItem(`mv_gallery_token_${slug}`)
-    const tStartAll = performance.now()
     try {
       const headers: Record<string, string> = {}
       if (token) headers['Authorization'] = `Bearer ${token}`
@@ -1354,9 +1273,6 @@ export default function GuestGalleryPhotos({ params }: Props) {
       const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/photos?${params}`, { headers })
       if (!res.ok) throw new Error('Failed to load photos')
       const data = await res.json()
-      const dur = Math.round(performance.now() - tStartAll)
-      setPerfStats(prev => ({ ...prev, allPhotosMs: dur }))
-      console.log(`%c[PERF ⏱️ GET /photos?tab=${tab}&offset=${offset}] %ctook ${dur}ms (loaded ${data.photos?.length || 0} photos, total: ${data.total || 0})`, 'color: #06b6d4; font-weight: bold;', 'color: #67e8f9;')
       const newPhotos: any[] = data.photos || []
       const hasMoreFromServer: boolean = data.hasMore ?? false
       // Update total count from first load of any tab
@@ -1447,24 +1363,39 @@ export default function GuestGalleryPhotos({ params }: Props) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activePhotoIndex, handleNextPhoto])
 
-  // FIX #4: Stable IntersectionObserver — loadAllPhotos now has a stable identity (deps: [slug, apiUrl, prefetchNextBatch])
-  // so this effect no longer recreates the observer on every fetch cycle.
-  // The observer callback guards with loadingMoreRef (ref, not state) to avoid triggering
-  // while a fetch is in progress, without needing loadingMore in the dep array.
+  // Stable IntersectionObserver & Scroll Fallback for Infinite Scrolling
   useEffect(() => {
+    if (viewMode !== 'all') return
     const sentinel = sentinelRef.current
     if (!sentinel) return
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !loadingMoreRef.current && hasMore) {
           loadAllPhotos(activeAllTab)
         }
       },
-      { rootMargin: '400px' } // start loading 400px before sentinel is visible
+      { rootMargin: '600px' }
     )
     observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [loadAllPhotos, hasMore, activeAllTab])
+
+    // Fallback scroll listener to guarantee pagination triggers smoothly
+    const handleScroll = () => {
+      if (loadingMoreRef.current || !hasMore) return
+      const scrollY = window.scrollY || document.documentElement.scrollTop
+      const windowHeight = window.innerHeight
+      const docHeight = document.documentElement.scrollHeight
+      if (scrollY + windowHeight >= docHeight - 800) {
+        loadAllPhotos(activeAllTab)
+      }
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [loadAllPhotos, hasMore, activeAllTab, allPhotos.length, viewMode])
 
   const handleBulkDownloadSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -2892,7 +2823,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 </div>
 
                 {/* Infinite scroll sentinel + loading indicator */}
-                <div ref={sentinelRef} style={{ width: '100%' }}>
+                <div ref={sentinelRef} style={{ width: '100%', minHeight: '60px' }}>
                   {loadingMore && (
                     <div className="flex py-10 items-center justify-center">
                       <div className="h-6 w-6 animate-spin rounded-full border-4 border-solid border-[#0f172a] border-t-transparent"></div>
@@ -3885,90 +3816,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
         }}
       />
 
-      {/* Real-Time Performance & Priority Diagnostic HUD */}
-      <div 
-        style={{
-          position: 'fixed',
-          bottom: '20px',
-          right: '20px',
-          zIndex: 99999,
-          maxWidth: showPerfHud ? '340px' : '90px',
-          background: 'rgba(17, 17, 17, 0.95)',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(255, 255, 255, 0.15)',
-          borderRadius: '12px',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
-          color: '#fff',
-          fontFamily: 'monospace',
-          fontSize: '11px',
-          padding: showPerfHud ? '12px 14px' : '8px 10px',
-          cursor: showPerfHud ? 'default' : 'pointer',
-          transition: 'all 0.2s ease',
-          lineHeight: '1.4'
-        }}
-        onClick={() => { if (!showPerfHud) setShowPerfHud(true); }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showPerfHud ? '8px' : '0' }}>
-          <span style={{ fontWeight: 800, color: '#E5C483', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            ⚡ PERF HUD
-          </span>
-          {showPerfHud ? (
-            <button 
-              onClick={(e) => { e.stopPropagation(); setShowPerfHud(false); }}
-              style={{ background: 'transparent', border: 'none', color: '#999', cursor: 'pointer', fontSize: '13px' }}
-            >
-              ✕
-            </button>
-          ) : (
-            <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 'bold' }}>EXPAND</span>
-          )}
-        </div>
 
-        {showPerfHud && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #333', paddingBottom: '3px' }}>
-              <span style={{ color: '#aaa' }}>API Events:</span>
-              <span style={{ color: perfStats.eventMs > 1000 ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>{perfStats.eventMs || '...'} ms</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #333', paddingBottom: '3px' }}>
-              <span style={{ color: '#aaa' }}>API Profile:</span>
-              <span style={{ color: perfStats.profileMs > 1000 ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>{perfStats.profileMs || '...'} ms</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #333', paddingBottom: '3px' }}>
-              <span style={{ color: '#aaa' }}>API Photos:</span>
-              <span style={{ color: perfStats.allPhotosMs > 1000 ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>{perfStats.allPhotosMs || '...'} ms</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #333', paddingBottom: '3px' }}>
-              <span style={{ color: '#aaa' }}>API Matched:</span>
-              <span style={{ color: perfStats.matchedMs > 1500 ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>{perfStats.matchedMs || '...'} ms</span>
-            </div>
-
-            <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px solid #444', fontWeight: 'bold', color: '#E5C483' }}>
-              Thumbnail Priority:
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#10b981' }}>● P1 (Direct CDN 600px):</span>
-              <span style={{ fontWeight: 'bold' }}>{perfStats.p1CdnCount}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#f59e0b' }}>● P2 (Resize Fallback):</span>
-              <span style={{ fontWeight: 'bold', color: perfStats.p2ResizeCount > 0 ? '#f59e0b' : '#aaa' }}>{perfStats.p2ResizeCount}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#ef4444' }}>● P3 (Full-Res Original):</span>
-              <span style={{ fontWeight: 'bold', color: perfStats.p3FullResCount > 0 ? '#ef4444' : '#aaa' }}>{perfStats.p3FullResCount}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#f87171' }}>✕ 404/Load Errors:</span>
-              <span style={{ fontWeight: 'bold', color: perfStats.errorCount > 0 ? '#f87171' : '#aaa' }}>{perfStats.errorCount}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px', paddingTop: '2px', borderTop: '1px solid #333' }}>
-              <span style={{ color: '#aaa' }}>Avg Image Load:</span>
-              <span style={{ color: '#fff', fontWeight: 'bold' }}>{perfStats.avgImageMs} ms ({perfStats.totalImagesLoaded} loaded)</span>
-            </div>
-          </div>
-        )}
-      </div>
 
       <style jsx global>{`
         @keyframes scan {
