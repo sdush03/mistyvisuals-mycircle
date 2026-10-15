@@ -155,6 +155,62 @@ function logTelemetry(entry) {
   }
 }
 
+const resolveAnchorVector = async ({ userId, email, guestId } = {}) => {
+  let circleUser = null;
+  if (userId) {
+    circleUser = await prisma.circleUser.findUnique({
+      where: { id: userId },
+      select: { id: true, selfieVector: true, email: true }
+    }).catch(() => null);
+  }
+  if (!circleUser && email) {
+    circleUser = await prisma.circleUser.findUnique({
+      where: { email },
+      select: { id: true, selfieVector: true, email: true }
+    }).catch(() => null);
+  }
+
+  if (circleUser?.selfieVector) {
+    return circleUser.selfieVector;
+  }
+
+  const selfiesDir = path.join(__dirname, '..', '..', 'uploads', 'photos', 'selfies');
+  const candidateIds = [circleUser?.id, userId, guestId].filter(Boolean);
+  for (const cid of candidateIds) {
+    const userVecFile = path.join(selfiesDir, `user_${cid}.json`);
+    if (fs.existsSync(userVecFile)) {
+      try {
+        const v = JSON.parse(fs.readFileSync(userVecFile, 'utf8'));
+        if (v && Array.isArray(v)) return v;
+      } catch (_) {}
+    }
+    const guestVecFile = path.join(selfiesDir, `guest_${cid}.json`);
+    if (fs.existsSync(guestVecFile)) {
+      try {
+        const v = JSON.parse(fs.readFileSync(guestVecFile, 'utf8'));
+        if (v && Array.isArray(v)) return v;
+      } catch (_) {}
+    }
+  }
+
+  if (email) {
+    try {
+      const guests = await prisma.guest.findMany({ where: { email }, select: { id: true } });
+      for (const g of guests) {
+        const gVec = path.join(selfiesDir, `guest_${g.id}.json`);
+        if (fs.existsSync(gVec)) {
+          try {
+            const v = JSON.parse(fs.readFileSync(gVec, 'utf8'));
+            if (v && Array.isArray(v)) return v;
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+
+  return null;
+};
+
 const { verifyGuestAuth, verifyFamilyAuth } = require('../../utils/galleryAuth');
 
 module.exports = {
@@ -167,7 +223,9 @@ module.exports = {
   guestAnchors,
   checkUserSelfie,
   ensureUserSelfieMigrated,
+  resolveAnchorVector,
   logTelemetry,
   verifyGuestAuth,
   verifyFamilyAuth,
 };
+

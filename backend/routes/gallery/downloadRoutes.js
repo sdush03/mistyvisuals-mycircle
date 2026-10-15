@@ -6,6 +6,7 @@ const faceRecManager = require('../../utils/faceRecManager');
 const { createRateLimiter, getClientIp } = require('../../utils/rateLimiter');
 const {
   guestAnchors,
+  resolveAnchorVector,
   getArchiver,
   verifyGuestAuth,
 } = require('./galleryCommon');
@@ -45,14 +46,14 @@ module.exports = async function downloadRoutes(fastify, opts) {
 
       let anchorVector = guestAnchors[guestKey]?.anchorVector;
 
-      if (!anchorVector && userId) {
-        const circleUser = await prisma.circleUser.findUnique({
-          where: { id: userId },
-          select: { selfieVector: true }
+      if (!anchorVector) {
+        anchorVector = await resolveAnchorVector({
+          userId,
+          email: req.guest.email,
+          guestId
         });
 
-        if (circleUser?.selfieVector) {
-          anchorVector = circleUser.selfieVector;
+        if (anchorVector) {
           guestAnchors[guestKey] = { anchorVector, extraVectors: [] };
         }
       }

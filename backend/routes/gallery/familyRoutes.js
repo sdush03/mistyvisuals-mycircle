@@ -10,6 +10,7 @@ const { createRateLimiter, getClientIp } = require('../../utils/rateLimiter');
 const {
   checkUserSelfie,
   ensureUserSelfieMigrated,
+  resolveAnchorVector,
   guestAnchors,
   verifyGuestAuth,
   verifyFamilyAuth,
@@ -26,6 +27,7 @@ const familyAuthRateLimiter = createRateLimiter({
 const familyEventsCache = new Map(); // key: userId, value: { data, timestamp }
 const inflightEventsRequests = new Map(); // key: userId, value: Promise
 const userMatchCountCache = new Map(); // key: `${userId}_${eventId}`, value: { count, timestamp }
+const activeBackgroundMatchingUsers = new Set(); // throttle concurrent background jobs
 
 module.exports = async function familyRoutes(fastify, opts) {
   const { requireAdmin } = opts;
@@ -275,6 +277,11 @@ module.exports = async function familyRoutes(fastify, opts) {
           } catch (_) {}
         }
 
+        // 3. Fallback to resolveAnchorVector (searches disk and guest files):
+        if (!anchorVector) {
+          anchorVector = await resolveAnchorVector({ userId: user.id, email: user.email });
+        }
+
         const userHasSelfie = Boolean(user.selfieUrl || user.selfieVector || anchorVector);
 
       // Process all events in parallel instead of sequentially.
@@ -421,25 +428,32 @@ module.exports = async function familyRoutes(fastify, opts) {
 
         familyEventsCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
 
-        // Trigger background face matching asynchronously without delaying gallery display
-        if (anchorVector && !qdrant.isMock) {
+        // Trigger background face matching asynchronously without delaying gallery display or choking CPU
+        if (anchorVector && !qdrant.isMock && !activeBackgroundMatchingUsers.has(user.id)) {
+          activeBackgroundMatchingUsers.add(user.id);
           setImmediate(async () => {
-            for (const ev of eventsList) {
-              const key = `${user.id}_${ev.id}`;
-              const existing = userMatchCountCache.get(key);
-              if (!existing || Date.now() - existing.timestamp > 300000) {
-                try {
-                  const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Qdrant background timeout')), 5000)
-                  );
-                  const mainMatches = await Promise.race([
-                    qdrant.searchVectors(ev.id, anchorVector, 100000, 0.35),
-                    timeoutPromise
-                  ]);
-                  const matchedPhotoIds = new Set(mainMatches.map(m => m.photo_id));
-                  userMatchCountCache.set(key, { count: matchedPhotoIds.size, timestamp: Date.now() });
-                } catch (_) {}
+            try {
+              for (const ev of eventsList) {
+                const key = `${user.id}_${ev.id}`;
+                const existing = userMatchCountCache.get(key);
+                if (!existing || Date.now() - existing.timestamp > 1800000) {
+                  try {
+                    const timeoutPromise = new Promise((_, reject) => 
+                      setTimeout(() => reject(new Error('Qdrant background timeout')), 15000)
+                    );
+                    const mainMatches = await Promise.race([
+                      qdrant.searchVectors(ev.id, anchorVector, 100000, 0.35),
+                      timeoutPromise
+                    ]);
+                    const matchedPhotoIds = new Set(mainMatches.map(m => m.photo_id));
+                    userMatchCountCache.set(key, { count: matchedPhotoIds.size, timestamp: Date.now() });
+                  } catch (_) {}
+                  // Yield CPU for 400ms between event scans so server stays responsive
+                  await new Promise(r => setTimeout(r, 400));
+                }
               }
+            } finally {
+              activeBackgroundMatchingUsers.delete(user.id);
             }
           });
         }

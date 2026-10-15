@@ -10,6 +10,7 @@ const {
   guestAnchors,
   checkUserSelfie,
   ensureUserSelfieMigrated,
+  resolveAnchorVector,
   getDerivedThumbnail,
   verifyGuestAuth,
   isMobileAppRequest,
@@ -528,13 +529,13 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
       let anchorVector = guestAnchors[guestKey]?.anchorVector;
 
       if (!anchorVector) {
-        const circleUser = await prisma.circleUser.findUnique({
-          where: { id: userId },
-          select: { selfieVector: true }
+        anchorVector = await resolveAnchorVector({
+          userId,
+          email: req.guest.email,
+          guestId
         });
 
-        if (circleUser?.selfieVector) {
-          anchorVector = circleUser.selfieVector;
+        if (anchorVector) {
           guestAnchors[guestKey] = { anchorVector, extraVectors: [] };
         }
       }
@@ -684,12 +685,12 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
       }
 
       if (!guestAnchors[guestKey]) {
-        const circleUser = await prisma.circleUser.findUnique({
-          where: { id: userId },
-          select: { selfieVector: true }
+        const anchorVector = await resolveAnchorVector({
+          userId,
+          email: req.guest.email,
+          guestId
         });
-        const anchorVector = circleUser?.selfieVector || null;
-        guestAnchors[guestKey] = { anchorVector, extraVectors: [] };
+        guestAnchors[guestKey] = { anchorVector: anchorVector || null, extraVectors: [] };
       }
 
       guestAnchors[guestKey].extraVectors.push(res.vector);

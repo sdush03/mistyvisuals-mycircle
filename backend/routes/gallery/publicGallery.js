@@ -3,7 +3,7 @@ const path = require('path');
 const { prisma, Prisma } = require('../../prisma');
 const qdrant = require('../../utils/qdrant');
 const faceRecManager = require('../../utils/faceRecManager');
-const { checkPreviewToken, getDerivedThumbnail, verifyGuestAuth, isMobileAppRequest } = require('./galleryCommon');
+const { checkPreviewToken, getDerivedThumbnail, verifyGuestAuth, isMobileAppRequest, resolveAnchorVector } = require('./galleryCommon');
 
 function purgeOrphanedFacesBackground(log) {
   setTimeout(() => {
@@ -604,10 +604,15 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
 
       // Check matched photos if guest has selfie
       let matchedPhotosList = [];
-      const hasSelfie = Boolean(circleUser?.selfieUrl || dbGuest?.selfieUrl);
-      if (hasSelfie && circleUser?.selfieVector && !qdrant.isMock) {
+      const userVector = circleUser?.selfieVector || await resolveAnchorVector({
+        userId: circleUser?.id,
+        email: dbGuest?.email || circleUser?.email,
+        guestId: dbGuest?.id
+      });
+      const hasSelfie = Boolean(circleUser?.selfieUrl || dbGuest?.selfieUrl || userVector);
+      if (hasSelfie && userVector && !qdrant.isMock) {
         try {
-          const vectorMatches = await qdrant.searchVectors(event.id, circleUser.selfieVector, 100, 0.40);
+          const vectorMatches = await qdrant.searchVectors(event.id, userVector, 100000, 0.35);
           if (vectorMatches && vectorMatches.length > 0) {
             const photoIds = vectorMatches.map(m => m.photo_id);
             const rawMatched = await prisma.photo.findMany({

@@ -25,9 +25,9 @@ class QdrantService {
     }
     if (qdrantUrl && QdrantClient) {
       try {
-        this.client = new QdrantClient({ url: qdrantUrl, timeout: 3000 });
+        this.client = new QdrantClient({ url: qdrantUrl, timeout: 20000 });
         this.isMock = false;
-        console.log(`[Qdrant] Initialized with URL: ${qdrantUrl} (timeout: 3000ms)`);
+        console.log(`[Qdrant] Initialized with URL: ${qdrantUrl} (timeout: 20000ms)`);
       } catch (err) {
         console.error('[Qdrant] Connection failed. Using mock fallback.', err);
       }
