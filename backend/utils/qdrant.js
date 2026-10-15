@@ -19,12 +19,15 @@ class QdrantService {
     this.isMock = true;
     this.mockCache = [];
 
-    const qdrantUrl = process.env.QDRANT_URL;
+    let qdrantUrl = process.env.QDRANT_URL;
+    if (qdrantUrl && typeof qdrantUrl === 'string') {
+      qdrantUrl = qdrantUrl.replace('localhost', '127.0.0.1');
+    }
     if (qdrantUrl && QdrantClient) {
       try {
-        this.client = new QdrantClient({ url: qdrantUrl });
+        this.client = new QdrantClient({ url: qdrantUrl, timeout: 3000 });
         this.isMock = false;
-        console.log(`[Qdrant] Initialized with URL: ${qdrantUrl}`);
+        console.log(`[Qdrant] Initialized with URL: ${qdrantUrl} (timeout: 3000ms)`);
       } catch (err) {
         console.error('[Qdrant] Connection failed. Using mock fallback.', err);
       }

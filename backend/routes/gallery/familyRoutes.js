@@ -23,6 +23,9 @@ const familyAuthRateLimiter = createRateLimiter({
   errorMessage: 'Too many login attempts. Please wait 15 minutes.'
 });
 
+const familyEventsCache = new Map(); // key: userId, value: { data, timestamp }
+const inflightEventsRequests = new Map(); // key: userId, value: Promise
+
 module.exports = async function familyRoutes(fastify, opts) {
   const { requireAdmin } = opts;
 
@@ -220,32 +223,58 @@ module.exports = async function familyRoutes(fastify, opts) {
       });
       if (!user) return { events: [], profile: null };
 
-      const guestProfiles = await prisma.guest.findMany({
-        where: { email },
-        include: { galleryEvent: true }
-      });
-
-      // Fetch LEFT status separately via raw SQL (Prisma client may not have status yet)
-      const leftRows = await prisma.$queryRaw`
-        SELECT id FROM guests WHERE email = ${email} AND status = 'LEFT'
-      `;
-      const leftIds = new Set(leftRows.map((r) => r.id));
-
-      const eventsList = [];
-      const selfiesDir = path.join(__dirname, '..', '..', 'uploads', 'photos', 'selfies');
-      const selfiePath = path.join(selfiesDir, `user_${user.id}.jpg`);
-      const vectorPath = path.join(selfiesDir, `user_${user.id}.json`);
-      let anchorVector = user.selfieVector || null;
-
-      if (!anchorVector && fs.existsSync(selfiePath) && fs.existsSync(vectorPath)) {
-        try {
-          anchorVector = JSON.parse(fs.readFileSync(vectorPath, 'utf8'));
-        } catch (e) {
-          req.log.error('Failed to parse anchor vector:', e);
-        }
+      // Return from short-lived in-memory cache if requested within 30 seconds
+      const cacheKey = `user_${user.id}`;
+      const cached = familyEventsCache.get(cacheKey);
+      const now = Date.now();
+      if (cached && (now - cached.timestamp < 30000)) {
+        return cached.data;
       }
 
-      const userHasSelfie = Boolean(user.selfieUrl || user.selfieVector || anchorVector);
+      // If an identical calculation for this user is already in-flight, await the same promise
+      if (inflightEventsRequests.has(cacheKey)) {
+        return await inflightEventsRequests.get(cacheKey);
+      }
+
+      const computationPromise = (async () => {
+        const guestProfiles = await prisma.guest.findMany({
+          where: { email },
+          include: { galleryEvent: true }
+        });
+
+        // Fetch LEFT status separately via raw SQL (Prisma client may not have status yet)
+        const leftRows = await prisma.$queryRaw`
+          SELECT id FROM guests WHERE email = ${email} AND status = 'LEFT'
+        `;
+        const leftIds = new Set(leftRows.map((r) => r.id));
+
+        const eventsList = [];
+        const selfiesDir = path.join(__dirname, '..', '..', 'uploads', 'photos', 'selfies');
+        const selfiePath = path.join(selfiesDir, `user_${user.id}.jpg`);
+        const vectorPath = path.join(selfiesDir, `user_${user.id}.json`);
+        let anchorVector = null;
+
+        // 1. Check local disk first:
+        if (fs.existsSync(vectorPath)) {
+          try {
+            anchorVector = JSON.parse(fs.readFileSync(vectorPath, 'utf8'));
+          } catch (e) {
+            req.log.warn(`[familyRoutes] Corrupt anchor vector file for user_${user.id}: ${e.message}`);
+          }
+        }
+
+        // 2. Fallback to database and cache on disk for subsequent runs:
+        if (!anchorVector && user.selfieVector) {
+          anchorVector = user.selfieVector;
+          try {
+            if (!fs.existsSync(selfiesDir)) {
+              fs.mkdirSync(selfiesDir, { recursive: true });
+            }
+            fs.writeFileSync(vectorPath, JSON.stringify(anchorVector));
+          } catch (_) {}
+        }
+
+        const userHasSelfie = Boolean(user.selfieUrl || user.selfieVector || anchorVector);
 
       // Process all events in parallel instead of sequentially.
       // Each event needs: Qdrant matchedCount + 2 photo counts + role resolution + JWT.
@@ -283,7 +312,14 @@ module.exports = async function familyRoutes(fastify, opts) {
                   }
                   return 0;
                 } else {
-                  const mainMatches = await qdrant.searchVectors(event.id, anchorVector, 100000, 0.35);
+                  // Run full vector search up to 100,000 matches with safety timeout to prevent hanging
+                  const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Qdrant search timeout')), 4000)
+                  );
+                  const mainMatches = await Promise.race([
+                    qdrant.searchVectors(event.id, anchorVector, 100000, 0.35),
+                    timeoutPromise
+                  ]);
                   const matchedPhotoIds = new Set(mainMatches.map(m => m.photo_id));
                   return matchedPhotoIds.size;
                 }
@@ -406,19 +442,30 @@ module.exports = async function familyRoutes(fastify, opts) {
         userId: user.id
       }, { expiresIn: '365d' });
 
-      return {
-        events: eventsList,
-        token: refreshedToken,
-        selfieUrl: isDeactivated ? null : (user.selfieUrl || null),
-        profile: {
-          name: user.name,
-          email,
-          phoneNumber: isDeactivated ? null : user.phoneNumber,
-          hasSelfie: isDeactivated ? false : !!(user.selfieVector || user.selfieUrl),
-          selfieGuestId: user.id,
-          selfieUrl: isDeactivated ? null : (user.selfieUrl || null)
-        }
-      };
+        const responseData = {
+          events: eventsList,
+          token: refreshedToken,
+          selfieUrl: isDeactivated ? null : (user.selfieUrl || null),
+          profile: {
+            name: user.name,
+            email,
+            phoneNumber: isDeactivated ? null : user.phoneNumber,
+            hasSelfie: isDeactivated ? false : !!(user.selfieVector || user.selfieUrl),
+            selfieGuestId: user.id,
+            selfieUrl: isDeactivated ? null : (user.selfieUrl || null)
+          }
+        };
+
+        familyEventsCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+        return responseData;
+      })();
+
+      inflightEventsRequests.set(cacheKey, computationPromise);
+      try {
+        return await computationPromise;
+      } finally {
+        inflightEventsRequests.delete(cacheKey);
+      }
     } catch (err) {
       req.log.error(err);
       return reply.code(500).send({ error: 'Failed to fetch family events' });
@@ -525,6 +572,8 @@ module.exports = async function familyRoutes(fastify, opts) {
         }
       }
     }
+
+    familyEventsCache.delete(`user_${user.id}`);
 
     return {
       name: user.name,
