@@ -33,38 +33,42 @@ module.exports = async function galleryRoutes(fastify, opts) {
   // GET /api/gallery/resize?url=...&w=400&q=75
   // NOTE: This is a CPU-intensive fallback for OLD photos without pre-generated R2 thumbs.
   // New uploads serve thumbnails directly from R2 — this route should rarely be called.
+  let activeResizeJobs = 0;
+
   fastify.get('/api/gallery/resize', async (req, reply) => {
-    // Rate-limit: 60 req/min/IP. Old photos without pre-generated R2 thumbs hit this
+    activeResizeJobs++;
+    const tResizeStart = Date.now();
+    // Rate-limit: 120 req/min/IP. Old photos without pre-generated R2 thumbs hit this
     // route on gallery load; new uploads bypass it entirely via direct R2 thumb URLs.
-    await resizeRateLimiter(req, reply);
-    if (reply.sent) return;
-
-    const imageUrl = req.query.url;
-    const width = Math.min(Math.max(parseInt(req.query.w, 10) || 400, 50), 2000);
-    const quality = Math.min(Math.max(parseInt(req.query.q, 10) || 75, 20), 100);
-
-    if (!imageUrl || typeof imageUrl !== 'string') {
-      return reply.code(400).send({ error: 'Missing url parameter' });
-    }
-
-    if (imageUrl.includes('banner.svg') || imageUrl.toLowerCase().split('?')[0].endsWith('.svg')) {
-      return reply.redirect(encodeURI(imageUrl));
-    }
-
-    let key = '';
-
-    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-      try {
-        const parsed = new URL(imageUrl);
-        key = decodeURIComponent(parsed.pathname.replace(/^\/+/, ''));
-      } catch (e) {
-        key = decodeURIComponent(imageUrl.replace(/^\/+/, ''));
-      }
-    } else {
-      key = decodeURIComponent(imageUrl.replace(/^\/?api\/photos\/file\//, '').replace(/^\/+/, ''));
-    }
-
     try {
+      await resizeRateLimiter(req, reply);
+      if (reply.sent) return;
+
+      const imageUrl = req.query.url;
+      const width = Math.min(Math.max(parseInt(req.query.w, 10) || 400, 50), 2000);
+      const quality = Math.min(Math.max(parseInt(req.query.q, 10) || 75, 20), 100);
+
+      if (!imageUrl || typeof imageUrl !== 'string') {
+        return reply.code(400).send({ error: 'Missing url parameter' });
+      }
+
+      if (imageUrl.includes('banner.svg') || imageUrl.toLowerCase().split('?')[0].endsWith('.svg')) {
+        return reply.redirect(encodeURI(imageUrl));
+      }
+
+      let key = '';
+
+      if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+        try {
+          const parsed = new URL(imageUrl);
+          key = decodeURIComponent(parsed.pathname.replace(/^\/+/, ''));
+        } catch (e) {
+          key = decodeURIComponent(imageUrl.replace(/^\/+/, ''));
+        }
+      } else {
+        key = decodeURIComponent(imageUrl.replace(/^\/?api\/photos\/file\//, '').replace(/^\/+/, ''));
+      }
+
       let inputBuffer = null;
 
       // 1. Try reading directly from Cloudflare R2 or local disk using key
@@ -128,15 +132,20 @@ module.exports = async function galleryRoutes(fastify, opts) {
         })
         .toBuffer();
 
+      const durationMs = Date.now() - tResizeStart;
+      fastify.log.info(`[PERF ⏱️ /api/gallery/resize] ${durationMs}ms | in: ${(inputBuffer.length / 1024).toFixed(0)}KB -> out: ${(outputBuffer.length / 1024).toFixed(0)}KB | concurrent active: ${activeResizeJobs} | key: ${key || imageUrl.slice(-30)}`);
+
       reply.type('image/jpeg');
       reply.header('Cache-Control', 'public, max-age=31536000, s-maxage=31536000, immutable');
       return reply.send(outputBuffer);
     } catch (err) {
-      fastify.log.warn(`[Resize Error] Failed to resize ${imageUrl}: ${err.message}`);
+      fastify.log.warn(`[Resize Error] Failed to resize ${imageUrl} (${Date.now() - tResizeStart}ms): ${err.message}`);
       if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
         return reply.redirect(encodeURI(imageUrl));
       }
       return reply.code(500).send({ error: 'Image resize processing failed' });
+    } finally {
+      activeResizeJobs--;
     }
   });
 

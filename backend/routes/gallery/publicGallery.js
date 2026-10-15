@@ -658,6 +658,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
   // Load photos of the event (requires guest auth OR admin auth)
   fastify.get('/api/gallery/public/events/:slug/photos', async (req, reply) => {
     const slug = req.params.slug.toLowerCase().trim();
+    const tStart = Date.now();
     try {
       const isPreview = checkPreviewToken(fastify, req);
       const event = await prisma.galleryEvent.findUnique({ where: { slug } });
@@ -929,6 +930,9 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           reply.header('X-Refreshed-Token', freshToken);
         } catch (_) {}
       }
+
+      const durationMs = Date.now() - tStart;
+      req.log.info({ slug, tab: tabFilter, offset, limit, count: mappedPhotos.length, total, durationMs }, `[PERF ⏱️ /photos] ${durationMs}ms | tab: ${tabFilter || 'ALL'} | offset: ${offset} | returned ${mappedPhotos.length}/${total}`);
 
       reply.header('Cache-Control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=300');
       return {

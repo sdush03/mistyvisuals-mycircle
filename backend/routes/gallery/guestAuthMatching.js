@@ -510,6 +510,9 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
 
   // Get matched photos of the guest using their saved selfie vector
   fastify.get('/api/gallery/public/events/:slug/matched-photos', { preHandler: verifyGuestAuth }, async (req, reply) => {
+    const tStart = Date.now();
+    let qdrantMs = 0;
+    let dbMs = 0;
     const eventId = req.guest.eventId;
     const guestKey = `${req.guest.email}_${eventId}`;
     const userId = req.guest.userId;
@@ -573,6 +576,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
           }
         }
       } else {
+        const tQdrantStart = Date.now();
         const mainMatches = await qdrant.searchVectors(eventId, anchorVector, 100000, 0.35);
         const photoIdsSet = new Set(mainMatches.map(m => m.photo_id));
         
@@ -581,6 +585,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
           extraMatches.forEach(m => photoIdsSet.add(m.photo_id));
         }
         photoIds = Array.from(photoIdsSet);
+        qdrantMs = Date.now() - tQdrantStart;
       }
 
       if (photoIds.length === 0 && (process.env.NODE_ENV === 'development' || process.env.MOCK_AI === 'true')) {
@@ -591,6 +596,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         photoIds = fallbackPhotos.map(p => p.id);
       }
 
+      const tDbStart = Date.now();
       const photos = await prisma.photo.findMany({
         where: { id: { in: photoIds } },
         select: {
@@ -619,6 +625,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
           { id: 'asc' }
         ]
       });
+      dbMs = Date.now() - tDbStart;
 
       const mappedPhotos = photos.map(p => ({
         id: p.id,
@@ -643,6 +650,9 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
       } catch (err) {
         req.log.warn('Failed to save matchCount for guest:', err.message);
       }
+
+      const totalMs = Date.now() - tStart;
+      req.log.info({ eventId, guestId, matches: mappedPhotos.length, qdrantMs, dbMs, totalMs }, `[PERF ⏱️ /matched-photos] ${totalMs}ms | Qdrant: ${qdrantMs}ms | DB: ${dbMs}ms | matches: ${mappedPhotos.length}`);
 
       return { photos: mappedPhotos };
     } catch (err) {
