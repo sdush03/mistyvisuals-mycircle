@@ -862,15 +862,58 @@ export default function GuestGalleryPhotos({ params }: Props) {
           return
         }
 
-        const parsedGuest = JSON.parse(savedGuest)
-        if (!parsedGuest.phoneNumber || !parsedGuest.hasSelfie) {
+        let parsedGuest: any
+        try {
+          parsedGuest = JSON.parse(savedGuest)
+        } catch (_) {
           router.push(`/${slug}/gallery`)
           return
         }
 
+        // Also inspect circle profile in localStorage to prevent false negatives
+        let circleProfile: any = null
+        try {
+          const circleProfileStr = localStorage.getItem('mv_circle_profile')
+          if (circleProfileStr) circleProfile = JSON.parse(circleProfileStr)
+        } catch (_) {}
+
+        // Hydrate missing info from circleProfile
+        if (!parsedGuest.phoneNumber && circleProfile?.phoneNumber) {
+          parsedGuest.phoneNumber = circleProfile.phoneNumber
+        }
+        if (!parsedGuest.selfieUrl && circleProfile?.selfieUrl) {
+          parsedGuest.selfieUrl = circleProfile.selfieUrl
+        }
+        if (!parsedGuest.selfieGuestId && (circleProfile?.selfieGuestId || circleProfile?.id)) {
+          parsedGuest.selfieGuestId = circleProfile.selfieGuestId || circleProfile.id
+        }
+
+        const hasSelfie = Boolean(
+          parsedGuest.hasSelfie || 
+          parsedGuest.selfieUrl || 
+          circleProfile?.hasSelfie || 
+          circleProfile?.selfieUrl
+        )
+        if (hasSelfie) {
+          parsedGuest.hasSelfie = true
+        }
+
+        // Set guest immediately so that the UI, avatar, and "My Profile" modal are responsive right away
         setGuest(parsedGuest)
-        if (parsedGuest.hasSelfie) {
-          fetchAuthenticatedSelfie(parsedGuest.id)
+
+        // Resolve avatar selfie preview immediately
+        if (parsedGuest.selfieUrl && typeof parsedGuest.selfieUrl === 'string' && parsedGuest.selfieUrl.startsWith('http')) {
+          setSelfiePreview(parsedGuest.selfieUrl)
+        } else if (circleProfile?.selfieUrl && typeof circleProfile.selfieUrl === 'string' && circleProfile.selfieUrl.startsWith('http')) {
+          setSelfiePreview(circleProfile.selfieUrl)
+        } else if (hasSelfie) {
+          fetchAuthenticatedSelfie(parsedGuest.selfieGuestId || parsedGuest.id)
+        }
+
+        if (!parsedGuest.phoneNumber || !hasSelfie) {
+          console.warn('Guest missing phone or selfie, redirecting to splash')
+          router.push(`/${slug}/gallery`)
+          return
         }
 
         // Auto-upgrade if they landed directly with a code query parameter
@@ -929,23 +972,34 @@ export default function GuestGalleryPhotos({ params }: Props) {
         })
           .then(res => {
             if (!res.ok) {
-              throw new Error('Session invalid on server')
+              if (res.status === 401 || res.status === 403) {
+                throw new Error('Session invalid on server')
+              }
+              // Transient or server error: do not destroy local session, mark synced
+              setIsProfileSynced(true)
+              return null
             }
             return res.json()
           })
           .then(profileData => {
+            if (!profileData) return
+
             if (profileData && profileData.profile) {
               const updatedGuest = {
                 ...parsedGuest,
-                name: profileData.profile.name,
-                phoneNumber: profileData.profile.phoneNumber,
-                hasSelfie: profileData.profile.hasSelfie,
-                hasFullAccess: profileData.profile.hasFullAccess
+                name: profileData.profile.name || parsedGuest.name,
+                phoneNumber: profileData.profile.phoneNumber || parsedGuest.phoneNumber,
+                hasSelfie: profileData.profile.hasSelfie ?? parsedGuest.hasSelfie,
+                hasFullAccess: profileData.profile.hasFullAccess ?? parsedGuest.hasFullAccess,
+                selfieUrl: profileData.profile.selfieUrl || parsedGuest.selfieUrl,
+                selfieGuestId: profileData.profile.selfieGuestId || parsedGuest.selfieGuestId
               }
               localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(updatedGuest))
               setGuest(updatedGuest)
               
-              if (profileData.profile.selfieGuestId) {
+              if (profileData.profile.selfieUrl && typeof profileData.profile.selfieUrl === 'string' && profileData.profile.selfieUrl.startsWith('http')) {
+                setSelfiePreview(profileData.profile.selfieUrl)
+              } else if (profileData.profile.selfieGuestId) {
                 fetchAuthenticatedSelfie(profileData.profile.selfieGuestId)
               }
 
@@ -1530,13 +1584,26 @@ export default function GuestGalleryPhotos({ params }: Props) {
         name: data.profile.name,
         phoneNumber: data.profile.phoneNumber,
         hasSelfie: data.profile.hasSelfie,
-        hasFullAccess: data.profile.hasFullAccess !== undefined ? data.profile.hasFullAccess : guest.hasFullAccess
+        hasFullAccess: data.profile.hasFullAccess !== undefined ? data.profile.hasFullAccess : guest.hasFullAccess,
+        selfieUrl: data.profile.selfieUrl || guest.selfieUrl,
+        selfieGuestId: data.profile.selfieGuestId || guest.selfieGuestId
       }
       localStorage.setItem(`mv_gallery_guest_${slug}`, JSON.stringify(updatedGuest))
       setGuest(updatedGuest)
 
+      // Also keep mv_circle_profile in sync so home page updates seamlessly
+      try {
+        const circleProfStr = localStorage.getItem('mv_circle_profile')
+        if (circleProfStr) {
+          const cp = JSON.parse(circleProfStr)
+          localStorage.setItem('mv_circle_profile', JSON.stringify({ ...cp, ...data.profile }))
+        }
+      } catch (_) {}
+
       // Re-load selfie image preview URL
-      if (data.profile.selfieGuestId) {
+      if (data.profile.selfieUrl && typeof data.profile.selfieUrl === 'string' && data.profile.selfieUrl.startsWith('http')) {
+        setSelfiePreview(data.profile.selfieUrl)
+      } else if (data.profile.selfieGuestId) {
         fetchAuthenticatedSelfie(data.profile.selfieGuestId)
       }
 

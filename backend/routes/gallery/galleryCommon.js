@@ -90,13 +90,20 @@ const checkUserSelfie = async (userId) => {
   try {
     const user = await prisma.circleUser.findUnique({
       where: { id: userId },
-      select: { selfieUrl: true }
+      select: { selfieUrl: true, selfieVector: true }
     });
-    return !!user?.selfieUrl;
+    if (user?.selfieUrl || user?.selfieVector) return true;
+
+    const selfiesDir = path.join(__dirname, '..', '..', 'uploads', 'photos', 'selfies');
+    if (fs.existsSync(path.join(selfiesDir, `user_${userId}.jpg`)) || fs.existsSync(path.join(selfiesDir, `user_${userId}.json`))) {
+      return true;
+    }
+    return false;
   } catch (e) {
     return false;
   }
 };
+
 
 const ensureUserSelfieMigrated = async (fastify, userId, email) => {
   if (!userId || !email) return false;

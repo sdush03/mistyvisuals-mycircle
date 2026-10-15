@@ -235,15 +235,17 @@ module.exports = async function familyRoutes(fastify, opts) {
       const selfiesDir = path.join(__dirname, '..', '..', 'uploads', 'photos', 'selfies');
       const selfiePath = path.join(selfiesDir, `user_${user.id}.jpg`);
       const vectorPath = path.join(selfiesDir, `user_${user.id}.json`);
-      let anchorVector = null;
+      let anchorVector = user.selfieVector || null;
 
-      if (fs.existsSync(selfiePath) && fs.existsSync(vectorPath)) {
+      if (!anchorVector && fs.existsSync(selfiePath) && fs.existsSync(vectorPath)) {
         try {
           anchorVector = JSON.parse(fs.readFileSync(vectorPath, 'utf8'));
         } catch (e) {
           req.log.error('Failed to parse anchor vector:', e);
         }
       }
+
+      const userHasSelfie = Boolean(user.selfieUrl || user.selfieVector || anchorVector);
 
       // Process all events in parallel instead of sequentially.
       // Each event needs: Qdrant matchedCount + 2 photo counts + role resolution + JWT.
@@ -378,7 +380,9 @@ module.exports = async function familyRoutes(fastify, opts) {
             phoneNumber: user.phoneNumber,
             hasFullAccess: g.hasFullAccess,
             displayRole: resolvedDisplayRole,
-            hasSelfie: !!anchorVector
+            hasSelfie: userHasSelfie,
+            selfieUrl: user.selfieUrl || null,
+            selfieGuestId: user.id
           }
         };
       });
@@ -527,7 +531,8 @@ module.exports = async function familyRoutes(fastify, opts) {
       email,
       phoneNumber: user.phoneNumber,
       hasSelfie,
-      selfieGuestId: user.id
+      selfieGuestId: user.id,
+      selfieUrl: user.selfieUrl || null
     };
   }
 
@@ -613,7 +618,8 @@ module.exports = async function familyRoutes(fastify, opts) {
           phoneNumber: user.phoneNumber,
           hasFullAccess: guest.hasFullAccess,
           hasSelfie: await checkUserSelfie(user.id),
-          selfieGuestId: user.id
+          selfieGuestId: user.id,
+          selfieUrl: user.selfieUrl || null
         }
       };
     } catch (err) {

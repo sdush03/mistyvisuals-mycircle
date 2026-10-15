@@ -27,6 +27,9 @@ interface CircleEvent {
     email: string
     phoneNumber: string | null
     hasFullAccess: boolean
+    hasSelfie?: boolean
+    selfieUrl?: string | null
+    selfieGuestId?: number | null
   }
 }
 
@@ -505,7 +508,13 @@ export default function CirclePage() {
 
   const handleEnterEventGallery = (ev: CircleEvent) => {
     localStorage.setItem(`mv_gallery_token_${ev.slug}`, ev.eventToken)
-    localStorage.setItem(`mv_gallery_guest_${ev.slug}`, JSON.stringify(ev.guestInfo))
+    const guestData = {
+      ...ev.guestInfo,
+      hasSelfie: ev.guestInfo.hasSelfie ?? Boolean(selfieUrl || profile?.hasSelfie),
+      selfieUrl: ev.guestInfo.selfieUrl || selfieUrl || profile?.selfieUrl || null,
+      selfieGuestId: ev.guestInfo.selfieGuestId || profile?.selfieGuestId || profile?.id || null
+    }
+    localStorage.setItem(`mv_gallery_guest_${ev.slug}`, JSON.stringify(guestData))
     router.push(`/${ev.slug}/gallery/photos`)
   }
 

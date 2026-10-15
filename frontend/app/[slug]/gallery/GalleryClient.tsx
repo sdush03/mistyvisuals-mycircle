@@ -75,7 +75,9 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                   email: profileData.profile.email,
                   phoneNumber: profileData.profile.phoneNumber,
                   hasSelfie: profileData.profile.hasSelfie,
-                  hasFullAccess: profileData.profile.hasFullAccess
+                  hasFullAccess: profileData.profile.hasFullAccess,
+                  selfieUrl: profileData.profile.selfieUrl || null,
+                  selfieGuestId: profileData.profile.selfieGuestId || null
                 }
                 
                 // If they are logged in as partial, but landed with a code, auto-upgrade them in background
@@ -140,7 +142,9 @@ export default function GuestGallerySplash({ slug }: { slug: string }) {
                     email: exchangeData.guest.email,
                     phoneNumber: exchangeData.guest.phoneNumber,
                     hasSelfie: exchangeData.guest.hasSelfie,
-                    hasFullAccess: exchangeData.guest.hasFullAccess
+                    hasFullAccess: exchangeData.guest.hasFullAccess,
+                    selfieUrl: exchangeData.guest.selfieUrl || null,
+                    selfieGuestId: exchangeData.guest.selfieGuestId || null
                   }
                   
                   localStorage.setItem(`mv_gallery_token_${slug}`, exchangeData.token)

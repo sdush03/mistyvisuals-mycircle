@@ -161,7 +161,8 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
           phoneNumber: user.phoneNumber,
           hasFullAccess: guest.hasFullAccess,
           hasSelfie,
-          selfieUrl: user.selfieUrl || null
+          selfieUrl: user.selfieUrl || null,
+          selfieGuestId: user.id
         }
       };
     } catch (err) {
@@ -317,7 +318,8 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
           hasFullAccess: guest.hasFullAccess,
           displayRole: resolvedDisplayRole,
           hasSelfie,
-          selfieUrl: user?.selfieUrl || null
+          selfieUrl: user?.selfieUrl || null,
+          selfieGuestId: user?.id || null
         }
       };
     } catch (err) {
