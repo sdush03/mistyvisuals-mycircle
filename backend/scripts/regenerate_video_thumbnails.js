@@ -20,7 +20,13 @@ const fs = require('fs');
 const os = require('os');
 const { execFile } = require('child_process');
 const sharp = require('sharp');
-const { prisma } = require('../modules/quotation/prisma');
+let prisma;
+try {
+  const pModule = require('../prisma');
+  prisma = pModule.prisma || pModule;
+} catch (_) {
+  prisma = require('../modules/quotation/prisma').prisma;
+}
 const { uploadAsset, isR2Enabled } = require('../utils/r2');
 
 const isDryRun = process.argv.includes('--dry-run');
