@@ -245,61 +245,58 @@ module.exports = async function familyRoutes(fastify, opts) {
         }
       }
 
-      for (const g of guestProfiles) {
-        if (leftIds.has(g.id) || g.status === 'LEFT') continue;
-        const event = g.galleryEvent;
-        if (!event || !event.active || event.slug === 'system-directory') continue;
+      // Process all events in parallel instead of sequentially.
+      // Each event needs: Qdrant matchedCount + 2 photo counts + role resolution + JWT.
+      const eventPromises = guestProfiles
+        .filter(g => !leftIds.has(g.id) && g.status !== 'LEFT' && g.galleryEvent && g.galleryEvent.active && g.galleryEvent.slug !== 'system-directory')
+        .map(async (g) => {
+          const event = g.galleryEvent;
 
-        let matchedCount = 0;
+          // Run Qdrant search + both photo counts in parallel
+          let matchedCount = 0;
+          let highlightsPhotoCount = 0;
+          let totalPhotoCount = 0;
 
-        if (anchorVector) {
-          try {
-            if (qdrant.isMock) {
-              const validPhotos = await prisma.photo.findMany({
-                where: { eventId: event.id },
-                select: { id: true }
-              });
-              const validPhotoIds = new Set(validPhotos.map(p => p.id));
-              const dbVectors = qdrant.mockCache
-                .filter(item => item.eventId === event.id && validPhotoIds.has(item.photoId))
-                .map(item => ({
-                  photoId: item.photoId,
-                  faceId: item.faceId,
-                  vector: item.vector
-                }));
-              if (dbVectors.length > 0) {
-                const res = await faceRecManager.matchSelfie(selfiePath, dbVectors, []);
-                if (res.matches) {
-                  matchedCount = res.matches.length;
+          const [matchResult, highlightsResult, totalResult] = await Promise.allSettled([
+            // Qdrant vector search — limit to 5000 since we only need a count
+            (async () => {
+              if (!anchorVector) return 0;
+              try {
+                if (qdrant.isMock) {
+                  const validPhotos = await prisma.photo.findMany({
+                    where: { eventId: event.id },
+                    select: { id: true }
+                  });
+                  const validPhotoIds = new Set(validPhotos.map(p => p.id));
+                  const dbVectors = qdrant.mockCache
+                    .filter(item => item.eventId === event.id && validPhotoIds.has(item.photoId))
+                    .map(item => ({
+                      photoId: item.photoId,
+                      faceId: item.faceId,
+                      vector: item.vector
+                    }));
+                  if (dbVectors.length > 0) {
+                    const res = await faceRecManager.matchSelfie(selfiePath, dbVectors, []);
+                    return res.matches ? res.matches.length : 0;
+                  }
+                  return 0;
+                } else {
+                  const mainMatches = await qdrant.searchVectors(event.id, anchorVector, 100000, 0.35);
+                  const matchedPhotoIds = new Set(mainMatches.map(m => m.photo_id));
+                  return matchedPhotoIds.size;
                 }
+              } catch (matchErr) {
+                req.log.warn(`matchedCount computation failed for event ${event.id}:`, matchErr.message);
+                return 0;
               }
-            } else {
-              const mainMatches = await qdrant.searchVectors(event.id, anchorVector, 100000, 0.35);
-              const matchedPhotoIds = new Set(mainMatches.map(m => m.photo_id));
-              matchedCount = matchedPhotoIds.size;
-            }
-          } catch (matchErr) {
-            req.log.warn(`matchedCount computation failed for event ${event.id}:`, matchErr.message);
-          }
-        }
+            })(),
+            prisma.photo.count({ where: { eventId: event.id, tabName: 'Highlights' } }).catch(() => 0),
+            prisma.photo.count({ where: { eventId: event.id } }).catch(() => 0)
+          ]);
 
-        let highlightsPhotoCount = 0;
-        try {
-          highlightsPhotoCount = await prisma.photo.count({
-            where: { eventId: event.id, tabName: 'Highlights' }
-          });
-        } catch (e) {
-          req.log.warn(`highlightsPhotoCount failed for event ${event.id}:`, e.message);
-        }
-
-        let totalPhotoCount = 0;
-        try {
-          totalPhotoCount = await prisma.photo.count({
-            where: { eventId: event.id }
-          });
-        } catch (e) {
-          req.log.warn(`totalPhotoCount failed for event ${event.id}:`, e.message);
-        }
+          matchedCount = matchResult.status === 'fulfilled' ? matchResult.value : 0;
+          highlightsPhotoCount = highlightsResult.status === 'fulfilled' ? highlightsResult.value : 0;
+          totalPhotoCount = totalResult.status === 'fulfilled' ? totalResult.value : 0;
 
         const eventDate = new Date(event.date);
         const today = new Date();
@@ -358,7 +355,7 @@ module.exports = async function familyRoutes(fastify, opts) {
           hasFullAccess: g.hasFullAccess
         }, { expiresIn: '365d' });
 
-        eventsList.push({
+        return {
           id: event.id,
           title: event.title,
           slug: event.slug,
@@ -383,8 +380,10 @@ module.exports = async function familyRoutes(fastify, opts) {
             displayRole: resolvedDisplayRole,
             hasSelfie: !!anchorVector
           }
-        });
-      }
+        };
+      });
+
+      eventsList.push(...(await Promise.all(eventPromises)));
 
       eventsList.sort((a, b) => {
         const timeA = a.date ? new Date(a.date).getTime() : 0;

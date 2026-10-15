@@ -370,8 +370,8 @@ export function GuestLoginFlow({
       }
 
       let attempts = 0
-      const maxAttempts = 5
-      const retryDelay = 3000
+      const maxAttempts = 3
+      const baseDelay = 2000
 
       const executeUpload = async (): Promise<any> => {
         try {
@@ -394,8 +394,10 @@ export function GuestLoginFlow({
           const isNetworkOrUpdateError = err instanceof TypeError || err.message === 'Server is updating' || err.message.includes('fetch')
           if (isNetworkOrUpdateError && attempts < maxAttempts) {
             attempts++
-            setSelfieError('We are performing a quick system update. This may take a few minutes. Please wait...')
-            await new Promise(resolve => setTimeout(resolve, retryDelay))
+            // Exponential backoff: 2s -> 4s -> 8s + jitter to relieve server pressure
+            const delay = baseDelay * Math.pow(2, attempts - 1) + Math.random() * 500
+            setSelfieError('We are performing a quick system update. This may take a few moments. Please wait...')
+            await new Promise(resolve => setTimeout(resolve, delay))
             return executeUpload()
           }
           throw err

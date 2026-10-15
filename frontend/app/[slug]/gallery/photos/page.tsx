@@ -91,7 +91,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
   }, [isVideoUrl])
 
   // Dynamically resolve on-the-fly resized image URL for gallery grid
-  const getThumbnailUrl = useCallback((photo: any, width = 600) => {
+  const getThumbnailUrl = useCallback((photo: any, width = 400) => {
     if (!photo) return ''
 
     const isVideo = isVideoItem(photo)
@@ -128,7 +128,24 @@ export default function GuestGalleryPhotos({ params }: Props) {
       return ''
     }
 
-    // Normal photos (images)
+    // Normal photos (images) — check for pre-generated R2 thumbnail first.
+    // Photos uploaded after the thumb-upload rollout have thumbnailUrl pointing
+    // directly to a 400px JPEG on R2; return it straight without the resize proxy.
+    const r2Thumb = photo.thumbnailUrl
+    if (r2Thumb && typeof r2Thumb === 'string') {
+      const t = r2Thumb.trim()
+      if (
+        t &&
+        !t.startsWith('/api/gallery/resize') &&
+        !t.startsWith('file:') &&
+        !t.startsWith('data:') &&
+        (t.includes('.r2.dev/') || t.includes('/thumbnails/') || t.includes('/thumbs/'))
+      ) {
+        return t
+      }
+    }
+
+    // Fallback: on-the-fly resize for photos without a pre-generated thumb (old uploads)
     const source = photo.r2Url || photo.url || photo.file_url || photo.thumbnailUrl || ''
     if (!source) return ''
     if (source.startsWith('/api/gallery/resize')) {
@@ -288,6 +305,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
   // Scroll impressions analytics queue and sync flush
   const viewedQueueRef = useRef<Set<number>>(new Set())
   const flushTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const impressionObserverRef = useRef<IntersectionObserver | null>(null)
 
   const flushViewedQueue = useCallback(() => {
     if (flushTimeoutRef.current) clearTimeout(flushTimeoutRef.current)
@@ -332,12 +350,12 @@ export default function GuestGalleryPhotos({ params }: Props) {
     }
   }, [])
 
-  // Set up intersection observer for scroll impressions
+  // Stable intersection observer for scroll impressions
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const observer = new IntersectionObserver((entries) => {
-      const newlyViewed: number[] = [];
+    const obs = new IntersectionObserver((entries) => {
+      let newlyViewedCount = 0
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
           const photoIdStr = entry.target.getAttribute('data-photo-id')
@@ -345,13 +363,15 @@ export default function GuestGalleryPhotos({ params }: Props) {
             const photoId = parseInt(photoIdStr, 10)
             if (!isNaN(photoId) && !viewedQueueRef.current.has(photoId)) {
               viewedQueueRef.current.add(photoId)
-              newlyViewed.push(photoId)
+              newlyViewedCount++
             }
           }
+          // Stop observing this element once viewed to free up browser resources
+          obs.unobserve(entry.target)
         }
       })
 
-      if (newlyViewed.length > 0) {
+      if (newlyViewedCount > 0) {
         flushViewedQueue()
       }
     }, {
@@ -360,13 +380,29 @@ export default function GuestGalleryPhotos({ params }: Props) {
       threshold: 0.1
     })
 
-    const elements = document.querySelectorAll('.observed-photo')
-    elements.forEach((el) => observer.observe(el))
+    impressionObserverRef.current = obs
 
     return () => {
-      observer.disconnect()
+      obs.disconnect()
+      impressionObserverRef.current = null
     }
-  }, [viewMode, photos, allPhotos, favoritesList, flushViewedQueue])
+  }, [flushViewedQueue])
+
+  // Observe newly mounted photos without re-scanning or disconnecting previous ones
+  useEffect(() => {
+    const obs = impressionObserverRef.current
+    if (!obs) return
+
+    const unobserved = document.querySelectorAll('.observed-photo:not([data-observed="true"])')
+    unobserved.forEach((el) => {
+      el.setAttribute('data-observed', 'true')
+      const photoIdStr = el.getAttribute('data-photo-id')
+      if (photoIdStr && viewedQueueRef.current.has(parseInt(photoIdStr, 10))) {
+        return // Already viewed
+      }
+      obs.observe(el)
+    })
+  }, [viewMode, photos.length, allPhotos.length, favoritesList.length])
 
 
   
@@ -840,8 +876,9 @@ export default function GuestGalleryPhotos({ params }: Props) {
         // Auto-upgrade if they landed directly with a code query parameter
         const searchParams = new URLSearchParams(window.location.search)
         const code = searchParams.get('code')
+        const isUpgradingWithCode = Boolean(code && !parsedGuest.hasFullAccess)
 
-        if (code && !parsedGuest.hasFullAccess) {
+        if (isUpgradingWithCode) {
           fetch(`${apiUrl}/api/gallery/public/events/${slug}/upgrade`, {
             method: 'POST',
             headers: {
@@ -867,19 +904,22 @@ export default function GuestGalleryPhotos({ params }: Props) {
             })
             .catch(err => {
               console.warn('Auto-upgrade from URL parameter failed:', err.message)
+              setViewMode('matched')
+              loadMatchedPhotos()
             })
         }
 
-        if (parsedGuest.hasFullAccess || (code && !parsedGuest.hasFullAccess)) {
+        if (parsedGuest.hasFullAccess || isUpgradingWithCode) {
           setViewMode('all')
         } else {
           setViewMode('matched')
         }
 
-        // Background-load the first page of photos (empty tab = all tabs)
-        loadAllPhotos('')
-        // Load matched photos
-        loadMatchedPhotos()
+        // If upgrading via code, the upgrade handler above will trigger photo loading once verified
+        if (!isUpgradingWithCode) {
+          loadAllPhotos('')
+          loadMatchedPhotos()
+        }
 
         // Sync profile source of truth from database
         fetch(`${apiUrl}/api/gallery/public/events/${slug}/profile`, {
@@ -1118,17 +1158,25 @@ export default function GuestGalleryPhotos({ params }: Props) {
     }
   }, [slug, apiUrl])
 
+  // Refs to allow stable loadAllPhotos without re-creating on every state change
+  const loadingMoreRef = useRef(false)
+  const tabCacheRef = useRef(tabCache)
+  useEffect(() => { tabCacheRef.current = tabCache }, [tabCache])
+
   // Cache-aware paginated photo loader
   // tab: which tab to load. If already fully loaded (hasMore=false), skips.
+  // Uses refs for loadingMore and tabCache so the function identity stays stable
+  // and does NOT recreate on every render — preventing the IntersectionObserver cascade loop.
   const loadAllPhotos = useCallback(async (tab: string) => {
     if (event && event.allowDownloads === false && !event.isPreviewMode) return
-    // Don't double-fetch
-    if (loadingMore) return
-    const cached = tabCache[tab]
+    // Don't double-fetch — use ref (not state) to avoid recreating this callback
+    if (loadingMoreRef.current) return
+    const cached = tabCacheRef.current[tab]
     // Already fully loaded for this tab
     if (cached && !cached.hasMore) return
 
     const offset = cached?.offset ?? 0
+    loadingMoreRef.current = true
     setLoadingMore(true)
     const token = localStorage.getItem(`mv_gallery_token_${slug}`)
     try {
@@ -1166,9 +1214,12 @@ export default function GuestGalleryPhotos({ params }: Props) {
     } catch (err) {
       console.error(err)
     } finally {
+      loadingMoreRef.current = false
       setLoadingMore(false)
     }
-  }, [loadingMore, tabCache, slug, apiUrl, prefetchNextBatch])
+  }, [slug, apiUrl, prefetchNextBatch])
+  // NOTE: loadingMore and tabCache intentionally omitted from deps — accessed via refs
+  // to keep loadAllPhotos identity stable and prevent IntersectionObserver cascade.
 
   const [pendingNextInLightbox, setPendingNextInLightbox] = useState(false)
 
@@ -1198,11 +1249,18 @@ export default function GuestGalleryPhotos({ params }: Props) {
     }
   }, [pendingNextInLightbox, activePhotoIndex, activePhotosList.length])
 
-  // Pre-fetch next page when lightbox index approaches end of loaded photos
+  // FIX #3: Pre-fetch next page when lightbox index approaches end of loaded photos.
+  // Guards with lastLightboxRequestedOffsetRef so a completed fetch that returns
+  // duplicate/fewer photos does not immediately re-request the same offset (infinite loop).
+  const lastLightboxRequestedOffsetRef = useRef(-1)
   useEffect(() => {
     if (activePhotoIndex !== null && viewMode === 'all' && hasMore && !loadingMore) {
       if (activePhotoIndex >= activePhotosList.length - 5) {
-        loadAllPhotos(activeAllTab)
+        const currentOffset = tabCacheRef.current[activeAllTab]?.offset ?? 0
+        if (currentOffset !== lastLightboxRequestedOffsetRef.current) {
+          lastLightboxRequestedOffsetRef.current = currentOffset
+          loadAllPhotos(activeAllTab)
+        }
       }
     }
   }, [activePhotoIndex, viewMode, hasMore, loadingMore, activePhotosList.length, loadAllPhotos, activeAllTab])
@@ -1218,13 +1276,16 @@ export default function GuestGalleryPhotos({ params }: Props) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activePhotoIndex, handleNextPhoto])
 
-  // IntersectionObserver — fires when sentinel enters the viewport
+  // FIX #4: Stable IntersectionObserver — loadAllPhotos now has a stable identity (deps: [slug, apiUrl, prefetchNextBatch])
+  // so this effect no longer recreates the observer on every fetch cycle.
+  // The observer callback guards with loadingMoreRef (ref, not state) to avoid triggering
+  // while a fetch is in progress, without needing loadingMore in the dep array.
   useEffect(() => {
     const sentinel = sentinelRef.current
     if (!sentinel) return
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && !loadingMore && hasMore) {
+        if (entries[0].isIntersecting && !loadingMoreRef.current && hasMore) {
           loadAllPhotos(activeAllTab)
         }
       },
@@ -1232,7 +1293,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
     )
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [loadAllPhotos, loadingMore, hasMore, activeAllTab])
+  }, [loadAllPhotos, hasMore, activeAllTab])
 
   const handleBulkDownloadSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -2034,7 +2095,9 @@ export default function GuestGalleryPhotos({ params }: Props) {
               onClick={() => {
                 setViewMode('all');
                 setActiveAllTab('');
-                loadAllPhotos('');
+                if (!tabCacheRef.current['']?.photos?.length) {
+                  loadAllPhotos('');
+                }
               }}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
@@ -2103,7 +2166,9 @@ export default function GuestGalleryPhotos({ params }: Props) {
                 onClick={() => {
                   setViewMode('all');
                   setActiveAllTab(tab);
-                  loadAllPhotos(tab);
+                  if (!tabCacheRef.current[tab]?.photos?.length) {
+                    loadAllPhotos(tab);
+                  }
                 }}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
@@ -2205,7 +2270,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                           data-photo-id={p.id}
                         >
                           <img
-                            src={getThumbnailUrl(p, 600)}
+                            src={getThumbnailUrl(p, 400)}
                             alt=""
                             loading="lazy"
                             onLoad={(e) => handleImageLoad(e, p)}
@@ -2362,7 +2427,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                           data-photo-id={p.id}
                         >
                           <img
-                            src={getThumbnailUrl(p, 600)}
+                            src={getThumbnailUrl(p, 400)}
                             alt=""
                             loading="lazy"
                             onLoad={(e) => handleImageLoad(e, p)}
@@ -2524,7 +2589,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
                             data-photo-id={p.id}
                           >
                             <img
-                              src={getThumbnailUrl(p, 600)}
+                              src={getThumbnailUrl(p, 400)}
                               alt=""
                               loading="lazy"
                               onLoad={(e) => handleImageLoad(e, p)}

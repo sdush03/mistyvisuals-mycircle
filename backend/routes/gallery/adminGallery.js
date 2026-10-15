@@ -1273,7 +1273,8 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
         select: {
           id: true,
           filename: true,
-          r2Url: true
+          r2Url: true,
+          thumbnailUrl: true
         },
         take: 50
       });
@@ -1336,6 +1337,31 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
   });
 
   // Explicitly mark cluster cache as dirty and update gallery faces completion status
+  // Update thumbnailUrl for a single photo after backfill thumb upload
+  fastify.patch('/api/gallery/events/:id/photos/:photoId/thumbnail', async (req, reply) => {
+    const auth = requireAdmin(req, reply);
+    if (!auth) return;
+
+    const eventId = parseInt(req.params.id, 10);
+    const photoId = parseInt(req.params.photoId, 10);
+    const { thumbnailUrl } = req.body || {};
+
+    if (!thumbnailUrl || typeof thumbnailUrl !== 'string') {
+      return reply.code(400).send({ error: 'Missing thumbnailUrl' });
+    }
+
+    try {
+      await prisma.photo.update({
+        where: { id: photoId },
+        data: { thumbnailUrl }
+      });
+      return { success: true };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: 'Failed to update thumbnailUrl' });
+    }
+  });
+
   fastify.post('/api/gallery/events/:id/finalize-upload', async (req, reply) => {
     const auth = requireAdmin(req, reply);
     if (!auth) return;

@@ -1,4 +1,4 @@
-const { PrismaClient } = require('@prisma/client')
+const { PrismaClient, Prisma } = require('@prisma/client')
 
 if (!process.env.DATABASE_URL) {
   const host = process.env.DB_HOST
@@ -38,4 +38,4 @@ if (!process.env.DATABASE_URL || process.env.DATABASE_URL.startsWith('file:')) {
   prisma.$queryRawUnsafe('PRAGMA synchronous = NORMAL;').catch(() => {})
 }
 
-module.exports = { prisma }
+module.exports = { prisma, Prisma }

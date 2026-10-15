@@ -29,7 +29,9 @@ async function ensureSchema(pool) {
  * Robust resolution checking JWT auth, circle_users, and guests tables.
  */
 async function resolveUserContext(pool, req) {
-  await ensureSchema(pool);
+  // NOTE: ensureSchema() removed from hot path. The tags column should exist
+  // via migration. If it's ever missing, call ensureSchema(pool) once at boot
+  // from the route registration function, not per-request.
 
   const auth = req.auth || {};
   let userId = auth.sub || auth.id || auth.userId || null;
@@ -131,6 +133,9 @@ function normalizeTags(rawTags) {
 
 module.exports = async function savesRoutes(fastify, opts) {
   const { pool, requireAuth } = opts;
+
+  // Run schema migration once at boot — NOT per-request (avoids AccessExclusiveLock in hot path)
+  ensureSchema(pool).catch(err => console.warn('[saves] Boot schema ensure failed:', err?.message));
 
   // POST /api/saves - Save a story / featured photo (with optional tags)
   fastify.post('/api/saves', async (req, reply) => {
@@ -404,38 +409,11 @@ module.exports = async function savesRoutes(fastify, opts) {
     const { userId, eventId, isCouple } = await resolveUserContext(pool, req);
 
     try {
-      if (eventId && isCouple) {
-        // 1. Proactively auto-heal couple saves to link with couple's event_id
-        try {
-          await pool.query(
-            `UPDATE saved_photos sp
-             SET event_id = g.event_id,
-                 display_role = g.display_role
-             FROM circle_users cu
-             JOIN guests g ON LOWER(g.email) = LOWER(cu.email)
-             WHERE sp.user_id = cu.id
-               AND g.event_id = $1
-               AND g.display_role IN ('BRIDE', 'GROOM')
-               AND (sp.event_id IS NULL OR sp.display_role NOT IN ('BRIDE', 'GROOM'))`,
-            [eventId]
-          );
-        } catch (_healErr) {}
-
-        // 2. Unlink any guest saves from the couple's event_id so they don't appear in the couple feed
-        try {
-          await pool.query(
-            `UPDATE saved_photos sp
-             SET event_id = NULL
-             WHERE sp.event_id = $1
-               AND sp.user_id NOT IN (
-                 SELECT cu.id FROM circle_users cu
-                 JOIN guests g ON LOWER(g.email) = LOWER(cu.email)
-                 WHERE g.event_id = $1 AND g.display_role IN ('BRIDE', 'GROOM')
-               )`,
-            [eventId]
-          );
-        } catch (_cleanErr) {}
-      }
+      // NOTE: The "auto-heal" UPDATEs that previously ran here (linking couple saves,
+      // cleaning stale event_id values) have been removed. They were running on EVERY
+      // GET request, using LOWER(email) JOINs that prevented index usage and caused
+      // table locks. Data integrity should be handled on write (save/unsave endpoints)
+      // or via a periodic background job — not on every read.
 
       let query;
       let params;

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { prisma } = require('../../prisma');
+const { prisma, Prisma } = require('../../prisma');
 const qdrant = require('../../utils/qdrant');
 const faceRecManager = require('../../utils/faceRecManager');
 const { checkPreviewToken, getDerivedThumbnail, verifyGuestAuth, isMobileAppRequest } = require('./galleryCommon');
@@ -1041,44 +1041,94 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         : Math.min(65, Math.max(20, Math.floor(total / 3)));
       const step = Math.max(1, Math.floor(total / targetCount));
 
-      // Fast, lightweight query selecting only milestone fields
-      const photos = await prisma.photo.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          r2Url: true,
-          thumbnailUrl: true,
-          tabName: true,
-          capturedAt: true
-        },
-        orderBy: [
-          { capturedAt: 'asc' },
-          { id: 'asc' }
-        ]
-      });
+      let keyframes = [];
 
-      const keyframes = [];
-      for (let i = 0; i < photos.length; i += step) {
-        const p = photos[i];
-        keyframes.push({
-          index: i,
-          id: p.id,
-          r2Url: p.r2Url,
-          thumbnailUrl: getDerivedThumbnail(p.thumbnailUrl, p.r2Url),
-          tabName: p.tabName
+      if (total <= 150) {
+        // Lightweight query for small galleries / tabs
+        const photos = await prisma.photo.findMany({
+          where: whereClause,
+          select: {
+            id: true,
+            r2Url: true,
+            thumbnailUrl: true,
+            tabName: true,
+            capturedAt: true
+          },
+          orderBy: [
+            { capturedAt: 'asc' },
+            { id: 'asc' }
+          ]
         });
-      }
 
-      // Ensure the very last photo is always present to anchor the end of the timeline
-      if (photos.length > 1 && (photos.length - 1) % step !== 0) {
-        const lastP = photos[photos.length - 1];
-        keyframes.push({
-          index: photos.length - 1,
-          id: lastP.id,
-          r2Url: lastP.r2Url,
-          thumbnailUrl: getDerivedThumbnail(lastP.thumbnailUrl, lastP.r2Url),
-          tabName: lastP.tabName
-        });
+        for (let i = 0; i < photos.length; i += step) {
+          const p = photos[i];
+          keyframes.push({
+            index: i,
+            id: p.id,
+            r2Url: p.r2Url,
+            thumbnailUrl: getDerivedThumbnail(p.thumbnailUrl, p.r2Url),
+            tabName: p.tabName
+          });
+        }
+
+        if (photos.length > 1 && (photos.length - 1) % step !== 0) {
+          const lastP = photos[photos.length - 1];
+          keyframes.push({
+            index: photos.length - 1,
+            id: lastP.id,
+            r2Url: lastP.r2Url,
+            thumbnailUrl: getDerivedThumbnail(lastP.thumbnailUrl, lastP.r2Url),
+            tabName: lastP.tabName
+          });
+        }
+      } else {
+        // Large galleries (thousands of photos): sample milestones directly in PostgreSQL
+        // using ROW_NUMBER() window function so Node.js memory only receives the ~65 rows.
+        try {
+          const privateFilter = !isBrideOrGroom ? Prisma.sql`AND is_private = false` : Prisma.empty;
+          const tabSqlFilter = !isAllTab && whereClause.tabName?.equals
+            ? Prisma.sql`AND LOWER(tab_name) = LOWER(${whereClause.tabName.equals})`
+            : Prisma.empty;
+
+          const sampled = await prisma.$queryRaw`
+            SELECT id, r2_url as "r2Url", thumbnail_url as "thumbnailUrl", tab_name as "tabName", (rn - 1)::int as index
+            FROM (
+              SELECT id, r2_url, thumbnail_url, tab_name,
+                     ROW_NUMBER() OVER (ORDER BY captured_at ASC NULLS LAST, id ASC) as rn
+              FROM photos
+              WHERE event_id = ${event.id}
+                ${privateFilter}
+                ${tabSqlFilter}
+            ) sub
+            WHERE (rn - 1) % ${step} = 0 OR rn = ${total}
+            ORDER BY rn ASC
+          `;
+
+          keyframes = (sampled || []).map((p) => ({
+            index: Number(p.index),
+            id: p.id,
+            r2Url: p.r2Url,
+            thumbnailUrl: getDerivedThumbnail(p.thumbnailUrl, p.r2Url),
+            tabName: p.tabName
+          }));
+        } catch (rawErr) {
+          req.log.warn('Raw SQL filmstrip milestone fallback to findMany:', rawErr?.message);
+          const photos = await prisma.photo.findMany({
+            where: whereClause,
+            select: { id: true, r2Url: true, thumbnailUrl: true, tabName: true },
+            orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }]
+          });
+          for (let i = 0; i < photos.length; i += step) {
+            const p = photos[i];
+            keyframes.push({
+              index: i,
+              id: p.id,
+              r2Url: p.r2Url,
+              thumbnailUrl: getDerivedThumbnail(p.thumbnailUrl, p.r2Url),
+              tabName: p.tabName
+            });
+          }
+        }
       }
 
       return reply.send({

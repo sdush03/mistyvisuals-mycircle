@@ -96,8 +96,10 @@ async function verifyGuestAuth(req, reply) {
       if (dbGuest.isBlocked) {
         return reply.code(403).send({ error: 'Access denied: Participant is blocked' });
       }
-      // Automatically reactivate guest if they re-entered the gallery after leaving
-      await prisma.$executeRaw`UPDATE guests SET status = 'ACTIVE', updated_at = NOW() WHERE id = ${dbGuest.id} AND status = 'LEFT'`.catch(() => {});
+      // Automatically reactivate guest ONLY if they were marked as 'LEFT'
+      if (dbGuest.status === 'LEFT') {
+        await prisma.$executeRaw`UPDATE guests SET status = 'ACTIVE', updated_at = NOW() WHERE id = ${dbGuest.id} AND status = 'LEFT'`.catch(() => {});
+      }
     }
 
     req.guest = {

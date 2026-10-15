@@ -27,6 +27,9 @@ module.exports = async function authRoutes(fastify, opts) {
     } catch {}
   }
 
+  // Ensure partial index on user_sessions for fast stale cleanup without full table scans
+  pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_cleanup ON user_sessions (last_seen_at) WHERE logout_at IS NULL`).catch(() => {})
+
   const cleanupStaleSessions = async () => {
     try {
       const intervalMinutes = Math.floor(SESSION_STALE_MS / 60000)
@@ -42,23 +45,26 @@ module.exports = async function authRoutes(fastify, opts) {
         `,
         [intervalMinutes]
       )
-      for (const row of staleRes.rows || []) {
-        await logLeadActivity(
-          null,
-          'session_ended',
-          {
-            log_type: 'audit',
-            session_id: row.id,
-            duration_seconds: row.duration_seconds,
-            end_reason: 'inactive',
-            client_kind: row.client_kind,
-            device_type: row.device_type,
-            platform: row.platform,
-            client_name: row.client_name,
-            client_version: row.client_version,
-          },
-          row.user_id
-        )
+      const rows = staleRes.rows || []
+      if (rows.length > 0) {
+        await Promise.allSettled(rows.map(row =>
+          logLeadActivity(
+            null,
+            'session_ended',
+            {
+              log_type: 'audit',
+              session_id: row.id,
+              duration_seconds: row.duration_seconds,
+              end_reason: 'inactive',
+              client_kind: row.client_kind,
+              device_type: row.device_type,
+              platform: row.platform,
+              client_name: row.client_name,
+              client_version: row.client_version,
+            },
+            row.user_id
+          )
+        ))
       }
     } catch (err) {
       // no-op to avoid crashing auth routes

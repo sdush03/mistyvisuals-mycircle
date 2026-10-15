@@ -99,8 +99,16 @@ module.exports = async function pushTokenRoutes(fastify, opts) {
     }
   });
 
-  // ── Developer / Admin Test Push ──
+  // ── Developer / Admin Test Push (Admin Only) ──
+  const { requireAdmin } = opts || {};
   fastify.post('/api/user/push-test', async (req, reply) => {
+    if (typeof requireAdmin === 'function') {
+      const adminAuth = requireAdmin(req, reply);
+      if (!adminAuth) return;
+    } else {
+      return reply.code(403).send({ error: 'Admin authentication required' });
+    }
+
     const { token, title, body, data } = req.body || {};
     if (!token) return reply.code(400).send({ error: 'Token is required' });
 

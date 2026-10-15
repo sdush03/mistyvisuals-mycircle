@@ -134,7 +134,7 @@ module.exports = async function downloadRoutes(fastify, opts) {
       reply.header('Content-Disposition', `attachment; filename="${formattedTitle}_${guestName}_matched_photos.zip"`);
 
       const archive = archiver('zip', {
-        zlib: { level: 9 }
+        store: true
       });
 
       (async () => {
@@ -362,7 +362,7 @@ module.exports = async function downloadRoutes(fastify, opts) {
       reply.header('Content-Disposition', `attachment; filename="${event.title.replace(/\s+/g, '_')}_photos.zip"`);
 
       const archive = archiver('zip', {
-        zlib: { level: 9 }
+        store: true
       });
 
       (async () => {

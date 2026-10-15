@@ -1,6 +1,6 @@
 
 require('dotenv').config()
-const fastify = require('fastify')({ logger: true, bodyLimit: 524288000 })
+const fastify = require('fastify')({ logger: true, bodyLimit: 52428800 }) // 50MB body limit
 const cors = require('@fastify/cors')
 const cookie = require('@fastify/cookie')
 const jwt = require('@fastify/jwt')
@@ -91,7 +91,7 @@ fastify.addContentTypeParser('application/json', { parseAs: 'string' }, function
     done(err, undefined)
   }
 })
-fastify.register(multipart, { limits: { fileSize: 524288000 } }) // 500MB multipart limit
+fastify.register(multipart, { limits: { fileSize: 52428800 } }) // 50MB multipart limit
 
 
 
@@ -313,7 +313,7 @@ fastify.addHook('onRequest', async (req, reply) => {
   if (path.endsWith('/events') && (path.startsWith('/api/proposals/') || path.startsWith('/proposals/'))) return
   if (path.startsWith('/api/photos/file/') || path.startsWith('/photos/file/')) return
   if (path.startsWith('/api/videos/file/') || path.startsWith('/videos/file/')) return
-  if (path === '/api/gallery/resize') return
+  if (path === '/api/gallery/resize') return  // Public resize endpoint — rate-limited inside gallery.js
   if (path.startsWith('/api/user/push-')) return
   const auth = getAuthFromRequest(req)
   if (auth) req.auth = auth
@@ -513,7 +513,9 @@ fastify.register(require('./routes/analytics'), {
 fastify.register(require('./routes/saves'), {
     pool, requireAdmin, requireAuth
 })
-fastify.register(require('./routes/pushTokens'))
+fastify.register(require('./routes/pushTokens'), {
+    pool, requireAdmin, requireAuth
+})
 // Removed /* ===================== PUBLIC WEBSITE ===================== */
 
 // Removed apiRoutes registration

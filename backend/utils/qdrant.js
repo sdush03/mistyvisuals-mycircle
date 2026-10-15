@@ -297,10 +297,8 @@ class QdrantService {
     }
 
     try {
-      // Use exact: true to force brute-force full scan instead of HNSW approximate search.
-      // HNSW with ef_construct=100 only explores ~100 candidates at search time,
-      // hard-capping results at ~100 regardless of how many real matches exist.
-      // At 57k vectors × 512 dims in Rust, exact search takes < 50ms — acceptable.
+      // Use HNSW approximate search for fast index-based retrieval without freezing CPU.
+      // Search up to 100,000 matches so large events (8k-12k+ photos) are fully searched.
       const searchResult = await this.client.search(COLLECTION_NAME, {
         vector: queryVector,
         filter: {
@@ -312,10 +310,7 @@ class QdrantService {
           ]
         },
         limit: Math.min(limit, 100000),
-        score_threshold: threshold,
-        params: {
-          exact: true  // brute-force: guaranteed to find ALL matches above threshold
-        }
+        score_threshold: threshold
       });
 
       return searchResult.map(hit => ({

@@ -8,7 +8,7 @@ import { GuestLoginFlow } from '@/components/GuestLoginFlow'
 import { UserAvatarDropdown } from '@/components/UserAvatarDropdown'
 
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
 
 interface CircleEvent {
   id: number
@@ -260,9 +260,9 @@ export default function CirclePage() {
     }
 
     // Try to auto-login using an existing event guest session
-    const eventToken = findExistingEventToken()
-    if (eventToken) {
-      autoLoginFromEventToken(eventToken)
+    const existing = findExistingEventToken()
+    if (existing) {
+      autoLoginFromEventToken(existing.token, existing.key)
     } else {
       setLoading(false)
     }
@@ -290,17 +290,18 @@ export default function CirclePage() {
     }
   }, [showProfileModal])
 
-  const findExistingEventToken = (): string | null => {
+  const findExistingEventToken = (): { key: string; token: string } | null => {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
       if (key && key.startsWith('mv_gallery_token_')) {
-        return localStorage.getItem(key)
+        const token = localStorage.getItem(key)
+        if (token) return { key, token }
       }
     }
     return null
   }
 
-  const autoLoginFromEventToken = async (eventToken: string) => {
+  const autoLoginFromEventToken = async (eventToken: string, tokenKey?: string) => {
     try {
       setLoading(true)
       const res = await fetch(`${apiUrl}/api/gallery/family/auth-from-event`, {
@@ -309,6 +310,9 @@ export default function CirclePage() {
         body: JSON.stringify({ eventToken })
       })
       if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          if (tokenKey) localStorage.removeItem(tokenKey)
+        }
         setLoading(false)
         return
       }

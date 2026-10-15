@@ -810,23 +810,10 @@ module.exports = async function analyticsRoutes(fastify, opts) {
         insight: comparisonInsight
       };
 
-      // Background: refresh stale matchCounts (old HNSW results were capped at ~100)
-      setImmediate(async () => {
-        for (const g of guests) {
-          const vector = g.circleUser?.selfieVector;
-          if (!vector || g.matchCount > 100) continue; // skip if already looks correct
-          try {
-            const matches = await qdrant.searchVectors(eventId, vector, 100000, 0.35);
-            const liveCount = new Set(matches.map(m => m.photo_id)).size;
-            if (liveCount !== g.matchCount) {
-              await prisma.guest.update({
-                where: { id: g.id },
-                data: { matchCount: liveCount }
-              }).catch(() => {});
-            }
-          } catch (e) { /* silent */ }
-        }
-      });
+      // NOTE: Removed legacy background vector re-scan loop (Fix #17).
+      // Previously, opening the analytics dashboard quietly fired 80+ Qdrant vector scans
+      // in the background as an ad-hoc backfill. Match counts are updated when photos/vectors
+      // are processed or when guests view matched photos.
 
       const totalUniqueViewers = allUniqueViewers.size;
       const totalCompletedUniqueViewers = allCompletedViewers.size;

@@ -8,27 +8,18 @@ type Props = {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
   
-  const apiUrls = [
-    process.env.NEXT_PUBLIC_API_URL,
-    'https://mycircle.mistyvisuals.com',
-    'https://os.mistyvisuals.com',
-    'http://localhost:3004'
-  ].filter(Boolean) as string[]
-
+  const baseUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3004'
   let event: any = null
 
-  for (const baseUrl of apiUrls) {
-    try {
-      const res = await fetch(`${baseUrl}/api/gallery/public/events/${slug}`, {
-        next: { revalidate: 60 } // Cache for 60 seconds
-      })
-      if (res.ok) {
-        event = await res.json()
-        break
-      }
-    } catch (e) {
-      // Try next fallback
+  try {
+    const res = await fetch(`${baseUrl}/api/gallery/public/events/${slug}`, {
+      next: { revalidate: 60 } // Cache for 60 seconds
+    })
+    if (res.ok) {
+      event = await res.json()
     }
+  } catch (e) {
+    // Event not found or network error, use default metadata
   }
 
   const title = event?.title || 'Misty Visuals Gallery'

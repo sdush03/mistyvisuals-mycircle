@@ -4,6 +4,7 @@ const { Readable } = require('stream');
 const sharp = require('sharp');
 const { PHOTO_UPLOAD_DIR, getImageContentType } = require('./gallery/galleryCommon');
 const { isR2Enabled, getObjectStream } = require('../utils/r2');
+const { createRateLimiter, getClientIp } = require('../utils/rateLimiter');
 
 const adminGalleryRoutes = require('./gallery/adminGallery');
 const publicGalleryRoutes = require('./gallery/publicGallery');
@@ -11,10 +12,33 @@ const guestAuthMatchingRoutes = require('./gallery/guestAuthMatching');
 const familyRoutes = require('./gallery/familyRoutes');
 const downloadRoutes = require('./gallery/downloadRoutes');
 
+// 120 resize requests/min/user — generous enough for fast browsing through older
+// unbackfilled galleries while protecting against abusive scrapers and infinite loops.
+// Keyed by IP + Token snippet so multiple guests on the same venue Wi-Fi don't block each other.
+const resizeRateLimiter = createRateLimiter({
+  name: 'resize',
+  timeWindowMs: 60 * 1000,
+  max: 120,
+  keyGenerator: (req) => {
+    const ip = getClientIp(req);
+    const auth = req.headers.authorization || req.headers['x-guest-token'] || '';
+    const tokenPart = auth.length > 20 ? auth.slice(-16) : '';
+    return tokenPart ? `${ip}:${tokenPart}` : ip;
+  },
+  errorMessage: 'Too many image resize requests. Please slow down.'
+});
+
 module.exports = async function galleryRoutes(fastify, opts) {
   // On-The-Fly Image Resizing with Cloudflare Edge Cache Support
   // GET /api/gallery/resize?url=...&w=400&q=75
+  // NOTE: This is a CPU-intensive fallback for OLD photos without pre-generated R2 thumbs.
+  // New uploads serve thumbnails directly from R2 — this route should rarely be called.
   fastify.get('/api/gallery/resize', async (req, reply) => {
+    // Rate-limit: 60 req/min/IP. Old photos without pre-generated R2 thumbs hit this
+    // route on gallery load; new uploads bypass it entirely via direct R2 thumb URLs.
+    await resizeRateLimiter(req, reply);
+    if (reply.sent) return;
+
     const imageUrl = req.query.url;
     const width = Math.min(Math.max(parseInt(req.query.w, 10) || 400, 50), 2000);
     const quality = Math.min(Math.max(parseInt(req.query.q, 10) || 75, 20), 100);

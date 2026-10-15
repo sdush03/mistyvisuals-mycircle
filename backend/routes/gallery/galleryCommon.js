@@ -40,7 +40,7 @@ function getDerivedThumbnail(thumbnailUrl, r2Url) {
 
   const source = r2Url || thumbnailUrl;
   if (!source) return null;
-  return `/api/gallery/resize?url=${encodeURIComponent(source)}&w=600&q=75`;
+  return `/api/gallery/resize?url=${encodeURIComponent(source)}&w=400&q=75`;
 }
 
 function getArchiver() {
