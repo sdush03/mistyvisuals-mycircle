@@ -35,11 +35,16 @@ function getDerivedThumbnail(thumbnailUrl, r2Url) {
 
   // If r2Url is a video, check if standard thumbnail path exists
   if (isVideo(r2Url)) {
-    if (r2Url && typeof r2Url === 'string' && r2Url.includes('/videos/')) {
+    if (r2Url && typeof r2Url === 'string') {
       const clean = r2Url.split('?')[0];
       const fn = clean.substring(clean.lastIndexOf('/') + 1);
       const base = fn.replace(/\.[^/.]+$/, '');
-      return clean.replace('/videos/' + fn, `/thumbnails/thumb_${base}.jpg`);
+      if (clean.includes('/videos/')) {
+        return clean.replace('/videos/' + fn, `/thumbnails/thumb_${base}.jpg`);
+      }
+      if (clean.includes('/photos/')) {
+        return clean.replace('/photos/' + fn, `/thumbnails/thumb_${base}.jpg`);
+      }
     }
     return null;
   }
