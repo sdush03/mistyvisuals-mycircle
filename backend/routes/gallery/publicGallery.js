@@ -570,14 +570,10 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         const isPhotoOnlyCinema = isCinemaTab && !isVideoExt;
         const isComingSoon = Boolean(p.exif?.isComingSoon || p.exif?.comingSoon || isPhotoOnlyCinema);
 
-        const posterUrl = p.exif?.posterUrl || p.exif?.coverUrl || p.exif?.coverPhotoUrl || null;
-
         return {
           id: p.id,
           r2Url: p.r2Url,
-          thumbnailUrl: getDerivedThumbnail(p.thumbnailUrl || posterUrl, p.r2Url),
-          posterUrl,
-          coverUrl: posterUrl,
+          thumbnailUrl: getDerivedThumbnail(p.thumbnailUrl, p.r2Url),
           filename: p.filename,
           originalSize: p.originalFileSize,
           tabName: p.tabName,
