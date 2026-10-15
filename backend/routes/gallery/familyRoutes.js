@@ -25,6 +25,7 @@ const familyAuthRateLimiter = createRateLimiter({
 
 const familyEventsCache = new Map(); // key: userId, value: { data, timestamp }
 const inflightEventsRequests = new Map(); // key: userId, value: Promise
+const userMatchCountCache = new Map(); // key: `${userId}_${eventId}`, value: { count, timestamp }
 
 module.exports = async function familyRoutes(fastify, opts) {
   const { requireAdmin } = opts;
@@ -283,56 +284,18 @@ module.exports = async function familyRoutes(fastify, opts) {
         .map(async (g) => {
           const event = g.galleryEvent;
 
-          // Run Qdrant search + both photo counts in parallel
-          let matchedCount = 0;
+          // Matched count from cache (instant) - photo matching runs in background post-render
+          const cacheMatchKey = `${user.id}_${event.id}`;
+          const cachedMatch = userMatchCountCache.get(cacheMatchKey);
+          let matchedCount = cachedMatch ? cachedMatch.count : 0;
           let highlightsPhotoCount = 0;
           let totalPhotoCount = 0;
 
-          const [matchResult, highlightsResult, totalResult] = await Promise.allSettled([
-            // Qdrant vector search — limit to 5000 since we only need a count
-            (async () => {
-              if (!anchorVector) return 0;
-              try {
-                if (qdrant.isMock) {
-                  const validPhotos = await prisma.photo.findMany({
-                    where: { eventId: event.id },
-                    select: { id: true }
-                  });
-                  const validPhotoIds = new Set(validPhotos.map(p => p.id));
-                  const dbVectors = qdrant.mockCache
-                    .filter(item => item.eventId === event.id && validPhotoIds.has(item.photoId))
-                    .map(item => ({
-                      photoId: item.photoId,
-                      faceId: item.faceId,
-                      vector: item.vector
-                    }));
-                  if (dbVectors.length > 0) {
-                    const res = await faceRecManager.matchSelfie(selfiePath, dbVectors, []);
-                    return res.matches ? res.matches.length : 0;
-                  }
-                  return 0;
-                } else {
-                  // Run full vector search up to 100,000 matches with safety timeout to prevent hanging
-                  const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Qdrant search timeout')), 4000)
-                  );
-                  const mainMatches = await Promise.race([
-                    qdrant.searchVectors(event.id, anchorVector, 100000, 0.35),
-                    timeoutPromise
-                  ]);
-                  const matchedPhotoIds = new Set(mainMatches.map(m => m.photo_id));
-                  return matchedPhotoIds.size;
-                }
-              } catch (matchErr) {
-                req.log.warn(`matchedCount computation failed for event ${event.id}:`, matchErr.message);
-                return 0;
-              }
-            })(),
+          const [highlightsResult, totalResult] = await Promise.allSettled([
             prisma.photo.count({ where: { eventId: event.id, tabName: 'Highlights' } }).catch(() => 0),
             prisma.photo.count({ where: { eventId: event.id } }).catch(() => 0)
           ]);
 
-          matchedCount = matchResult.status === 'fulfilled' ? matchResult.value : 0;
           highlightsPhotoCount = highlightsResult.status === 'fulfilled' ? highlightsResult.value : 0;
           totalPhotoCount = totalResult.status === 'fulfilled' ? totalResult.value : 0;
 
@@ -457,6 +420,30 @@ module.exports = async function familyRoutes(fastify, opts) {
         };
 
         familyEventsCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+
+        // Trigger background face matching asynchronously without delaying gallery display
+        if (anchorVector && !qdrant.isMock) {
+          setImmediate(async () => {
+            for (const ev of eventsList) {
+              const key = `${user.id}_${ev.id}`;
+              const existing = userMatchCountCache.get(key);
+              if (!existing || Date.now() - existing.timestamp > 300000) {
+                try {
+                  const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Qdrant background timeout')), 5000)
+                  );
+                  const mainMatches = await Promise.race([
+                    qdrant.searchVectors(ev.id, anchorVector, 100000, 0.35),
+                    timeoutPromise
+                  ]);
+                  const matchedPhotoIds = new Set(mainMatches.map(m => m.photo_id));
+                  userMatchCountCache.set(key, { count: matchedPhotoIds.size, timestamp: Date.now() });
+                } catch (_) {}
+              }
+            }
+          });
+        }
+
         return responseData;
       })();
 
@@ -469,6 +456,33 @@ module.exports = async function familyRoutes(fastify, opts) {
     } catch (err) {
       req.log.error(err);
       return reply.code(500).send({ error: 'Failed to fetch family events' });
+    }
+  });
+
+  // Background endpoint: fetch asynchronously matched photo counts without blocking gallery rendering
+  fastify.get('/api/gallery/family/events/matches', { preHandler: verifyFamilyAuth }, async (req, reply) => {
+    try {
+      const email = req.family.email;
+      const user = await prisma.circleUser.findUnique({ where: { email } });
+      if (!user) return { matches: {} };
+
+      const guestProfiles = await prisma.guest.findMany({
+        where: { email },
+        select: { eventId: true }
+      });
+
+      const matches = {};
+      for (const g of guestProfiles) {
+        const key = `${user.id}_${g.eventId}`;
+        const cached = userMatchCountCache.get(key);
+        if (cached) {
+          matches[g.eventId] = cached.count;
+        }
+      }
+
+      return { matches };
+    } catch (err) {
+      return { matches: {} };
     }
   });
 
