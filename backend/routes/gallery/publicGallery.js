@@ -497,13 +497,24 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         }
         whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
       } else {
-        const activeTabs = event.tabs || [];
-        if (activeTabs.length > 0) {
+        const nonCinemaTabs = (event.tabs || []).filter(t => t.trim().toLowerCase() !== 'cinema');
+        if (nonCinemaTabs.length > 0) {
           whereClause.OR = [
-            { tabName: { in: activeTabs } },
+            { tabName: { in: nonCinemaTabs } },
             { tabName: null }
           ];
         }
+        whereClause.NOT = [
+          { tabName: { equals: 'Cinema', mode: 'insensitive' } },
+          { filename: { endsWith: '.mp4' } },
+          { filename: { endsWith: '.mov' } },
+          { filename: { endsWith: '.m4v' } },
+          { filename: { endsWith: '.webm' } },
+          { r2Url: { contains: '.mp4' } },
+          { r2Url: { contains: '.mov' } },
+          { r2Url: { contains: '.m4v' } },
+          { r2Url: { contains: '.webm' } }
+        ];
       }
 
       const totalAllCount = await prisma.photo.count({ where: whereClause });
@@ -540,7 +551,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         prisma.photo.findMany({
           where: whereClause,
           select: selectClause,
-          orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }],
+          orderBy: [{ capturedAt: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
           take: 60
         }),
         guestId ? prisma.photoLike.findMany({
@@ -900,7 +911,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           where: whereClause,
           select: selectClause,
           orderBy: [
-            { capturedAt: 'asc' },
+            { capturedAt: { sort: 'asc', nulls: 'last' } },
             { id: 'asc' }
           ],
           skip: offset,
@@ -1054,7 +1065,36 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           if (matchedTab) actualTab = matchedTab;
         }
         whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+      } else {
+        const nonCinemaTabs = (event.tabs || []).filter(t => t.trim().toLowerCase() !== 'cinema');
+        if (nonCinemaTabs.length > 0) {
+          whereClause.OR = [
+            { tabName: { in: nonCinemaTabs } },
+            { tabName: null }
+          ];
+        }
+        whereClause.NOT = [
+          { tabName: { equals: 'Cinema', mode: 'insensitive' } },
+          { filename: { endsWith: '.mp4' } },
+          { filename: { endsWith: '.mov' } },
+          { filename: { endsWith: '.m4v' } },
+          { filename: { endsWith: '.webm' } },
+          { r2Url: { contains: '.mp4' } },
+          { r2Url: { contains: '.mov' } },
+          { r2Url: { contains: '.m4v' } },
+          { r2Url: { contains: '.webm' } }
+        ];
       }
+
+      const isCinemaPhoto = (p) => {
+        if (!p) return false;
+        if (p.tabName && p.tabName.trim().toUpperCase() === 'CINEMA') return true;
+        const isVideoExt = ['.mp4', '.mov', '.m4v', '.webm'].some(ext => (p.filename || p.r2Url || '').toLowerCase().includes(ext));
+        if (isVideoExt) return true;
+        if (p.exif?.cinemaCategory) return true;
+        if (p.exif?.isComingSoon || p.exif?.comingSoon) return true;
+        return false;
+      };
 
       const total = await prisma.photo.count({ where: whereClause });
       if (total === 0) {
@@ -1067,31 +1107,37 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       }
 
       // Step configuration:
-      // Dynamically target ~50-70 keyframes for smooth, continuous timeline scrubbing
+      // Dynamically target ~100-120 keyframes for large galleries, 20-65 for smaller ones
       const requestedTarget = parseInt(req.query.target, 10);
-      const targetCount = Number.isFinite(requestedTarget) && requestedTarget >= 15 && requestedTarget <= 100
+      const targetCount = Number.isFinite(requestedTarget) && requestedTarget >= 15 && requestedTarget <= 120
         ? requestedTarget
-        : Math.min(65, Math.max(20, Math.floor(total / 3)));
+        : (total >= 190
+          ? Math.min(120, Math.max(100, Math.floor(total / 2)))
+          : Math.min(65, Math.max(20, Math.floor(total / 3))));
       const step = Math.max(1, Math.floor(total / targetCount));
 
       let keyframes = [];
 
       if (total <= 150) {
         // Lightweight query for small galleries / tabs
-        const photos = await prisma.photo.findMany({
+        const rawPhotos = await prisma.photo.findMany({
           where: whereClause,
           select: {
             id: true,
             r2Url: true,
             thumbnailUrl: true,
+            filename: true,
             tabName: true,
-            capturedAt: true
+            capturedAt: true,
+            exif: true
           },
           orderBy: [
-            { capturedAt: 'asc' },
+            { capturedAt: { sort: 'asc', nulls: 'last' } },
             { id: 'asc' }
           ]
         });
+
+        const photos = rawPhotos.filter(p => !isCinemaPhoto(p));
 
         for (let i = 0; i < photos.length; i += step) {
           const p = photos[i];
@@ -1121,7 +1167,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           const privateFilter = !isBrideOrGroom ? Prisma.sql`AND is_private = false` : Prisma.empty;
           const tabSqlFilter = !isAllTab && whereClause.tabName?.equals
             ? Prisma.sql`AND LOWER(tab_name) = LOWER(${whereClause.tabName.equals})`
-            : Prisma.empty;
+            : Prisma.sql`AND (tab_name IS NULL OR LOWER(tab_name) != 'cinema') AND (filename IS NULL OR (filename NOT ILIKE '%.mp4' AND filename NOT ILIKE '%.mov' AND filename NOT ILIKE '%.m4v' AND filename NOT ILIKE '%.webm')) AND (r2_url NOT ILIKE '%.mp4' AND r2_url NOT ILIKE '%.mov' AND r2_url NOT ILIKE '%.m4v' AND r2_url NOT ILIKE '%.webm') AND (exif IS NULL OR ((exif->>'cinemaCategory') IS NULL AND (exif->>'isComingSoon' IS NULL OR exif->>'isComingSoon' != 'true') AND (exif->>'comingSoon' IS NULL OR exif->>'comingSoon' != 'true')))`;
 
           const sampled = await prisma.$queryRaw`
             SELECT id, r2_url as "r2Url", thumbnail_url as "thumbnailUrl", tab_name as "tabName", (rn - 1)::int as index
@@ -1146,11 +1192,12 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           }));
         } catch (rawErr) {
           req.log.warn('Raw SQL filmstrip milestone fallback to findMany:', rawErr?.message);
-          const photos = await prisma.photo.findMany({
+          const rawPhotos = await prisma.photo.findMany({
             where: whereClause,
-            select: { id: true, r2Url: true, thumbnailUrl: true, tabName: true },
-            orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }]
+            select: { id: true, r2Url: true, thumbnailUrl: true, filename: true, tabName: true, exif: true },
+            orderBy: [{ capturedAt: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }]
           });
+          const photos = rawPhotos.filter(p => !isCinemaPhoto(p));
           for (let i = 0; i < photos.length; i += step) {
             const p = photos[i];
             keyframes.push({
