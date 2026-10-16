@@ -131,8 +131,21 @@ async function verifyFamilyAuth(req, reply) {
     if (!decoded.email) {
       return reply.code(403).send({ error: 'Access denied: Email missing' });
     }
+
+    // Verify session sid is still active in circle_user_sessions
+    if (decoded.sid) {
+      const activeSess = await prisma.$queryRaw`
+        SELECT id FROM circle_user_sessions
+        WHERE id = ${decoded.sid} AND logout_at IS NULL
+      `.catch(() => []);
+      if (!activeSess || activeSess.length === 0) {
+        return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'SESSION_TERMINATED' });
+      }
+    }
+
     req.family = decoded;
   } catch (err) {
+    if (err.statusCode === 401) return reply.code(401).send(err.response || err);
     return reply.code(401).send({ error: 'Unauthorized session' });
   }
 }

@@ -32,6 +32,20 @@ const activeBackgroundMatchingUsers = new Set(); // throttle concurrent backgrou
 module.exports = async function familyRoutes(fastify, opts) {
   const { requireAdmin } = opts;
 
+  // Ensure circle_user_sessions table exists
+  prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS circle_user_sessions (
+        id SERIAL PRIMARY KEY,
+        user_id INT NOT NULL,
+        client_kind VARCHAR(20) NOT NULL,
+        device_type VARCHAR(50),
+        user_agent TEXT,
+        login_at TIMESTAMP DEFAULT NOW(),
+        logout_at TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_circle_sessions_active ON circle_user_sessions (user_id, client_kind) WHERE logout_at IS NULL;
+  `).catch(() => {});
+
   // Verify OAuth (Google/Apple/Facebook/Phone) token globally for Family Dashboard
   fastify.post('/api/gallery/family/auth', { preHandler: familyAuthRateLimiter }, async (req, reply) => {
     const { token, provider = 'google', email: inputEmail, name: inputName, phoneNumber, appleUserId } = req.body;
@@ -121,11 +135,32 @@ module.exports = async function familyRoutes(fastify, opts) {
         });
       }
 
+      const userAgent = String(req.headers['user-agent'] || '').toLowerCase();
+      const isApp = req.headers['x-client-type'] === 'app' || userAgent.includes('expo') || userAgent.includes('react-native');
+      const clientKind = isApp ? 'app' : 'desktop';
+
+      // Terminate previous active sessions of the same clientKind
+      await prisma.$executeRaw`
+        UPDATE circle_user_sessions
+        SET logout_at = NOW()
+        WHERE user_id = ${user.id} AND client_kind = ${clientKind} AND logout_at IS NULL
+      `.catch(() => {});
+
+      // Create new session
+      const newSess = await prisma.$queryRaw`
+        INSERT INTO circle_user_sessions (user_id, client_kind, device_type, user_agent, login_at)
+        VALUES (${user.id}, ${clientKind}, ${isApp ? 'mobile' : 'desktop'}, ${req.headers['user-agent'] || ''}, NOW())
+        RETURNING id
+      `;
+      const sessionId = Number(Array.isArray(newSess) && newSess[0] ? newSess[0].id : 0);
+
       const familyToken = fastify.jwt.sign({
         email: user.email,
         role: 'family',
         name: user.name || verifiedName,
-        userId: user.id
+        userId: user.id,
+        sid: sessionId,
+        clientKind
       }, { expiresIn: '365d' });
 
       return {
