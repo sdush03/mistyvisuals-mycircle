@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { prisma } = require('../../prisma');
+const { pool } = require('../../db');
 const qdrant = require('../../utils/qdrant');
 const faceRecManager = require('../../utils/faceRecManager');
 const { uploadAssetWithRetry } = require('../../utils/r2');
@@ -33,7 +34,7 @@ module.exports = async function familyRoutes(fastify, opts) {
   const { requireAdmin } = opts;
 
   // Ensure circle_user_sessions table exists
-  prisma.$executeRawUnsafe(`
+  pool.query(`
     CREATE TABLE IF NOT EXISTS circle_user_sessions (
         id SERIAL PRIMARY KEY,
         user_id INT NOT NULL,
@@ -140,19 +141,21 @@ module.exports = async function familyRoutes(fastify, opts) {
       const clientKind = isApp ? 'app' : 'desktop';
 
       // Terminate previous active sessions of the same clientKind
-      await prisma.$executeRaw`
-        UPDATE circle_user_sessions
-        SET logout_at = NOW()
-        WHERE user_id = ${user.id} AND client_kind = ${clientKind} AND logout_at IS NULL
-      `.catch(() => {});
+      await pool.query(
+        `UPDATE circle_user_sessions
+         SET logout_at = NOW()
+         WHERE user_id = $1 AND client_kind = $2 AND logout_at IS NULL`,
+        [user.id, clientKind]
+      ).catch(() => {});
 
       // Create new session
-      const newSess = await prisma.$queryRaw`
-        INSERT INTO circle_user_sessions (user_id, client_kind, device_type, user_agent, login_at)
-        VALUES (${user.id}, ${clientKind}, ${isApp ? 'mobile' : 'desktop'}, ${req.headers['user-agent'] || ''}, NOW())
-        RETURNING id
-      `;
-      const sessionId = Number(Array.isArray(newSess) && newSess[0] ? newSess[0].id : 0);
+      const newSess = await pool.query(
+        `INSERT INTO circle_user_sessions (user_id, client_kind, device_type, user_agent, login_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         RETURNING id`,
+        [user.id, clientKind, isApp ? 'mobile' : 'desktop', req.headers['user-agent'] || '']
+      );
+      const sessionId = Number(newSess.rows[0]?.id || 0);
 
       const familyToken = fastify.jwt.sign({
         email: user.email,
