@@ -149,6 +149,13 @@ module.exports = async function familyRoutes(fastify, opts) {
         [user.id, clientKind]
       ).catch(() => {});
 
+      // Clear any cached events for this user across all sessions to prevent cache poisoning
+      for (const key of familyEventsCache.keys()) {
+        if (key.startsWith(`user_${user.id}`)) {
+          familyEventsCache.delete(key);
+        }
+      }
+
       // Create new session
       const newSess = await pool.query(
         `INSERT INTO circle_user_sessions (user_id, client_kind, device_type, user_agent, login_at)
@@ -240,6 +247,13 @@ module.exports = async function familyRoutes(fastify, opts) {
         [user.id, clientKind]
       ).catch(() => {});
 
+      // Clear any cached events for this user across all sessions to prevent cache poisoning
+      for (const key of familyEventsCache.keys()) {
+        if (key.startsWith(`user_${user.id}`)) {
+          familyEventsCache.delete(key);
+        }
+      }
+
       const newSess = await pool.query(
         `INSERT INTO circle_user_sessions (user_id, client_kind, device_type, user_agent, login_at)
          VALUES ($1, $2, $3, $4, NOW())
@@ -286,14 +300,28 @@ module.exports = async function familyRoutes(fastify, opts) {
       if (!user) return { events: [], profile: null };
 
       // Return from short-lived in-memory cache if requested within 30 seconds
-      const cacheKey = `user_${user.id}`;
+      // Include session ID in cacheKey to prevent cross-session token contamination
+      const cacheKey = `user_${user.id}_sid_${req.family?.sid || 'default'}`;
       const cached = familyEventsCache.get(cacheKey);
       const now = Date.now();
       if (cached && (now - cached.timestamp < 30000)) {
-        return cached.data;
+        const freshToken = fastify.jwt.sign({
+          email: user.email,
+          role: 'family',
+          name: user.name,
+          userId: user.id,
+          sid: req.family?.sid,
+          clientKind: req.family?.clientKind
+        }, { expiresIn: '365d' });
+        return {
+          events: cached.data.events,
+          token: freshToken,
+          selfieUrl: cached.data.selfieUrl,
+          profile: cached.data.profile
+        };
       }
 
-      // If an identical calculation for this user is already in-flight, await the same promise
+      // If an identical calculation for this user and session is already in-flight, await the same promise
       if (inflightEventsRequests.has(cacheKey)) {
         return await inflightEventsRequests.get(cacheKey);
       }
@@ -475,9 +503,8 @@ module.exports = async function familyRoutes(fastify, opts) {
         clientKind: req.family?.clientKind
       }, { expiresIn: '365d' });
 
-        const responseData = {
+        const cachedPayload = {
           events: eventsList,
-          token: refreshedToken,
           selfieUrl: isDeactivated ? null : (user.selfieUrl || null),
           profile: {
             name: user.name,
@@ -489,7 +516,7 @@ module.exports = async function familyRoutes(fastify, opts) {
           }
         };
 
-        familyEventsCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+        familyEventsCache.set(cacheKey, { data: cachedPayload, timestamp: Date.now() });
 
         // Trigger background face matching asynchronously without delaying gallery display or choking CPU
         if (anchorVector && !qdrant.isMock && !activeBackgroundMatchingUsers.has(user.id)) {
@@ -521,7 +548,10 @@ module.exports = async function familyRoutes(fastify, opts) {
           });
         }
 
-        return responseData;
+        return {
+          ...cachedPayload,
+          token: refreshedToken
+        };
       })();
 
       inflightEventsRequests.set(cacheKey, computationPromise);
@@ -664,7 +694,11 @@ module.exports = async function familyRoutes(fastify, opts) {
       }
     }
 
-    familyEventsCache.delete(`user_${user.id}`);
+    for (const key of familyEventsCache.keys()) {
+      if (key.startsWith(`user_${user.id}`)) {
+        familyEventsCache.delete(key);
+      }
+    }
 
     return {
       name: user.name,

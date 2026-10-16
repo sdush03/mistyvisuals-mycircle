@@ -452,7 +452,9 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           email: dbGuest.email,
           role: 'guest',
           displayRole: resolvedDisplayRole,
-          hasFullAccess: hasFullAccess
+          hasFullAccess: hasFullAccess,
+          sid: decoded?.sid,
+          clientKind: decoded?.clientKind
         };
       }
       const sessionToken = refreshPayload ? fastify.jwt.sign(refreshPayload, { expiresIn: '365d' }) : null;
@@ -776,7 +778,9 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
                 email: dbGuest.email,
                 role: 'guest',
                 displayRole: dbGuest.displayRole || null,
-                hasFullAccess: dbGuest.hasFullAccess
+                hasFullAccess: dbGuest.hasFullAccess,
+                sid: decoded?.sid,
+                clientKind: decoded?.clientKind
               };
             } else {
               return reply.code(403).send({ error: 'Token does not match this event' });
