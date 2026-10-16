@@ -117,6 +117,15 @@ module.exports = async function authRoutes(fastify, opts) {
     }
 
     const clientInfo = getClientInfo(req)
+
+    // Enforce single active session per client_kind (App = 1, Desktop / Browser = 1)
+    await pool.query(
+      `UPDATE user_sessions
+       SET logout_at = NOW()
+       WHERE user_id = $1 AND client_kind = $2 AND logout_at IS NULL`,
+      [user.id, clientInfo.client_kind]
+    )
+
     const sessionRes = await pool.query(
       `INSERT INTO user_sessions (user_id, login_at, last_seen_at, device_type, user_agent, client_kind, platform, client_name, client_version)
        VALUES ($1, NOW(), NOW(), $2, $3, $4, $5, $6, $7)
