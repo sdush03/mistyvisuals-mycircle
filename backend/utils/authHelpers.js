@@ -1,5 +1,5 @@
 module.exports = function installAuthHelpers(opts) {
-  const { crypto, fastify, AUTH_COOKIE } = opts;
+  const { crypto, fastify, AUTH_COOKIE, pool } = opts;
 
   const PROTECTED_ADMIN_EMAIL = String(process.env.PROTECTED_ADMIN_EMAIL || 'dushyant@mistyvisuals.com')
     .trim()

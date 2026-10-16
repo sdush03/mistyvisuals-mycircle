@@ -290,6 +290,13 @@ module.exports = async function authRoutes(fastify, opts) {
   fastify.get('/auth/me', async (req, reply) => {
     const auth = requireAuth(req, reply)
     if (!auth) return
+    if (auth.sid) {
+      const sess = await pool.query('SELECT id FROM user_sessions WHERE id = $1 AND logout_at IS NULL', [auth.sid])
+      if (sess.rows.length === 0) {
+        clearAuthCookie(reply)
+        return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'SESSION_TERMINATED' })
+      }
+    }
     trackInternalIp(req)
     const r = await pool.query(
       'SELECT id, email, role, name, nickname, profile_photo, job_title, force_password_reset, is_active, signature_image, signature_image_dark FROM users WHERE id=$1',
@@ -339,6 +346,13 @@ module.exports = async function authRoutes(fastify, opts) {
   fastify.post('/auth/heartbeat', async (req, reply) => {
     const auth = requireAuth(req, reply)
     if (!auth) return
+    if (auth.sid) {
+      const sess = await pool.query('SELECT id FROM user_sessions WHERE id = $1 AND logout_at IS NULL', [auth.sid])
+      if (sess.rows.length === 0) {
+        clearAuthCookie(reply)
+        return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'SESSION_TERMINATED' })
+      }
+    }
     trackInternalIp(req)
 
     const event = String(req.body?.event || 'ping').toLowerCase()
