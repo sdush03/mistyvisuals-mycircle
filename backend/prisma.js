@@ -24,9 +24,9 @@ if (process.env.DATABASE_URL) {
     } else if (!current.includes('timezone')) {
       url.searchParams.set('options', `${current} ${tzOption}`)
     }
-    // Enforce safe connection pool limit for 2GB RAM DigitalOcean droplet
+    // Enforce safe connection pool limit for 2GB RAM DigitalOcean droplet (20 for mycircle high-burst traffic)
     if (!url.searchParams.has('connection_limit')) {
-      url.searchParams.set('connection_limit', '10')
+      url.searchParams.set('connection_limit', '20')
     }
     if (!url.searchParams.has('pool_timeout')) {
       url.searchParams.set('pool_timeout', '20')
