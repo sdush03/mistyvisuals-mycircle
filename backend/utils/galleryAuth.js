@@ -103,6 +103,17 @@ async function verifyGuestAuth(req, reply) {
       }
     }
 
+    // Verify session sid is still active in circle_user_sessions (if token is associated with a session)
+    if (decoded.sid) {
+      const activeSess = await pool.query(
+        `SELECT id FROM circle_user_sessions WHERE id = $1 AND logout_at IS NULL`,
+        [decoded.sid]
+      ).catch(() => ({ rows: [] }));
+      if (!activeSess.rows || activeSess.rows.length === 0) {
+        return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'SESSION_TERMINATED' });
+      }
+    }
+
     req.guest = {
       ...decoded,
       guestId,
@@ -113,6 +124,7 @@ async function verifyGuestAuth(req, reply) {
       isPreviewMode: isAdminPreview
     };
   } catch (err) {
+    if (err.statusCode === 401) return reply.code(401).send(err.response || err);
     return reply.code(401).send({ error: 'Unauthorized session' });
   }
 }
@@ -133,15 +145,17 @@ async function verifyFamilyAuth(req, reply) {
       return reply.code(403).send({ error: 'Access denied: Email missing' });
     }
 
-    // Verify session sid is still active in circle_user_sessions
-    if (decoded.sid) {
-      const activeSess = await pool.query(
-        `SELECT id FROM circle_user_sessions WHERE id = $1 AND logout_at IS NULL`,
-        [decoded.sid]
-      ).catch(() => ({ rows: [] }));
-      if (!activeSess.rows || activeSess.rows.length === 0) {
-        return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'SESSION_TERMINATED' });
-      }
+    // Require active session sid in circle_user_sessions
+    if (!decoded.sid) {
+      return reply.code(401).send({ error: 'Session expired. Please log in again.', code: 'SESSION_EXPIRED' });
+    }
+
+    const activeSess = await pool.query(
+      `SELECT id FROM circle_user_sessions WHERE id = $1 AND logout_at IS NULL`,
+      [decoded.sid]
+    ).catch(() => ({ rows: [] }));
+    if (!activeSess.rows || activeSess.rows.length === 0) {
+      return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'SESSION_TERMINATED' });
     }
 
     req.family = decoded;

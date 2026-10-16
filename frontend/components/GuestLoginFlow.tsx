@@ -206,7 +206,11 @@ export function GuestLoginFlow({
           : `${apiUrl}/api/gallery/public/events/${eventSlug}/auth`)
       : `${apiUrl}/api/gallery/family/auth`
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-client-type': 'desktop',
+      'x-device-type': 'desktop',
+    }
     if (isCircle) {
       headers['Authorization'] = `Bearer ${oauthToken}`
     }

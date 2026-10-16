@@ -15,6 +15,7 @@ const {
   guestAnchors,
   verifyGuestAuth,
   verifyFamilyAuth,
+  isMobileAppRequest,
 } = require('./galleryCommon');
 
 const familyAuthRateLimiter = createRateLimiter({
@@ -137,7 +138,7 @@ module.exports = async function familyRoutes(fastify, opts) {
       }
 
       const userAgent = String(req.headers['user-agent'] || '').toLowerCase();
-      const isApp = req.headers['x-client-type'] === 'app' || userAgent.includes('expo') || userAgent.includes('react-native');
+      const isApp = req.headers['x-client-type'] === 'app' || isMobileAppRequest(req);
       const clientKind = isApp ? 'app' : 'desktop';
 
       // Terminate previous active sessions of the same clientKind
@@ -229,11 +230,31 @@ module.exports = async function familyRoutes(fastify, opts) {
       const [deletionRow] = await prisma.$queryRaw`SELECT deleted_at FROM circle_users WHERE id = ${user.id}`;
       const isDeactivated = !!(deletionRow?.deleted_at);
 
+      const isApp = req.headers['x-client-type'] === 'app' || isMobileAppRequest(req);
+      const clientKind = isApp ? 'app' : 'desktop';
+
+      await pool.query(
+        `UPDATE circle_user_sessions
+         SET logout_at = NOW()
+         WHERE user_id = $1 AND client_kind = $2 AND logout_at IS NULL`,
+        [user.id, clientKind]
+      ).catch(() => {});
+
+      const newSess = await pool.query(
+        `INSERT INTO circle_user_sessions (user_id, client_kind, device_type, user_agent, login_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         RETURNING id`,
+        [user.id, clientKind, isApp ? 'mobile' : 'desktop', req.headers['user-agent'] || '']
+      );
+      const sessionId = Number(newSess.rows[0]?.id || 0);
+
       const familyToken = fastify.jwt.sign({
         email,
         role: 'family',
         name: guest.name,
-        userId: user.id
+        userId: user.id,
+        sid: sessionId,
+        clientKind
       }, { expiresIn: '365d' });
 
       return {
@@ -398,7 +419,9 @@ module.exports = async function familyRoutes(fastify, opts) {
           email: g.email,
           role: 'guest',
           displayRole: resolvedDisplayRole,
-          hasFullAccess: g.hasFullAccess
+          hasFullAccess: g.hasFullAccess,
+          sid: req.family?.sid,
+          clientKind: req.family?.clientKind
         }, { expiresIn: '365d' });
 
         return {
@@ -447,7 +470,9 @@ module.exports = async function familyRoutes(fastify, opts) {
         email: user.email,
         role: 'family',
         name: user.name,
-        userId: user.id
+        userId: user.id,
+        sid: req.family?.sid,
+        clientKind: req.family?.clientKind
       }, { expiresIn: '365d' });
 
         const responseData = {
@@ -901,6 +926,11 @@ module.exports = async function familyRoutes(fastify, opts) {
       req.log.error(err);
       return reply.code(500).send({ error: 'Failed to process account deactivation' });
     }
+  });
+
+  // Lightweight session verification for mobile & desktop heartbeat watchdogs
+  fastify.get('/api/gallery/family/session-check', { preHandler: verifyFamilyAuth }, async (req, reply) => {
+    return { ok: true, active: true, sid: req.family?.sid, clientKind: req.family?.clientKind };
   });
 };
 

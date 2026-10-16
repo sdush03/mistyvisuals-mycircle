@@ -271,6 +271,34 @@ export default function CirclePage() {
     }
   }, [])
 
+  // Periodic session watchdog: check if this desktop session was revoked by another login
+  useEffect(() => {
+    if (!token) return
+
+    const checkSession = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/gallery/family/session-check`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (res.status === 401 || res.status === 403) {
+          handleLogout()
+        }
+      } catch (_) {}
+    }
+
+    const onFocus = () => {
+      checkSession()
+    }
+    window.addEventListener('focus', onFocus)
+
+    const interval = setInterval(checkSession, 15000)
+
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      clearInterval(interval)
+    }
+  }, [token])
+
   // Lock body scroll when profile modal is open
   // Lock body scroll and handle Escape key to close modal
   useEffect(() => {
