@@ -545,7 +545,24 @@ export default function CirclePage() {
     }
   }
 
-  const handleEnterEventGallery = (ev: CircleEvent) => {
+  const handleEnterEventGallery = async (ev: CircleEvent) => {
+    // 1. Verify that current desktop session is still valid before navigating
+    const currentToken = localStorage.getItem('mv_circle_token')
+    if (!currentToken) {
+      handleLogout()
+      return
+    }
+
+    try {
+      const res = await fetch(`${apiUrl}/api/gallery/family/session-check`, {
+        headers: { Authorization: `Bearer ${currentToken}` }
+      })
+      if (res.status === 401 || res.status === 403) {
+        handleLogout()
+        return
+      }
+    } catch (_) {}
+
     localStorage.setItem(`mv_gallery_token_${ev.slug}`, ev.eventToken)
     const guestData = {
       ...ev.guestInfo,

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { prisma } = require('../../prisma');
+const { pool } = require('../../db');
 const qdrant = require('../../utils/qdrant');
 const faceRecManager = require('../../utils/faceRecManager');
 const { uploadAssetWithRetry } = require('../../utils/r2');
@@ -145,13 +146,33 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
       await ensureUserSelfieMigrated(fastify, user.id, verifiedEmail);
       const hasSelfie = await checkUserSelfie(user.id, guest.id);
 
+      const isApp = req.headers['x-client-type'] === 'app' || isMobileAppRequest(req);
+      const clientKind = isApp ? 'app' : 'desktop';
+
+      await pool.query(
+        `UPDATE circle_user_sessions
+         SET logout_at = NOW()
+         WHERE user_id = $1 AND client_kind = $2 AND logout_at IS NULL`,
+        [user.id, clientKind]
+      ).catch(() => {});
+
+      const newSess = await pool.query(
+        `INSERT INTO circle_user_sessions (user_id, client_kind, device_type, user_agent, login_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         RETURNING id`,
+        [user.id, clientKind, isApp ? 'mobile' : 'desktop', req.headers['user-agent'] || '']
+      ).catch(() => ({ rows: [] }));
+      const sessionId = Number(newSess.rows?.[0]?.id || 0);
+
       const sessionToken = fastify.jwt.sign({
         guestId: guest.id,
         userId: user.id,
         eventId: event.id,
         email: guest.email,
         role: 'guest',
-        hasFullAccess: guest.hasFullAccess
+        hasFullAccess: guest.hasFullAccess,
+        sid: sessionId || undefined,
+        clientKind
       }, { expiresIn: '365d' });
 
       return {

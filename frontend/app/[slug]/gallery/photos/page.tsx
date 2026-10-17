@@ -95,7 +95,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
       }
     }
     keysToRemove.forEach((k) => localStorage.removeItem(k))
-    window.location.href = '/'
+    window.location.replace('/')
   }, [])
 
   const [activePhoto, setActivePhoto] = useState<any | null>(null)
@@ -886,6 +886,18 @@ export default function GuestGalleryPhotos({ params }: Props) {
   }, [event, guest])
 
   useEffect(() => {
+    // 0. Validate global session immediately if present
+    const circleToken = typeof window !== 'undefined' ? localStorage.getItem('mv_circle_token') : null
+    if (circleToken) {
+      fetch(`${apiUrl}/api/gallery/family/session-check`, {
+        headers: { Authorization: `Bearer ${circleToken}` }
+      }).then(res => {
+        if (res.status === 401 || res.status === 403) {
+          handleLogout()
+        }
+      }).catch(() => {})
+    }
+
     // 1. Fetch public event details first
     fetch(`${apiUrl}/api/gallery/public/events/${slug}`)
       .then(res => {

@@ -16,6 +16,7 @@ const {
   verifyGuestAuth,
   verifyFamilyAuth,
   isMobileAppRequest,
+  validateCircleSession,
 } = require('./galleryCommon');
 
 const familyAuthRateLimiter = createRateLimiter({
@@ -206,6 +207,13 @@ module.exports = async function familyRoutes(fastify, opts) {
 
       if (decoded.role !== 'guest' || !decoded.email) {
         return reply.code(403).send({ error: 'Invalid token role' });
+      }
+
+      if (decoded.sid) {
+        const isSessionActive = await validateCircleSession(decoded.sid);
+        if (!isSessionActive) {
+          return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'SESSION_TERMINATED' });
+        }
       }
 
       const { email, guestId } = decoded;

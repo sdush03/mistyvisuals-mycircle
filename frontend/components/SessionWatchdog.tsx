@@ -1,8 +1,11 @@
 'use client'
 
 import { useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 
 export default function SessionWatchdog() {
+  const pathname = usePathname()
+
   useEffect(() => {
     if (typeof window === 'undefined') return
 
@@ -43,7 +46,7 @@ export default function SessionWatchdog() {
 
           // If on a gallery or inner page, immediately return to homepage
           if (window.location.pathname !== '/') {
-            window.location.href = '/'
+            window.location.replace('/')
           }
         }
       } catch (_) {
@@ -51,19 +54,27 @@ export default function SessionWatchdog() {
       }
     }
 
-    const onFocus = () => {
-      checkSession()
-    }
-    window.addEventListener('focus', onFocus)
+    // Check immediately on mount and whenever route/pathname changes
+    checkSession()
 
-    // Check every 10 seconds while desktop browser tab is open
-    const interval = setInterval(checkSession, 10000)
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        checkSession()
+      }
+    }
+
+    window.addEventListener('focus', onFocusOrVisible)
+    document.addEventListener('visibilitychange', onFocusOrVisible)
+
+    // Check every 5 seconds while desktop browser tab is open
+    const interval = setInterval(checkSession, 5000)
 
     return () => {
-      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('focus', onFocusOrVisible)
+      document.removeEventListener('visibilitychange', onFocusOrVisible)
       clearInterval(interval)
     }
-  }, [])
+  }, [pathname])
 
   return null
 }
