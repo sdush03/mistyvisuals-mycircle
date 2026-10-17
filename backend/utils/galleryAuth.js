@@ -165,4 +165,18 @@ async function verifyFamilyAuth(req, reply) {
   }
 }
 
-module.exports = { verifyGuestAuth, verifyFamilyAuth };
+// Check whether a session ID is still active in circle_user_sessions
+async function validateCircleSession(sid) {
+  if (!sid) return true;
+  try {
+    const activeSess = await pool.query(
+      `SELECT id FROM circle_user_sessions WHERE id = $1 AND logout_at IS NULL`,
+      [sid]
+    );
+    return Boolean(activeSess.rows && activeSess.rows.length > 0);
+  } catch (_) {
+    return false;
+  }
+}
+
+module.exports = { verifyGuestAuth, verifyFamilyAuth, validateCircleSession };

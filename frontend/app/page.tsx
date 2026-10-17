@@ -299,6 +299,17 @@ export default function CirclePage() {
     }
   }, [token])
 
+  // Listen for global session watchdog logout event
+  useEffect(() => {
+    const onSessionExpired = () => {
+      handleLogout()
+    }
+    window.addEventListener('mv_session_expired', onSessionExpired)
+    return () => {
+      window.removeEventListener('mv_session_expired', onSessionExpired)
+    }
+  }, [])
+
   // Lock body scroll when profile modal is open
   // Lock body scroll and handle Escape key to close modal
   useEffect(() => {

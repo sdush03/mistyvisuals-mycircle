@@ -3,7 +3,7 @@ const path = require('path');
 const { prisma, Prisma } = require('../../prisma');
 const qdrant = require('../../utils/qdrant');
 const faceRecManager = require('../../utils/faceRecManager');
-const { checkPreviewToken, getDerivedThumbnail, verifyGuestAuth, isMobileAppRequest, resolveAnchorVector } = require('./galleryCommon');
+const { checkPreviewToken, getDerivedThumbnail, verifyGuestAuth, isMobileAppRequest, resolveAnchorVector, validateCircleSession } = require('./galleryCommon');
 
 function purgeOrphanedFacesBackground(log) {
   setTimeout(() => {
@@ -298,6 +298,13 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         try {
           const rawToken = authHeader.split(' ')[1];
           const decoded = fastify.jwt.verify(rawToken);
+
+          if (decoded.sid) {
+            const isSessionActive = await validateCircleSession(decoded.sid);
+            if (!isSessionActive) {
+              return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'SESSION_TERMINATED' });
+            }
+          }
 
           if (decoded.role === 'admin' || (decoded.roles && decoded.roles.includes('admin'))) {
             hasFullAccess = true;
@@ -715,6 +722,14 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         try {
           const token = authHeader.split(' ')[1];
           const decoded = fastify.jwt.verify(token);
+
+          if (decoded.sid) {
+            const isSessionActive = await validateCircleSession(decoded.sid);
+            if (!isSessionActive) {
+              return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'SESSION_TERMINATED' });
+            }
+          }
+
           isTokenValid = true;
 
           if (decoded.role === 'admin' || (decoded.roles && decoded.roles.includes('admin'))) {
@@ -1023,6 +1038,13 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         try {
           const token = authHeader.split(' ')[1];
           const decoded = fastify.jwt.verify(token);
+
+          if (decoded.sid) {
+            const isSessionActive = await validateCircleSession(decoded.sid);
+            if (!isSessionActive) {
+              return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'SESSION_TERMINATED' });
+            }
+          }
           if (decoded.role === 'admin' || (decoded.roles && decoded.roles.includes('admin'))) {
             hasFullAccess = true;
           } else if (decoded.isAdminPreview && decoded.slug.toLowerCase().trim() === slug) {

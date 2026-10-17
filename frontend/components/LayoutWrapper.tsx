@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import Footer from '@/components/Footer'
+import SessionWatchdog from '@/components/SessionWatchdog'
 
 export default function LayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -50,6 +51,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
   if (isSplash) {
     return (
       <main className="w-full h-[100svh] bg-[#111111] overflow-hidden">
+        <SessionWatchdog />
         {children}
       </main>
     )
@@ -57,6 +59,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
 
   return (
     <main className="w-full min-h-screen bg-white overflow-y-auto flex flex-col justify-between">
+      <SessionWatchdog />
       <div className="flex-1 w-full">{children}</div>
       <Footer />
     </main>

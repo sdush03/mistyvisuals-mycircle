@@ -75,6 +75,29 @@ export default function GuestGalleryPhotos({ params }: Props) {
     }
   }, [selfiePreview])
 
+  const handleLogout = useCallback(() => {
+    if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
+      try {
+        (window as any).google.accounts.id.disableAutoSelect()
+      } catch (_) {}
+    }
+    // Clear ALL gallery and circle tokens — not just current slug
+    const keysToRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (
+        key?.startsWith('mv_gallery_token_') ||
+        key?.startsWith('mv_gallery_guest_') ||
+        key === 'mv_circle_token' ||
+        key === 'mv_circle_profile'
+      ) {
+        keysToRemove.push(key)
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k))
+    window.location.href = '/'
+  }, [])
+
   const [activePhoto, setActivePhoto] = useState<any | null>(null)
   const [loadingMatched, setLoadingMatched] = useState(false)
 
@@ -1064,9 +1087,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
           })
           .catch(err => {
             console.error('Failed to sync guest profile, logging out:', err)
-            localStorage.removeItem(`mv_gallery_token_${slug}`)
-            localStorage.removeItem(`mv_gallery_guest_${slug}`)
-            router.push(`/${slug}/gallery`)
+            handleLogout()
           })
       })
       .catch((err) => {
@@ -1113,7 +1134,13 @@ export default function GuestGalleryPhotos({ params }: Props) {
           'Authorization': `Bearer ${token}`
         }
       })
-      if (!res.ok) throw new Error('Failed to load matched photos')
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          handleLogout()
+          return
+        }
+        throw new Error('Failed to load matched photos')
+      }
       const data = await res.json()
       const matchedPhotos = data.photos || []
       setPhotos(matchedPhotos)
@@ -1281,7 +1308,13 @@ export default function GuestGalleryPhotos({ params }: Props) {
       if (token) headers['Authorization'] = `Bearer ${token}`
       const params = new URLSearchParams({ offset: String(offset), limit: '120', tab })
       const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/photos?${params}`, { headers })
-      if (!res.ok) throw new Error('Failed to load photos')
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          handleLogout()
+          return
+        }
+        throw new Error('Failed to load photos')
+      }
       const data = await res.json()
       const newPhotos: any[] = data.photos || []
       const hasMoreFromServer: boolean = data.hasMore ?? false
@@ -1539,26 +1572,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
   const [errorSearch, setErrorSearch] = useState('')
 
-  const handleLogout = () => {
-    if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
-      (window as any).google.accounts.id.disableAutoSelect()
-    }
-    // Clear ALL gallery and circle tokens — not just current slug
-    const keysToRemove: string[] = []
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
-      if (
-        key?.startsWith('mv_gallery_token_') ||
-        key?.startsWith('mv_gallery_guest_') ||
-        key === 'mv_circle_token' ||
-        key === 'mv_circle_profile'
-      ) {
-        keysToRemove.push(key)
-      }
-    }
-    keysToRemove.forEach(k => localStorage.removeItem(k))
-    router.push(`/${slug}/gallery`)
-  }
+
 
   const openProfile = () => {
     if (!guest) return

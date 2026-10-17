@@ -14,6 +14,7 @@ const {
   getDerivedThumbnail,
   verifyGuestAuth,
   isMobileAppRequest,
+  validateCircleSession,
 } = require('./galleryCommon');
 
 const passcodeRateLimiter = createRateLimiter({
@@ -192,6 +193,13 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         return reply.code(401).send({ error: 'Invalid or expired Circle session' });
       }
 
+      if (decoded.sid) {
+        const isSessionActive = await validateCircleSession(decoded.sid);
+        if (!isSessionActive) {
+          return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'SESSION_TERMINATED' });
+        }
+      }
+
       if ((decoded.role !== 'family' && decoded.role !== 'guest') || !decoded.email) {
         return reply.code(403).send({ error: 'Access denied: Invalid session role' });
       }
@@ -306,7 +314,9 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         email: guest.email,
         role: 'guest',
         displayRole: resolvedDisplayRole,
-        hasFullAccess: guest.hasFullAccess
+        hasFullAccess: guest.hasFullAccess,
+        sid: decoded?.sid,
+        clientKind: decoded?.clientKind
       }, { expiresIn: '365d' });
 
       return {
@@ -363,7 +373,9 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         eventId: event.id,
         email: updatedGuest.email,
         role: 'guest',
-        hasFullAccess: true
+        hasFullAccess: true,
+        sid: req.guest?.sid,
+        clientKind: req.guest?.clientKind
       }, { expiresIn: '365d' });
 
       return {

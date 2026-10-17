@@ -248,7 +248,7 @@ const resolveAnchorVector = async ({ userId, email, guestId } = {}) => {
   return null;
 };
 
-const { verifyGuestAuth, verifyFamilyAuth } = require('../../utils/galleryAuth');
+const { verifyGuestAuth, verifyFamilyAuth, validateCircleSession } = require('../../utils/galleryAuth');
 
 module.exports = {
   PHOTO_UPLOAD_DIR,
@@ -264,5 +264,6 @@ module.exports = {
   logTelemetry,
   verifyGuestAuth,
   verifyFamilyAuth,
+  validateCircleSession,
 };
 
