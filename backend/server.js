@@ -525,8 +525,8 @@ fastify.register(require('./routes/pushTokens'), {
 fastify.get('/api/app-config/version', async (req, reply) => {
   markClientAsModern(req);
   return reply.send({
-    minSupportedVersion: '1.2.2',
-    latestVersion: '1.2.2',
+    minSupportedVersion: '1.2.3',
+    latestVersion: '1.2.3',
     forceUpdate: true,
     title: 'Update Required',
     message: 'A new version of Misty Visuals is available. Please update the app to continue using all features.',
