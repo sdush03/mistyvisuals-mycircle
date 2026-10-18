@@ -7,6 +7,30 @@ const { deletePhotosAssets, generateUniqueCode } = require('./galleryHelpers');
 
 const recentIntegrityPushes = new Map();
 
+/**
+ * Resolves the cinema category for a photo/video using explicit metadata,
+ * falling back to filename and title keyword heuristics if unset or default.
+ */
+function resolveCinemaCategory(explicitCat, filename, title) {
+  const cat = String(explicitCat || '').toUpperCase().trim();
+  if (cat.includes('CANDID') || cat.includes('REEL') || cat.includes('DIAR')) return 'CANDID';
+  if (cat.includes('STAGE') || cat.includes('SPOTLIGHT') || cat.includes('PERFORMANCE') || cat.includes('DANCE')) return 'STAGE';
+  if (cat.includes('EXTENDED') || cat.includes('CUTS') || cat.includes('CHAPTER')) return 'EXTENDED';
+
+  // Heuristic detection based on filename and title (same keywords as mobile client)
+  const clean = `${filename || ''} ${title || ''}`.toLowerCase();
+  if (clean.includes('dance') || clean.includes('performance') || clean.includes('stage') || clean.includes('solo') || clean.includes('squad') || clean.includes('choreo') || clean.includes('duet') || clean.includes('flashmob')) {
+    return 'STAGE';
+  }
+  if (clean.includes('reel') || clean.includes('candid') || clean.includes('vertical') || clean.includes('short')) {
+    return 'CANDID';
+  }
+  if (clean.includes('extended') || clean.includes('chapter') || clean.includes('ceremony') || clean.includes('sangeet') || clean.includes('haldi') || clean.includes('mehendi') || clean.includes('wedding') || clean.includes('reception') || clean.includes('varmala') || clean.includes('baraat') || clean.includes('vidai') || clean.includes('phera')) {
+    return 'EXTENDED';
+  }
+  return 'DIRECTORS_CUT';
+}
+
 module.exports = async function adminGalleryRoutes(fastify, opts) {
   const { pool, requireAdmin } = opts;
 
@@ -865,7 +889,7 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
 
     const eventId = parseInt(req.params.id, 10);
     const photoId = parseInt(req.params.photoId, 10);
-    const { r2Url, filename, fileSize, width, height, duration } = req.body || {};
+    const { r2Url, filename, fileSize, width, height, duration, cinemaCategory } = req.body || {};
 
     if (!r2Url || !filename) {
       return reply.code(400).send({ error: 'Missing r2Url or filename' });
@@ -886,13 +910,25 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
       }
 
       const currentExif = (photo.exif && typeof photo.exif === 'object') ? photo.exif : {};
+      const detectedCat = resolveCinemaCategory(cinemaCategory || currentExif.cinemaCategory, filename, currentExif.title);
+
+      const categoryLabelMap = {
+        'CANDID': 'CANDID DIARIES',
+        'STAGE': 'STAGE & SPOTLIGHT',
+        'EXTENDED': 'THE EXTENDED CUTS',
+        'DIRECTORS_CUT': 'THE DIRECTORS’ CUT'
+      };
+
       const updatedExif = {
         ...currentExif,
         isComingSoon: false, // Automatically remove Coming Soon!
         fileSize: typeof fileSize === 'number' ? fileSize : (currentExif.fileSize || photo.fileSize),
         videoWidth: width || currentExif.videoWidth,
         videoHeight: height || currentExif.videoHeight,
-        duration: duration || currentExif.duration
+        duration: duration || currentExif.duration,
+        cinemaCategory: (currentExif.cinemaCategory && currentExif.cinemaCategory !== 'THE DIRECTORS’ CUT')
+          ? currentExif.cinemaCategory
+          : (categoryLabelMap[detectedCat] || 'THE DIRECTORS’ CUT')
       };
 
       // If subtitle was 'COMING SOON • TEASER POSTER', update it to chapter duration if available
@@ -917,8 +953,9 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
       setImmediate(async () => {
         try {
           const pushService = require('../../services/pushNotificationService');
-          const prevWasComingSoon = Boolean(currentExif.isComingSoon || (photo.tabName === 'CINEMA' && !isOldVideo));
-          const cat = String(currentExif.cinemaCategory || '').toUpperCase();
+          const isCinemaTab = String(photo.tabName || '').trim().toUpperCase() === 'CINEMA';
+          const prevWasComingSoon = Boolean(currentExif.isComingSoon || (isCinemaTab && !isOldVideo));
+          const effectiveCat = updatedExif.cinemaCategory || categoryLabelMap[detectedCat];
 
           if (isOldVideo && photo.r2Url !== r2Url) {
             // 3F: Updated Version / Re-upload on the same poster
@@ -926,15 +963,15 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
               eventId,
               videoTitle: updatedExif.title || photo.filename,
               videoId: photoId,
-              category: cat
+              category: effectiveCat
             });
           } else if (prevWasComingSoon) {
             // Converted from Coming Soon -> Dispatch corresponding category notification
-            if (cat.includes('CANDID') || cat.includes('REEL') || cat.includes('DIAR')) {
+            if (detectedCat === 'CANDID') {
               await pushService.notifyCandidReels({ eventId });
-            } else if (cat.includes('STAGE') || cat.includes('SPOTLIGHT') || cat.includes('PERFORMANCE') || cat.includes('DANCE')) {
+            } else if (detectedCat === 'STAGE') {
               await pushService.notifyDancePerformances({ eventId });
-            } else if (cat.includes('EXTENDED') || cat.includes('CUTS') || cat.includes('CHAPTER')) {
+            } else if (detectedCat === 'EXTENDED') {
               await pushService.notifyExtendedCuts({ eventId });
             } else {
               await pushService.notifyCinemaHighlight({ eventId });
@@ -1597,7 +1634,7 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
               await pushService.notifyInitialGalleryLaunch({ eventId, excludeEmails: excluded });
             } else if (isCinema) {
               const comingSoonCount = await prisma.photo.count({
-                where: { ...where, tabName: 'CINEMA', exif: { path: ['isComingSoon'], equals: true } }
+                where: { ...where, tabName: { equals: 'Cinema', mode: 'insensitive' }, exif: { path: ['isComingSoon'], equals: true } }
               });
               if (comingSoonCount > 0) {
                 // 3E: Teaser poster
@@ -1605,15 +1642,16 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
               } else {
                 // Actual video release uploaded via desktop uploader
                 const firstVideo = await prisma.photo.findFirst({
-                  where: { ...where, tabName: 'CINEMA' },
-                  select: { exif: true }
+                  where: { ...where, tabName: { equals: 'Cinema', mode: 'insensitive' } },
+                  select: { id: true, filename: true, exif: true },
+                  orderBy: { id: 'desc' }
                 });
-                const cat = String(firstVideo?.exif?.cinemaCategory || '').toUpperCase();
-                if (cat.includes('CANDID') || cat.includes('REEL') || cat.includes('DIAR')) {
+                const cat = resolveCinemaCategory(firstVideo?.exif?.cinemaCategory, firstVideo?.filename, firstVideo?.exif?.title);
+                if (cat === 'CANDID') {
                   await pushService.notifyCandidReels({ eventId, excludeEmails: excluded });
-                } else if (cat.includes('STAGE') || cat.includes('SPOTLIGHT') || cat.includes('PERFORMANCE') || cat.includes('DANCE')) {
+                } else if (cat === 'STAGE') {
                   await pushService.notifyDancePerformances({ eventId, excludeEmails: excluded });
-                } else if (cat.includes('EXTENDED') || cat.includes('CUTS') || cat.includes('CHAPTER')) {
+                } else if (cat === 'EXTENDED') {
                   await pushService.notifyExtendedCuts({ eventId, excludeEmails: excluded });
                 } else {
                   await pushService.notifyCinemaHighlight({ eventId, excludeEmails: excluded });
