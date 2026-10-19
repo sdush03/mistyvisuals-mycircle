@@ -394,7 +394,15 @@ module.exports = async function familyRoutes(fastify, opts) {
           let totalPhotoCount = 0;
 
           const [highlightsResult, totalResult] = await Promise.allSettled([
-            prisma.photo.count({ where: { eventId: event.id, tabName: 'Highlights' } }).catch(() => 0),
+            prisma.photo.count({
+              where: {
+                eventId: event.id,
+                OR: [
+                  { tabName: 'Highlights' },
+                  { exif: { path: ['isHighlight'], equals: true } }
+                ]
+              }
+            }).catch(() => 0),
             prisma.photo.count({ where: { eventId: event.id } }).catch(() => 0)
           ]);
 

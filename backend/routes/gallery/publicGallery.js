@@ -485,6 +485,21 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         if (t.tabName) tabCounts[t.tabName.trim().toUpperCase()] = t._count._all;
       });
 
+      // Ensure Highlights tab is active if any photos are tagged with isHighlight
+      const hasHighlightsPhoto = await prisma.photo.findFirst({
+        where: {
+          eventId: event.id,
+          OR: [
+            { tabName: { equals: 'Highlights', mode: 'insensitive' } },
+            { exif: { path: ['isHighlight'], equals: true } }
+          ]
+        },
+        select: { id: true }
+      });
+      if (hasHighlightsPhoto && !activeTabNames.includes('HIGHLIGHTS')) {
+        activeTabNames.push('HIGHLIGHTS');
+      }
+
       // Filter ceremony tabs according to full vs partial access
       let allowedTabs = (event.tabs || []).filter(tab => typeof tab === 'string' && activeTabNames.includes(tab.trim().toUpperCase()));
       if (!hasFullAccess) {
@@ -499,12 +514,10 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       };
 
       if (!hasFullAccess) {
-        let actualTab = 'Highlights';
-        if (event.tabs && Array.isArray(event.tabs)) {
-          const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === 'highlights');
-          if (matchedTab) actualTab = matchedTab;
-        }
-        whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+        whereClause.OR = [
+          { tabName: { equals: 'Highlights', mode: 'insensitive' } },
+          { exif: { path: ['isHighlight'], equals: true } }
+        ];
       } else {
         const nonCinemaTabs = (event.tabs || []).filter(t => t.trim().toLowerCase() !== 'cinema');
         if (nonCinemaTabs.length > 0) {
@@ -853,12 +866,10 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           }
           whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
         } else {
-          let actualTab = 'Highlights';
-          if (event.tabs && Array.isArray(event.tabs)) {
-            const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === 'highlights');
-            if (matchedTab) actualTab = matchedTab;
-          }
-          whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+          whereClause.OR = [
+            { tabName: { equals: 'Highlights', mode: 'insensitive' } },
+            { exif: { path: ['isHighlight'], equals: true } }
+          ];
         }
       } else {
         const isCinemaRequest = tabFilter && tabFilter.trim().toLowerCase() === 'cinema';
@@ -877,7 +888,14 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
               actualTab = matchedTab;
             }
           }
-          whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+          if (actualTab.toLowerCase() === 'highlights') {
+            whereClause.OR = [
+              { tabName: { equals: 'Highlights', mode: 'insensitive' } },
+              { exif: { path: ['isHighlight'], equals: true } }
+            ];
+          } else {
+            whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+          }
         } else {
           // Tab is 'ALL': include all ceremony tabs, but strictly exclude Cinema videos
           const nonCinemaTabs = (event.tabs || []).filter(t => t.trim().toLowerCase() !== 'cinema');
