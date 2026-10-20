@@ -586,7 +586,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           where: whereClause,
           select: selectClause,
           orderBy: [{ capturedAt: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
-          take: 60
+          take: limit
         }),
         guestId ? prisma.photoLike.findMany({
           where: { guestId, photo: { eventId: event.id } },
@@ -860,7 +860,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
 
       const offset = Math.max(0, parseInt(req.query.offset) || 0);
       const tabFilter = (req.query.tab || '').trim();
-      const defaultLimit = (tabFilter && tabFilter.toLowerCase() === 'highlights') ? 1000 : 30;
+      const defaultLimit = (tabFilter && tabFilter.toLowerCase() === 'highlights') ? 1000 : 60;
       const limit  = Math.min(50000, Math.max(1, parseInt(req.query.limit) || defaultLimit));
 
       const whereClause = { eventId: event.id };
