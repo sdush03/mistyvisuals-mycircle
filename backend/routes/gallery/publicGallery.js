@@ -485,6 +485,18 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         if (t.tabName) tabCounts[t.tabName.trim().toUpperCase()] = t._count._all;
       });
 
+      // Calculate true highlights count (tabName Highlights OR isHighlight: true)
+      const highlightsCount = await prisma.photo.count({
+        where: {
+          eventId: event.id,
+          OR: [
+            { tabName: { equals: 'Highlights', mode: 'insensitive' } },
+            { exif: { path: ['isHighlight'], equals: true } }
+          ]
+        }
+      });
+      tabCounts['HIGHLIGHTS'] = highlightsCount;
+
       // Ensure Highlights tab is active if any photos are tagged with isHighlight
       const hasHighlightsPhoto = await prisma.photo.findFirst({
         where: {
@@ -847,8 +859,9 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       }
 
       const offset = Math.max(0, parseInt(req.query.offset) || 0);
-      const limit  = Math.min(50000, Math.max(1, parseInt(req.query.limit) || 30));
       const tabFilter = (req.query.tab || '').trim();
+      const defaultLimit = (tabFilter && tabFilter.toLowerCase() === 'highlights') ? 1000 : 30;
+      const limit  = Math.min(50000, Math.max(1, parseInt(req.query.limit) || defaultLimit));
 
       const whereClause = { eventId: event.id };
 
