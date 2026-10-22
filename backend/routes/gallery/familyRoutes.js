@@ -398,7 +398,7 @@ module.exports = async function familyRoutes(fastify, opts) {
               where: {
                 eventId: event.id,
                 OR: [
-                  { tabName: 'Highlights' },
+                  { tabName: { equals: 'Highlights', mode: 'insensitive' } },
                   { exif: { path: ['isHighlight'], equals: true } }
                 ]
               }

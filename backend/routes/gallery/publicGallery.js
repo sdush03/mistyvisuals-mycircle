@@ -223,10 +223,29 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         }
       });
 
+      // Calculate true highlights count (tabName Highlights OR isHighlight: true)
+      const highlightsCount = await prisma.photo.count({
+        where: {
+          eventId: event.id,
+          OR: [
+            { tabName: { equals: 'Highlights', mode: 'insensitive' } },
+            { exif: { path: ['isHighlight'], equals: true } }
+          ]
+        }
+      });
+      tabCounts['HIGHLIGHTS'] = highlightsCount;
+
+      if (highlightsCount > 0 && !activeTabNames.includes('HIGHLIGHTS')) {
+        activeTabNames.push('HIGHLIGHTS');
+      }
+
       const totalAllCount = await prisma.photo.count({ where: { eventId: event.id } });
       tabCounts['ALL'] = totalAllCount;
 
       event.tabs = (event.tabs || []).filter(tab => typeof tab === 'string' && activeTabNames.includes(tab.trim().toUpperCase()));
+      if (highlightsCount > 0 && !event.tabs.some(t => t.toLowerCase() === 'highlights')) {
+        event.tabs.unshift('Highlights');
+      }
       event.tabCounts = tabCounts;
 
       return event;
@@ -514,6 +533,9 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
 
       // Filter ceremony tabs according to full vs partial access
       let allowedTabs = (event.tabs || []).filter(tab => typeof tab === 'string' && activeTabNames.includes(tab.trim().toUpperCase()));
+      if (hasHighlightsPhoto && !allowedTabs.some(t => t.toLowerCase() === 'highlights')) {
+        allowedTabs.unshift('Highlights');
+      }
       if (!hasFullAccess) {
         allowedTabs = allowedTabs.filter(tab => ['HIGHLIGHTS', 'CINEMA'].includes(tab.trim().toUpperCase()));
       }
@@ -580,13 +602,15 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         };
       }
 
+      const bundleLimit = (!hasFullAccess) ? 1000 : 60;
+
       // Parallel data fetching: photos, favorites, cinema in single execution
       const [photos, favorites, cinemaPhotos] = await Promise.all([
         prisma.photo.findMany({
           where: whereClause,
           select: selectClause,
           orderBy: [{ capturedAt: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
-          take: limit
+          take: bundleLimit
         }),
         guestId ? prisma.photoLike.findMany({
           where: { guestId, photo: { eventId: event.id } },
@@ -643,6 +667,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           description: p.exif?.description || null,
           cinemaCategory: p.exif?.cinemaCategory || null,
           sortOrder: typeof p.exif?.sortOrder === 'number' ? p.exif.sortOrder : 0,
+          isHighlight: Boolean(p.exif?.isHighlight || (p.tabName && p.tabName.toLowerCase() === 'highlights')),
           exif: p.exif || null
         };
       };
@@ -1003,6 +1028,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           description: p.exif?.description || null,
           cinemaCategory: p.exif?.cinemaCategory || null,
           sortOrder: typeof p.exif?.sortOrder === 'number' ? p.exif.sortOrder : 0,
+          isHighlight: Boolean(p.exif?.isHighlight || (p.tabName && p.tabName.toLowerCase() === 'highlights')),
           exif: p.exif || null
         };
       });
@@ -1121,7 +1147,14 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === tabFilter.toLowerCase());
           if (matchedTab) actualTab = matchedTab;
         }
-        whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+        if (actualTab.toLowerCase() === 'highlights') {
+          whereClause.OR = [
+            { tabName: { equals: 'Highlights', mode: 'insensitive' } },
+            { exif: { path: ['isHighlight'], equals: true } }
+          ];
+        } else {
+          whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
+        }
       } else {
         const nonCinemaTabs = (event.tabs || []).filter(t => t.trim().toLowerCase() !== 'cinema');
         if (nonCinemaTabs.length > 0) {
@@ -1222,9 +1255,18 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         // using ROW_NUMBER() window function so Node.js memory only receives the ~65 rows.
         try {
           const privateFilter = !isBrideOrGroom ? Prisma.sql`AND is_private = false` : Prisma.empty;
-          const tabSqlFilter = !isAllTab && whereClause.tabName?.equals
-            ? Prisma.sql`AND LOWER(tab_name) = LOWER(${whereClause.tabName.equals})`
-            : Prisma.sql`AND (tab_name IS NULL OR LOWER(tab_name) != 'cinema') AND (filename IS NULL OR (filename NOT ILIKE '%.mp4' AND filename NOT ILIKE '%.mov' AND filename NOT ILIKE '%.m4v' AND filename NOT ILIKE '%.webm')) AND (r2_url NOT ILIKE '%.mp4' AND r2_url NOT ILIKE '%.mov' AND r2_url NOT ILIKE '%.m4v' AND r2_url NOT ILIKE '%.webm') AND (exif IS NULL OR ((exif->>'cinemaCategory') IS NULL AND (exif->>'isComingSoon' IS NULL OR exif->>'isComingSoon' != 'true') AND (exif->>'comingSoon' IS NULL OR exif->>'comingSoon' != 'true')))`;
+          let tabSqlFilter;
+          if (!isAllTab) {
+            if (tabFilter.toLowerCase() === 'highlights') {
+              tabSqlFilter = Prisma.sql`AND (LOWER(tab_name) = 'highlights' OR (exif->>'isHighlight') = 'true')`;
+            } else if (whereClause.tabName?.equals) {
+              tabSqlFilter = Prisma.sql`AND LOWER(tab_name) = LOWER(${whereClause.tabName.equals})`;
+            } else {
+              tabSqlFilter = Prisma.empty;
+            }
+          } else {
+            tabSqlFilter = Prisma.sql`AND (tab_name IS NULL OR LOWER(tab_name) != 'cinema') AND (filename IS NULL OR (filename NOT ILIKE '%.mp4' AND filename NOT ILIKE '%.mov' AND filename NOT ILIKE '%.m4v' AND filename NOT ILIKE '%.webm')) AND (r2_url NOT ILIKE '%.mp4' AND r2_url NOT ILIKE '%.mov' AND r2_url NOT ILIKE '%.m4v' AND r2_url NOT ILIKE '%.webm') AND (exif IS NULL OR ((exif->>'cinemaCategory') IS NULL AND (exif->>'isComingSoon' IS NULL OR exif->>'isComingSoon' != 'true') AND (exif->>'comingSoon' IS NULL OR exif->>'comingSoon' != 'true')))`;
+          }
 
           const sampled = await prisma.$queryRaw`
             SELECT id, r2_url as "r2Url", thumbnail_url as "thumbnailUrl", tab_name as "tabName", (rn - 1)::int as index

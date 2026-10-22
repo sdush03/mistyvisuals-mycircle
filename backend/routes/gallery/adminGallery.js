@@ -427,7 +427,14 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
     try {
       const whereClause = { eventId };
       if (tabName && tabName !== 'ALL') {
-        whereClause.tabName = tabName;
+        if (tabName.toLowerCase() === 'highlights') {
+          whereClause.OR = [
+            { tabName: { equals: 'Highlights', mode: 'insensitive' } },
+            { exif: { path: ['isHighlight'], equals: true } }
+          ];
+        } else {
+          whereClause.tabName = tabName;
+        }
       }
 
       const [total, photos] = await Promise.all([
@@ -1068,7 +1075,7 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
 
     const eventId = parseInt(req.params.id, 10);
     const photoId = parseInt(req.params.photoId, 10);
-    const { title, subtitle, description, cinemaCategory, sortOrder, isFeatured, tabName, isComingSoon, hasBakedCover } = req.body || {};
+    const { title, subtitle, description, cinemaCategory, sortOrder, isFeatured, tabName, isComingSoon, hasBakedCover, isHighlight } = req.body || {};
 
     try {
       const photo = await prisma.photo.findFirst({
@@ -1116,6 +1123,10 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
         updatedExif.isCoverBaked = Boolean(hasBakedCover);
       }
 
+      if (isHighlight !== undefined) {
+        updatedExif.isHighlight = Boolean(isHighlight);
+      }
+
       const updateData = { exif: updatedExif };
       if (tabName !== undefined && typeof tabName === 'string') {
         updateData.tabName = tabName.trim();
@@ -1135,7 +1146,8 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
           description: updatedExif.description,
           cinemaCategory: updatedExif.cinemaCategory,
           sortOrder: updatedExif.sortOrder,
-          isFeatured: Boolean(updatedExif.isFeatured)
+          isFeatured: Boolean(updatedExif.isFeatured),
+          isHighlight: Boolean(updatedExif.isHighlight)
         }
       };
     } catch (err) {
@@ -1235,11 +1247,14 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
           p.exif?.isCoverBaked
         );
 
+        const isHighlightItem = Boolean(p.isHighlight || (p.exif && p.exif.isHighlight));
+
         const photoExif = {
           ...(p.exif || {}),
           ...(typeof p.fileSize === 'number' ? { fileSize: p.fileSize } : {}),
           ...(typeof p.originalSize === 'number' ? { originalFileSize: p.originalSize } : {}),
           ...(isFeaturedItem ? { isFeatured: true } : {}),
+          ...(isHighlightItem ? { isHighlight: true } : {}),
           ...(p.title ? { title: String(p.title).trim() } : {}),
           ...(p.subtitle ? { subtitle: String(p.subtitle).trim() } : (effectiveComingSoon ? { subtitle: 'COMING SOON • TEASER POSTER' } : {})),
           ...(p.description ? { description: String(p.description).trim() } : {}),
@@ -1659,7 +1674,13 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
               }
             } else if (String(primaryTab || '').trim().toLowerCase() === 'highlights') {
               const allHighlightsCount = await prisma.photo.count({
-                where: { eventId, tabName: { equals: 'Highlights', mode: 'insensitive' } }
+                where: {
+                  eventId,
+                  OR: [
+                    { tabName: { equals: 'Highlights', mode: 'insensitive' } },
+                    { exif: { path: ['isHighlight'], equals: true } }
+                  ]
+                }
               });
               const isFirstBatch = allHighlightsCount <= (tabCounts[0]?._count?._all || 0) + 10;
               await pushService.notifyHighlightsDrop({

@@ -880,7 +880,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const allPhotosTabs = useMemo(() => {
     let tabs: string[] = (event?.tabs || []).filter((t: any) => typeof t === 'string' && t.trim().length > 0)
     if (guest && !guest.hasFullAccess) {
-      tabs = tabs.filter((t: string) => t === 'Highlights')
+      tabs = tabs.filter((t: string) => t.toLowerCase() === 'highlights')
     }
     return tabs
   }, [event, guest])
