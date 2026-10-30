@@ -311,12 +311,13 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       let dbGuest = null;
       let circleUser = null;
       let refreshPayload = null;
+      let decoded = null;
       const authHeader = req.headers.authorization;
 
       if (authHeader && authHeader.startsWith('Bearer ')) {
         try {
           const rawToken = authHeader.split(' ')[1];
-          const decoded = fastify.jwt.verify(rawToken);
+          decoded = fastify.jwt.verify(rawToken);
 
           if (decoded.sid) {
             const isSessionActive = await validateCircleSession(decoded.sid);
