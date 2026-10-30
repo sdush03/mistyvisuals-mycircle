@@ -238,9 +238,31 @@ export default function GuestGalleryPhotos({ params }: Props) {
       return
     }
 
+    // Lock to R2 CDN if the photo has an existing R2 thumbnail!
+    // Never punish the VPS /api/gallery/resize for client network drops or CDN timeouts.
+    const r2Thumb = photo.thumbnailUrl
+    const hasCdnThumb = Boolean(
+      r2Thumb &&
+      typeof r2Thumb === 'string' &&
+      !r2Thumb.startsWith('/api/gallery/resize') &&
+      !r2Thumb.startsWith('file:') &&
+      !r2Thumb.startsWith('data:')
+    )
+
+    if (hasCdnThumb) {
+      // Photo has a pre-generated R2 thumbnail. Fall back to original high-res R2 URL if needed,
+      // but never to /api/gallery/resize!
+      if (target.src !== fallback && fallback) {
+        target.src = fallback
+      } else {
+        target.classList.add('loaded')
+      }
+      return
+    }
+
     const resizeUrl = `/api/gallery/resize?url=${encodeURIComponent(fallback)}&w=400&q=75`
 
-    // Priority 2: If direct CDN thumbnail 404s, try on-the-fly resize first to save 99% user bandwidth!
+    // Priority 2: Only for photos with NO pre-existing thumbnail, try resize
     if (target.src !== resizeUrl && !target.src.includes('/api/gallery/resize')) {
       target.src = resizeUrl
       return
@@ -329,6 +351,10 @@ export default function GuestGalleryPhotos({ params }: Props) {
   const [tabCache, setTabCache] = useState<Record<string, { photos: any[], offset: number, hasMore: boolean }>>({})
   const [loadingMore, setLoadingMore] = useState(false)
   const [totalPhotos, setTotalPhotos] = useState(0)
+  const [totalMatchedPhotos, setTotalMatchedPhotos] = useState(0)
+  const [hasMoreMatched, setHasMoreMatched] = useState(true)
+  const [loadingMoreMatched, setLoadingMoreMatched] = useState(false)
+  const loadingMatchedRef = useRef(false)
   const [activeAllTab, setActiveAllTab] = useState<string>('')
 
   // Derived: photos currently visible in the grid
@@ -647,7 +673,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
   const totalPhotosForActiveView = useMemo(() => {
     if (viewMode === 'matched') {
-      return photos?.length || 0
+      return totalMatchedPhotos > 0 ? totalMatchedPhotos : (photos?.length || 0)
     } else if (viewMode === 'favorites') {
       return favoritesList?.length || 0
     } else if (viewMode === 'all') {
@@ -660,7 +686,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
       }
     }
     return activePhotosList?.length || 0
-  }, [viewMode, photos, favoritesList, activeAllTab, getTabCount, event?.tabCounts, totalPhotos, activePhotosList])
+  }, [viewMode, photos, totalMatchedPhotos, favoritesList, activeAllTab, getTabCount, event?.tabCounts, totalPhotos, activePhotosList])
 
 
 
@@ -1130,46 +1156,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
     }
   }, [showProfileModal])
 
-  const loadMatchedPhotos = async () => {
-    if (event && event.allowDownloads === false && !event.isPreviewMode) {
-      setLoadingMatched(false)
-      return
-    }
-    setLoadingMatched(true)
-    const token = localStorage.getItem(`mv_gallery_token_${slug}`)
-    const savedGuest = localStorage.getItem(`mv_gallery_guest_${slug}`)
-    const parsedGuest = savedGuest ? JSON.parse(savedGuest) : null
 
-    try {
-      const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/matched-photos`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-          handleLogout()
-          return
-        }
-        throw new Error('Failed to load matched photos')
-      }
-      const data = await res.json()
-      const matchedPhotos = data.photos || []
-      setPhotos(matchedPhotos)
-      setHasSearched(true)
-
-      // Default to Highlights if they have partial access and no matched photos
-      if (matchedPhotos.length === 0 && parsedGuest && !parsedGuest.hasFullAccess) {
-        setViewMode('all')
-        setActiveAllTab('Highlights')
-        loadAllPhotos('Highlights')
-      }
-    } catch (err) {
-      console.error('Failed to load matched photos automatically:', err)
-    } finally {
-      setLoadingMatched(false)
-    }
-  }
 
   const [showHeartPop, setShowHeartPop] = useState(false)
   const heartPopTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -1363,6 +1350,68 @@ export default function GuestGalleryPhotos({ params }: Props) {
   // NOTE: loadingMore and tabCache intentionally omitted from deps — accessed via refs
   // to keep loadAllPhotos identity stable and prevent IntersectionObserver cascade.
 
+  // Matched photos paginated loader
+  const loadMatchedPhotos = useCallback(async (targetOffset = 0) => {
+    if (event && event.allowDownloads === false && !event.isPreviewMode) {
+      setLoadingMatched(false)
+      return
+    }
+    if (loadingMatchedRef.current) return
+    loadingMatchedRef.current = true
+    if (targetOffset === 0) {
+      setLoadingMatched(true)
+    } else {
+      setLoadingMoreMatched(true)
+    }
+
+    const token = localStorage.getItem(`mv_gallery_token_${slug}`)
+    const savedGuest = localStorage.getItem(`mv_gallery_guest_${slug}`)
+    const parsedGuest = savedGuest ? JSON.parse(savedGuest) : null
+
+    try {
+      const res = await fetch(`${apiUrl}/api/gallery/public/events/${slug}/matched-photos?offset=${targetOffset}&limit=60`, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      })
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          handleLogout()
+          return
+        }
+        throw new Error('Failed to load matched photos')
+      }
+      const data = await res.json()
+      const newMatchedPhotos = data.photos || []
+      const totalCount = data.total ?? newMatchedPhotos.length
+      const hasMoreServer = data.hasMore ?? false
+
+      setTotalMatchedPhotos(totalCount)
+      setHasMoreMatched(hasMoreServer)
+
+      setPhotos(prev => {
+        if (targetOffset === 0) return newMatchedPhotos
+        const existingIds = new Set(prev.map((p: any) => p.id || p.r2Url))
+        const filtered = newMatchedPhotos.filter((p: any) => !existingIds.has(p.id || p.r2Url))
+        return [...prev, ...filtered]
+      })
+      setHasSearched(true)
+
+      // Default to Highlights if they have partial access and no matched photos
+      if (targetOffset === 0 && newMatchedPhotos.length === 0 && parsedGuest && !parsedGuest.hasFullAccess) {
+        setViewMode('all')
+        setActiveAllTab('Highlights')
+        loadAllPhotos('Highlights')
+      }
+    } catch (err) {
+      console.error('Failed to load matched photos automatically:', err)
+    } finally {
+      loadingMatchedRef.current = false
+      setLoadingMatched(false)
+      setLoadingMoreMatched(false)
+    }
+  }, [event, slug, apiUrl, handleLogout, loadAllPhotos])
+
   const [pendingNextInLightbox, setPendingNextInLightbox] = useState(false)
 
   // Lightbox keyboard arrows handler
@@ -1379,9 +1428,12 @@ export default function GuestGalleryPhotos({ params }: Props) {
       } else if (viewMode === 'all' && hasMore && !loadingMore) {
         setPendingNextInLightbox(true)
         loadAllPhotos(activeAllTab)
+      } else if (viewMode === 'matched' && hasMoreMatched && !loadingMoreMatched) {
+        setPendingNextInLightbox(true)
+        loadMatchedPhotos(photos.length)
       }
     }
-  }, [activePhotoIndex, activePhotosList.length, viewMode, hasMore, loadingMore, loadAllPhotos, activeAllTab])
+  }, [activePhotoIndex, activePhotosList.length, viewMode, hasMore, loadingMore, loadAllPhotos, activeAllTab, hasMoreMatched, loadingMoreMatched, loadMatchedPhotos, photos.length])
 
   // Advance lightbox when next batch finishes loading
   useEffect(() => {
@@ -1404,8 +1456,15 @@ export default function GuestGalleryPhotos({ params }: Props) {
           loadAllPhotos(activeAllTab)
         }
       }
+    } else if (activePhotoIndex !== null && viewMode === 'matched' && hasMoreMatched && !loadingMoreMatched) {
+      if (activePhotoIndex >= activePhotosList.length - 5) {
+        if (photos.length !== lastLightboxRequestedOffsetRef.current) {
+          lastLightboxRequestedOffsetRef.current = photos.length
+          loadMatchedPhotos(photos.length)
+        }
+      }
     }
-  }, [activePhotoIndex, viewMode, hasMore, loadingMore, activePhotosList.length, loadAllPhotos, activeAllTab])
+  }, [activePhotoIndex, viewMode, hasMore, loadingMore, activePhotosList.length, loadAllPhotos, activeAllTab, hasMoreMatched, loadingMoreMatched, loadMatchedPhotos, photos.length])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1420,14 +1479,18 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
   // Stable IntersectionObserver & Scroll Fallback for Infinite Scrolling
   useEffect(() => {
-    if (viewMode !== 'all') return
+    if (viewMode !== 'all' && viewMode !== 'matched') return
     const sentinel = sentinelRef.current
     if (!sentinel) return
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && !loadingMoreRef.current && hasMore) {
-          loadAllPhotos(activeAllTab)
+        if (entries[0].isIntersecting) {
+          if (viewMode === 'all' && !loadingMoreRef.current && hasMore) {
+            loadAllPhotos(activeAllTab)
+          } else if (viewMode === 'matched' && !loadingMatchedRef.current && hasMoreMatched) {
+            loadMatchedPhotos(photos.length)
+          }
         }
       },
       { rootMargin: '600px' }
@@ -1436,12 +1499,15 @@ export default function GuestGalleryPhotos({ params }: Props) {
 
     // Fallback scroll listener to guarantee pagination triggers smoothly
     const handleScroll = () => {
-      if (loadingMoreRef.current || !hasMore) return
       const scrollY = window.scrollY || document.documentElement.scrollTop
       const windowHeight = window.innerHeight
       const docHeight = document.documentElement.scrollHeight
       if (scrollY + windowHeight >= docHeight - 800) {
-        loadAllPhotos(activeAllTab)
+        if (viewMode === 'all' && !loadingMoreRef.current && hasMore) {
+          loadAllPhotos(activeAllTab)
+        } else if (viewMode === 'matched' && !loadingMatchedRef.current && hasMoreMatched) {
+          loadMatchedPhotos(photos.length)
+        }
       }
     }
     window.addEventListener('scroll', handleScroll, { passive: true })
@@ -1450,7 +1516,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
       observer.disconnect()
       window.removeEventListener('scroll', handleScroll)
     }
-  }, [loadAllPhotos, hasMore, activeAllTab, allPhotos.length, viewMode])
+  }, [loadAllPhotos, loadMatchedPhotos, hasMore, hasMoreMatched, activeAllTab, allPhotos.length, photos.length, viewMode])
 
   const handleBulkDownloadSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1574,6 +1640,8 @@ export default function GuestGalleryPhotos({ params }: Props) {
       const data = await res.json()
       
       setPhotos(data.photos || [])
+      setTotalMatchedPhotos(data.total ?? (data.photos?.length || 0))
+      setHasMoreMatched(data.hasMore ?? false)
       setHasSearched(true)
     } catch (err: any) {
       setErrorSearch(err.message)
@@ -2283,7 +2351,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
               flexShrink: 0
             }}
           >
-            My Photos {photos.length > 0 ? `(${photos.length})` : ''}
+            My Photos {totalMatchedPhotos > 0 ? `(${totalMatchedPhotos})` : (photos.length > 0 ? `(${photos.length})` : '')}
           </button>
 
           {/* MY FAVOURITES Tab */}
@@ -2398,6 +2466,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
             {loadingMatched ? (
               renderSkeletons()
             ) : photos.length > 0 ? (
+              <>
               <div style={{ display: 'flex', gap: '12px', width: '100%', background: '#fff', padding: '16px clamp(0.75rem, 3vw, 2.5rem) 32px' }} className="story-masonry">
                 {getBalancedColumns(photos).map((colPhotos, colIdx) => (
                   <div key={colIdx} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -2540,6 +2609,21 @@ export default function GuestGalleryPhotos({ params }: Props) {
                   </div>
                 ))}
               </div>
+
+              {/* Infinite scroll sentinel + loading indicator for Matched Photos */}
+              <div ref={sentinelRef} style={{ width: '100%', minHeight: '60px' }}>
+                {loadingMoreMatched && (
+                  <div className="flex py-10 items-center justify-center">
+                    <div className="h-6 w-6 animate-spin rounded-full border-4 border-solid border-[#0f172a] border-t-transparent"></div>
+                  </div>
+                )}
+                {!hasMoreMatched && photos.length > 0 && (
+                  <div className="text-center py-8" style={{ fontFamily: "'Montserrat', system-ui, sans-serif", fontSize: '0.6rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: '#b0a89e' }}>
+                    All photos loaded
+                  </div>
+                )}
+              </div>
+              </>
             ) : (
               <div className="text-center py-20">
                 <p className="font-lora text-lg text-neutral-600 mb-2">We couldn't find your photos from this event</p>
@@ -3215,7 +3299,7 @@ export default function GuestGalleryPhotos({ params }: Props) {
             </div>
 
             {/* Static Next arrow in right corner */}
-            {zoomScale === 1 && (activePhotoIndex < activePhotosList.length - 1 || (viewMode === 'all' && hasMore)) && (
+            {zoomScale === 1 && (activePhotoIndex < activePhotosList.length - 1 || (viewMode === 'all' && hasMore) || (viewMode === 'matched' && hasMoreMatched)) && (
               <button
                 onClick={e => { e.stopPropagation(); handleNextPhoto() }}
                 onPointerDown={e => e.stopPropagation()}
