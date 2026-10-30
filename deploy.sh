@@ -80,7 +80,7 @@ rollback() {
   npx prisma generate
   bash "$REPO_ROOT/backend/migrate.sh"
   pm2 restart mycircle-backend --update-env
-  which misty-log-deploy >/dev/null 2>&1 && misty-log-deploy mycircle-backend "$PREV_HASH" "Rollback" || true
+  node "$REPO_ROOT/scripts/misty-tracker.js" log mycircle-backend "$PREV_HASH" "Rollback" || true
 
   echo "[deploy] Installing frontend deps (rollback)..."
   cd "$REPO_ROOT/frontend"
@@ -90,7 +90,7 @@ rollback() {
   free -h || true
   NODE_OPTIONS="--max-old-space-size=512" npm run build
   pm2 restart mycircle-frontend --update-env
-  which misty-log-deploy >/dev/null 2>&1 && misty-log-deploy mycircle-frontend "$PREV_HASH" "Rollback" || true
+  node "$REPO_ROOT/scripts/misty-tracker.js" log mycircle-frontend "$PREV_HASH" "Rollback" || true
 
   echo "[deploy] Rollback complete."
 }
@@ -144,7 +144,7 @@ if [[ -n "$BACKEND_CHANGED" ]]; then
 
   echo "[deploy] Restarting backend..."
   pm2 restart mycircle-backend --update-env
-  which misty-log-deploy >/dev/null 2>&1 && misty-log-deploy mycircle-backend "$NEW_HASH" || true
+  node "$REPO_ROOT/scripts/misty-tracker.js" log mycircle-backend "$NEW_HASH" || true
 else
   echo "[deploy] No backend changes → skipping backend steps"
 fi
@@ -171,7 +171,7 @@ if [[ -n "$FRONTEND_CHANGED" ]]; then
 
   echo "[deploy] Restarting frontend..."
   pm2 restart mycircle-frontend --update-env
-  which misty-log-deploy >/dev/null 2>&1 && misty-log-deploy mycircle-frontend "$NEW_HASH" || true
+  node "$REPO_ROOT/scripts/misty-tracker.js" log mycircle-frontend "$NEW_HASH" || true
 else
   echo "[deploy] No frontend changes → skipping build and restart"
 fi
