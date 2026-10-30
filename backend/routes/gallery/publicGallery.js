@@ -678,6 +678,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
 
       // Check matched photos if guest has selfie
       let matchedPhotosList = [];
+      let totalMatchedCount = 0;
       const userVector = circleUser?.selfieVector || await resolveAnchorVector({
         userId: circleUser?.id,
         email: dbGuest?.email || circleUser?.email,
@@ -689,13 +690,24 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           const vectorMatches = await qdrant.searchVectors(event.id, userVector, 100000, 0.35);
           if (vectorMatches && vectorMatches.length > 0) {
             const photoIds = vectorMatches.map(m => m.photo_id);
+            totalMatchedCount = photoIds.length;
+            // Paginate matched photos in bundle: fetch first 60 to prevent memory spikes & socket disconnects
             const rawMatched = await prisma.photo.findMany({
               where: { id: { in: photoIds }, eventId: event.id, ...(!isBrideOrGroom ? { isPrivate: false } : {}) },
-              select: selectClause
+              select: selectClause,
+              orderBy: [
+                { capturedAt: { sort: 'asc', nulls: 'last' } },
+                { id: 'asc' }
+              ],
+              take: 60
             });
             matchedPhotosList = rawMatched.map(formatPhoto);
           }
         } catch (_) {}
+      }
+
+      if (totalMatchedCount > 0) {
+        tabCounts['MY PHOTOS'] = totalMatchedCount;
       }
 
       return {
@@ -716,6 +728,8 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         total: totalAllCount,
         hasMore: photos.length < totalAllCount,
         matched: matchedPhotosList,
+        totalMatched: totalMatchedCount,
+        hasMoreMatched: matchedPhotosList.length < totalMatchedCount,
         favorites: mappedFavorites,
         cinema: mappedCinema,
         tabCache: {

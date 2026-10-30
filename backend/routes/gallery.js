@@ -25,7 +25,14 @@ const resizeRateLimiter = createRateLimiter({
     const tokenPart = auth.length > 20 ? auth.slice(-16) : '';
     return tokenPart ? `${ip}:${tokenPart}` : ip;
   },
-  errorMessage: 'Too many image resize requests. Please slow down.'
+  errorMessage: 'Too many image resize requests. Please slow down.',
+  onRateLimit: (req, reply) => {
+    const imageUrl = req.query?.url;
+    if (imageUrl && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
+      return reply.redirect(encodeURI(imageUrl));
+    }
+    return reply.code(429).send({ error: 'Too many image resize requests. Please slow down.' });
+  }
 });
 
 module.exports = async function galleryRoutes(fastify, opts) {
@@ -38,13 +45,18 @@ module.exports = async function galleryRoutes(fastify, opts) {
   fastify.get('/api/gallery/resize', async (req, reply) => {
     activeResizeJobs++;
     const tResizeStart = Date.now();
-    // Rate-limit: 120 req/min/IP. Old photos without pre-generated R2 thumbs hit this
-    // route on gallery load; new uploads bypass it entirely via direct R2 thumb URLs.
     try {
+      const imageUrl = req.query.url;
+
+      // Circuit breaker: Protect single vCPU / low RAM droplet from OOM crashes and CPU freezing.
+      // If 2 or more resize jobs are active concurrently, immediately 302 redirect to CDN image URL.
+      if (activeResizeJobs > 2 && imageUrl && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
+        return reply.redirect(encodeURI(imageUrl));
+      }
+
       await resizeRateLimiter(req, reply);
       if (reply.sent) return;
 
-      const imageUrl = req.query.url;
       const width = Math.min(Math.max(parseInt(req.query.w, 10) || 400, 50), 2000);
       const quality = Math.min(Math.max(parseInt(req.query.q, 10) || 75, 20), 100);
 

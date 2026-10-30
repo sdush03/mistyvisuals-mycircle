@@ -629,6 +629,12 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         photoIds = fallbackPhotos.map(p => p.id);
       }
 
+      const totalMatched = photoIds.length;
+      const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+      const limit = req.query.limit !== undefined
+        ? Math.min(120, Math.max(1, parseInt(req.query.limit, 10) || 60))
+        : (req.query.all === 'true' ? undefined : 60);
+
       const tDbStart = Date.now();
       const photos = await prisma.photo.findMany({
         where: { id: { in: photoIds } },
@@ -654,9 +660,11 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
           }
         },
         orderBy: [
-          { capturedAt: 'asc' },
+          { capturedAt: { sort: 'asc', nulls: 'last' } },
           { id: 'asc' }
-        ]
+        ],
+        skip: offset,
+        ...(limit ? { take: limit } : {})
       });
       dbMs = Date.now() - tDbStart;
 
@@ -678,16 +686,22 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
       try {
         await prisma.guest.update({
           where: { id: guestId },
-          data: { matchCount: mappedPhotos.length }
+          data: { matchCount: totalMatched }
         });
       } catch (err) {
         req.log.warn('Failed to save matchCount for guest:', err.message);
       }
 
       const totalMs = Date.now() - tStart;
-      req.log.info({ eventId, guestId, matches: mappedPhotos.length, qdrantMs, dbMs, totalMs }, `[PERF ⏱️ /matched-photos] ${totalMs}ms | Qdrant: ${qdrantMs}ms | DB: ${dbMs}ms | matches: ${mappedPhotos.length}`);
+      req.log.info({ eventId, guestId, matches: mappedPhotos.length, totalMatched, qdrantMs, dbMs, totalMs }, `[PERF ⏱️ /matched-photos] ${totalMs}ms | Qdrant: ${qdrantMs}ms | DB: ${dbMs}ms | returning: ${mappedPhotos.length}/${totalMatched}`);
 
-      return { photos: mappedPhotos };
+      return {
+        photos: mappedPhotos,
+        total: totalMatched,
+        hasMore: (offset + mappedPhotos.length) < totalMatched,
+        offset,
+        limit: limit || mappedPhotos.length
+      };
     } catch (err) {
       req.log.error(err);
       return reply.code(500).send({ error: 'Failed to retrieve matched photos' });
@@ -773,6 +787,12 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         photoIds = Array.from(photoIdsSet);
       }
 
+      const totalMatched = photoIds.length;
+      const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+      const limit = req.query.limit !== undefined
+        ? Math.min(120, Math.max(1, parseInt(req.query.limit, 10) || 60))
+        : (req.query.all === 'true' ? undefined : 60);
+
       const photos = await prisma.photo.findMany({
         where: { id: { in: photoIds } },
         select: {
@@ -796,9 +816,11 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
           }
         },
         orderBy: [
-          { capturedAt: 'asc' },
+          { capturedAt: { sort: 'asc', nulls: 'last' } },
           { id: 'asc' }
-        ]
+        ],
+        skip: offset,
+        ...(limit ? { take: limit } : {})
       });
 
       const mappedPhotos = photos.map(p => ({
@@ -815,7 +837,13 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         isLiked: p.likes && p.likes.length > 0
       }));
 
-      return { photos: mappedPhotos };
+      return {
+        photos: mappedPhotos,
+        total: totalMatched,
+        hasMore: (offset + mappedPhotos.length) < totalMatched,
+        offset,
+        limit: limit || mappedPhotos.length
+      };
     } catch (err) {
       req.log.error('Option B live face search failed:', err.message);
       return reply.code(500).send({ error: 'Search failed' });

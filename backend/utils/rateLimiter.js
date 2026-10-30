@@ -66,6 +66,9 @@ function createRateLimiter(options) {
 
     if (record.count > max) {
       reply.header('Retry-After', retryAfterSec);
+      if (typeof options.onRateLimit === 'function') {
+        return options.onRateLimit(req, reply, retryAfterSec);
+      }
       return reply.code(429).send({
         error: errorMessage,
         retryAfterSeconds: retryAfterSec,

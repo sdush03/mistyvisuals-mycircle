@@ -80,6 +80,7 @@ rollback() {
   npx prisma generate
   bash "$REPO_ROOT/backend/migrate.sh"
   pm2 restart mycircle-backend --update-env
+  which misty-log-deploy >/dev/null 2>&1 && misty-log-deploy mycircle-backend "$PREV_HASH" "Rollback" || true
 
   echo "[deploy] Installing frontend deps (rollback)..."
   cd "$REPO_ROOT/frontend"
@@ -89,6 +90,7 @@ rollback() {
   free -h || true
   NODE_OPTIONS="--max-old-space-size=512" npm run build
   pm2 restart mycircle-frontend --update-env
+  which misty-log-deploy >/dev/null 2>&1 && misty-log-deploy mycircle-frontend "$PREV_HASH" "Rollback" || true
 
   echo "[deploy] Rollback complete."
 }
@@ -102,6 +104,15 @@ git checkout main 2>/dev/null || true
 git pull origin main
 
 NEW_HASH="$(git rev-parse HEAD)"
+
+# Sync deploy tracker script if present
+if [[ -f "$REPO_ROOT/scripts/misty-tracker.js" ]]; then
+  chmod +x "$REPO_ROOT/scripts/misty-tracker.js"
+  mkdir -p "$HOME/.pm2"
+  cp "$REPO_ROOT/scripts/misty-tracker.js" "$HOME/.pm2/misty-tracker.js"
+  sudo ln -sf "$HOME/.pm2/misty-tracker.js" /usr/local/bin/misty-status 2>/dev/null || true
+  sudo ln -sf "$HOME/.pm2/misty-tracker.js" /usr/local/bin/misty-log-deploy 2>/dev/null || true
+fi
 CHANGED_FILES="$(git diff --name-only "$PREV_HASH" "$NEW_HASH")"
 BACKEND_CHANGED="$(echo "$CHANGED_FILES" | grep -E '^backend/' || true)"
 MIGRATIONS_CHANGED="$(git diff --name-only "$PREV_HASH" "$NEW_HASH" -- backend/migrations || true)"
@@ -133,6 +144,7 @@ if [[ -n "$BACKEND_CHANGED" ]]; then
 
   echo "[deploy] Restarting backend..."
   pm2 restart mycircle-backend --update-env
+  which misty-log-deploy >/dev/null 2>&1 && misty-log-deploy mycircle-backend "$NEW_HASH" || true
 else
   echo "[deploy] No backend changes → skipping backend steps"
 fi
@@ -159,6 +171,7 @@ if [[ -n "$FRONTEND_CHANGED" ]]; then
 
   echo "[deploy] Restarting frontend..."
   pm2 restart mycircle-frontend --update-env
+  which misty-log-deploy >/dev/null 2>&1 && misty-log-deploy mycircle-frontend "$NEW_HASH" || true
 else
   echo "[deploy] No frontend changes → skipping build and restart"
 fi

@@ -8,6 +8,27 @@ class FaceRecManager {
     this.stdoutBuffer = '';
     this.isInitializing = false;
     this.scriptPath = path.join(__dirname, 'face_rec.py');
+    this.idleTimer = null;
+    this.idleTimeoutMs = 5 * 60 * 1000; // 5 minutes inactivity timeout
+  }
+
+  resetIdleTimer() {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+    // Only schedule idle timeout if daemon is running and queue is empty
+    if (this.pythonDaemon) {
+      this.idleTimer = setTimeout(() => {
+        if (this.queue.length === 0) {
+          console.log('[FaceRecManager] 5 minutes of inactivity reached. Shutting down daemon to reclaim RAM.');
+          this.shutdown();
+        } else {
+          this.resetIdleTimer();
+        }
+      }, this.idleTimeoutMs);
+      if (this.idleTimer && this.idleTimer.unref) this.idleTimer.unref();
+    }
   }
 
   ensureDaemon() {
@@ -55,6 +76,7 @@ class FaceRecManager {
           this.isInitializing = false;
           if (msg.status === 'ready') {
             console.log('[FaceRecManager] Daemon is ready and running.');
+            this.resetIdleTimer();
             resolve();
           } else {
             reject(new Error(`Daemon startup failed: ${JSON.stringify(msg)}`));
@@ -88,6 +110,9 @@ class FaceRecManager {
             nextJob.resolve(payload);
           }
         }
+        if (this.queue.length === 0) {
+          this.resetIdleTimer();
+        }
       } catch (err) {
         console.error('[FaceRecManager] Failed to parse JSON from stdout line:', line, err);
       }
@@ -95,6 +120,10 @@ class FaceRecManager {
   }
 
   handleCrash(error) {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
     this.pythonDaemon = null;
     this.isInitializing = false;
     this.stdoutBuffer = '';
@@ -107,6 +136,10 @@ class FaceRecManager {
 
   async sendCommand(command) {
     await this.ensureDaemon();
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
     return new Promise((resolve, reject) => {
       this.queue.push({ resolve, reject });
       try {
@@ -115,6 +148,7 @@ class FaceRecManager {
         // Remove this job from the queue if stdin write failed
         const idx = this.queue.findIndex(job => job.resolve === resolve);
         if (idx !== -1) this.queue.splice(idx, 1);
+        this.resetIdleTimer();
         reject(err);
       }
     });
@@ -137,6 +171,10 @@ class FaceRecManager {
   }
 
   shutdown() {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
     if (this.pythonDaemon) {
       try {
         this.pythonDaemon.stdin.write(JSON.stringify({ action: 'exit' }) + '\n');
