@@ -115,13 +115,21 @@ async function verifyGuestAuth(req, reply) {
       }
     }
 
+    const resolvedUserId = decoded.userId || (dbGuest ? dbGuest.id : 0);
+    const universalAdminRecord = resolvedUserId ? await prisma.universalAdmin.findUnique({
+      where: { userId: Number(resolvedUserId) }
+    }).catch(() => null) : null;
+
+    const isUniversalAdmin = Boolean(universalAdminRecord);
+
     req.guest = {
       ...decoded,
       guestId,
-      userId: decoded.userId || (dbGuest ? dbGuest.id : 0),
+      userId: resolvedUserId,
       eventId: event ? event.id : decoded.eventId,
-      role: 'guest',
-      hasFullAccess: dbGuest ? dbGuest.hasFullAccess : decoded.hasFullAccess,
+      role: isUniversalAdmin ? 'admin' : 'guest',
+      hasFullAccess: isUniversalAdmin || (dbGuest ? dbGuest.hasFullAccess : decoded.hasFullAccess),
+      isUniversalAdmin,
       isPreviewMode: isAdminPreview
     };
   } catch (err) {
@@ -163,7 +171,22 @@ async function verifyFamilyAuth(req, reply) {
       return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'ERR_SESSION_REVOKED' });
     }
 
-    req.family = decoded;
+    const userRecord = await prisma.circleUser.findUnique({
+      where: { email: decoded.email.trim().toLowerCase() }
+    }).catch(() => null);
+
+    const universalAdminRecord = userRecord ? await prisma.universalAdmin.findUnique({
+      where: { userId: userRecord.id }
+    }).catch(() => null) : null;
+
+    const isUniversalAdmin = Boolean(universalAdminRecord);
+
+    req.family = {
+      ...decoded,
+      userId: userRecord ? userRecord.id : decoded.userId,
+      isUniversalAdmin,
+      role: isUniversalAdmin ? 'admin' : decoded.role
+    };
   } catch (err) {
     if (err.statusCode === 401) return reply.code(401).send(err.response || err);
     const errMessage = (err.message || '').toLowerCase();

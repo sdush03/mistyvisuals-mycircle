@@ -260,6 +260,33 @@ module.exports = async function adminGalleryRoutes(fastify, opts) {
         }
       });
 
+      // Automatically provision active Universal Admins into the new gallery
+      try {
+        const admins = await prisma.universalAdmin.findMany({
+          include: { circleUser: true }
+        });
+        for (const admin of admins) {
+          const user = admin.circleUser;
+          if (!user || !user.email) continue;
+          await prisma.guest.upsert({
+            where: { eventId_email: { eventId: event.id, email: user.email.trim().toLowerCase() } },
+            update: { hasFullAccess: true, displayRole: 'ADMIN', name: user.name || 'Admin', phoneNumber: user.phoneNumber },
+            create: {
+              eventId: event.id,
+              email: user.email.trim().toLowerCase(),
+              name: user.name || 'Admin',
+              phoneNumber: user.phoneNumber,
+              provider: user.provider || 'circle',
+              providerId: user.providerId || 'circle',
+              hasFullAccess: true,
+              displayRole: 'ADMIN'
+            }
+          });
+        }
+      } catch (adminProvErr) {
+        req.log.error('Failed to provision universal admins for new gallery:', adminProvErr);
+      }
+
       return event;
     } catch (err) {
       req.log.error(err);
