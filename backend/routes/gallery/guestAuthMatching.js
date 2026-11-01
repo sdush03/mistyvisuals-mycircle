@@ -231,19 +231,20 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
       const dbPasscode = event.fullCode;
       const dbPartialPasscode = event.partialCode;
 
+      const email = (decoded.email || '').trim().toLowerCase();
       const user = await prisma.circleUser.findUnique({
-        where: { email: decoded.email }
+        where: { email }
       });
       if (!user && decoded.role === 'family') {
         return reply.code(404).send({ error: 'User profile not found' });
       }
 
       let guest = await prisma.guest.findFirst({
-        where: { eventId: event.id, email: decoded.email }
+        where: { eventId: event.id, email }
       });
 
       let isCodeValid = false;
-      
+
       if (dbPasscode || dbPartialPasscode) {
         if (!code) {
           if (!guest) {
@@ -274,7 +275,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         guest = await prisma.guest.create({
           data: {
             eventId: event.id,
-            email: decoded.email,
+            email,
             name: userName,
             phoneNumber: userPhone,
             provider: userProvider,
@@ -294,7 +295,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
       }
 
       if (user) {
-        await ensureUserSelfieMigrated(fastify, user.id, decoded.email);
+        await ensureUserSelfieMigrated(fastify, user.id, email);
       }
       const hasSelfie = await checkUserSelfie(user?.id, guest?.id);
 

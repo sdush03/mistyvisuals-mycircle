@@ -866,17 +866,31 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
               return reply.code(403).send({ error: 'Token does not match this event' });
             }
           } else if (decoded.role === 'family' && decoded.email) {
+            const email = (decoded.email || '').trim().toLowerCase();
             let familyGuest = await prisma.guest.findFirst({
-              where: { eventId: event.id, email: decoded.email }
+              where: { eventId: event.id, email }
             });
-            if (familyGuest) {
-              if (familyGuest.isBlocked) {
-                return reply.code(403).send({ error: 'Access denied: Participant is blocked' });
-              }
-              hasFullAccess = familyGuest.hasFullAccess;
-            } else {
-              hasFullAccess = !event.fullCode && !event.partialCode;
+            if (!familyGuest) {
+              const user = await prisma.circleUser.findUnique({ where: { email } });
+              familyGuest = await prisma.guest.create({
+                data: {
+                  eventId: event.id,
+                  email,
+                  name: user ? user.name : (decoded.name || 'Family Guest'),
+                  phoneNumber: user ? user.phoneNumber : null,
+                  provider: user ? user.provider : 'circle',
+                  providerId: user ? user.providerId : 'circle',
+                  hasFullAccess: !event.fullCode && !event.partialCode
+                }
+              });
             }
+            if (familyGuest.isBlocked) {
+              return reply.code(403).send({ error: 'Access denied: Participant is blocked' });
+            }
+            guestId = familyGuest.id;
+            hasFullAccess = familyGuest.hasFullAccess;
+            const guestRole = (familyGuest.displayRole || '').toString().trim().toUpperCase();
+            isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(guestRole);
           } else {
             return reply.code(403).send({ error: 'Token does not match this event' });
           }
@@ -1407,11 +1421,12 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
     }
   });
 
-  // Toggle like status for a photo
+  // Toggle or explicitly set like status for a photo (Idempotent & Race-Condition Safe)
   fastify.post('/api/gallery/public/events/:slug/photos/:photoId/like', { preHandler: verifyGuestAuth }, async (req, reply) => {
     const slug = req.params.slug.toLowerCase().trim();
     const photoId = Number(req.params.photoId);
     const guestId = req.guest.guestId;
+    const { liked: desiredLiked } = req.body || {};
 
     if (isNaN(photoId)) {
       return reply.code(400).send({ error: 'Invalid photo ID' });
@@ -1427,29 +1442,72 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         return reply.code(404).send({ error: 'Photo not found in this gallery' });
       }
 
-      const existingLike = await prisma.photoLike.findUnique({
-        where: {
-          photoId_guestId: {
-            photoId,
-            guestId
+      let liked = false;
+
+      if (typeof desiredLiked === 'boolean') {
+        // Explicit desired state (Idempotent)
+        if (desiredLiked) {
+          try {
+            await prisma.photoLike.upsert({
+              where: {
+                photoId_guestId: {
+                  photoId,
+                  guestId
+                }
+              },
+              create: {
+                photoId,
+                guestId
+              },
+              update: {}
+            });
+          } catch (upsertErr) {
+            // Safe fallback if concurrent upsert race triggers unique constraint
+            req.log.warn({ photoId, guestId, err: upsertErr.message }, 'Upsert photoLike handled concurrency');
+          }
+          liked = true;
+        } else {
+          await prisma.photoLike.deleteMany({
+            where: {
+              photoId,
+              guestId
+            }
+          });
+          liked = false;
+        }
+      } else {
+        // Legacy toggle fallback (Safe from P2002 race conditions)
+        const existingLike = await prisma.photoLike.findUnique({
+          where: {
+            photoId_guestId: {
+              photoId,
+              guestId
+            }
+          }
+        });
+
+        if (existingLike) {
+          await prisma.photoLike.deleteMany({
+            where: {
+              photoId,
+              guestId
+            }
+          });
+          liked = false;
+        } else {
+          try {
+            await prisma.photoLike.create({
+              data: {
+                photoId,
+                guestId
+              }
+            });
+            liked = true;
+          } catch (createErr) {
+            // If another request created the like concurrently, consider it liked
+            liked = true;
           }
         }
-      });
-
-      let liked = false;
-      if (existingLike) {
-        await prisma.photoLike.delete({
-          where: { id: existingLike.id }
-        });
-        liked = false;
-      } else {
-        await prisma.photoLike.create({
-          data: {
-            photoId,
-            guestId
-          }
-        });
-        liked = true;
       }
 
       const likeCount = await prisma.photoLike.count({

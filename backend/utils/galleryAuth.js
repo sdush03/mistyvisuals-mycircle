@@ -65,15 +65,16 @@ async function verifyGuestAuth(req, reply) {
       }
       guestId = adminGuest.id;
     } else if (decoded.role === 'family' && event && decoded.email) {
+      const email = (decoded.email || '').trim().toLowerCase();
       let familyGuest = await prisma.guest.findFirst({
-        where: { eventId: event.id, email: decoded.email }
+        where: { eventId: event.id, email }
       });
       if (!familyGuest) {
-        const user = await prisma.circleUser.findUnique({ where: { email: decoded.email } });
+        const user = await prisma.circleUser.findUnique({ where: { email } });
         familyGuest = await prisma.guest.create({
           data: {
             eventId: event.id,
-            email: decoded.email,
+            email,
             name: user ? user.name : (decoded.name || 'Family Guest'),
             phoneNumber: user ? user.phoneNumber : null,
             provider: user ? user.provider : 'circle',
@@ -110,7 +111,7 @@ async function verifyGuestAuth(req, reply) {
         [decoded.sid]
       ).catch(() => ({ rows: [] }));
       if (!activeSess.rows || activeSess.rows.length === 0) {
-        return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'SESSION_TERMINATED' });
+        return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'ERR_SESSION_REVOKED' });
       }
     }
 
@@ -125,7 +126,11 @@ async function verifyGuestAuth(req, reply) {
     };
   } catch (err) {
     if (err.statusCode === 401) return reply.code(401).send(err.response || err);
-    return reply.code(401).send({ error: 'Unauthorized session' });
+    const errMessage = (err.message || '').toLowerCase();
+    if (errMessage.includes('expired') || errMessage.includes('jwt expired')) {
+      return reply.code(401).send({ error: 'Token expired', code: 'ERR_TOKEN_EXPIRED' });
+    }
+    return reply.code(401).send({ error: 'Unauthorized session', code: 'ERR_INVALID_TOKEN' });
   }
 }
 
@@ -134,7 +139,7 @@ async function verifyFamilyAuth(req, reply) {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return reply.code(401).send({ error: 'Missing or invalid token' });
+      return reply.code(401).send({ error: 'Missing or invalid token', code: 'ERR_UNAUTHORIZED' });
     }
     const token = authHeader.split(' ')[1];
     const decoded = req.server.jwt.verify(token);
@@ -147,7 +152,7 @@ async function verifyFamilyAuth(req, reply) {
 
     // Require active session sid in circle_user_sessions
     if (!decoded.sid) {
-      return reply.code(401).send({ error: 'Session expired. Please log in again.', code: 'SESSION_EXPIRED' });
+      return reply.code(401).send({ error: 'Session expired. Please log in again.', code: 'ERR_SESSION_EXPIRED' });
     }
 
     const activeSess = await pool.query(
@@ -155,13 +160,17 @@ async function verifyFamilyAuth(req, reply) {
       [decoded.sid]
     ).catch(() => ({ rows: [] }));
     if (!activeSess.rows || activeSess.rows.length === 0) {
-      return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'SESSION_TERMINATED' });
+      return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'ERR_SESSION_REVOKED' });
     }
 
     req.family = decoded;
   } catch (err) {
     if (err.statusCode === 401) return reply.code(401).send(err.response || err);
-    return reply.code(401).send({ error: 'Unauthorized session' });
+    const errMessage = (err.message || '').toLowerCase();
+    if (errMessage.includes('expired') || errMessage.includes('jwt expired')) {
+      return reply.code(401).send({ error: 'Token expired', code: 'ERR_TOKEN_EXPIRED' });
+    }
+    return reply.code(401).send({ error: 'Unauthorized session', code: 'ERR_INVALID_TOKEN' });
   }
 }
 
