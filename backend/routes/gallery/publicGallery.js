@@ -1603,13 +1603,14 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       const event = await prisma.galleryEvent.findUnique({ where: { slug } });
       if (!event) return reply.code(404).send({ error: 'Event not found' });
 
-      // Resolve Bride/Groom role (same robust pattern as delete endpoint)
+      // Resolve Bride/Groom or Universal Admin role
       const guestId = req.guest.guestId;
       const guest = await prisma.guest.findUnique({ where: { id: guestId } });
 
       let roleUpper = (guest?.displayRole || req.guest.displayRole || '').toString().trim().toUpperCase();
+      const isUniversalAdmin = Boolean(req.guest?.isUniversalAdmin);
 
-      if (!['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) {
+      if (!isUniversalAdmin && !['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) {
         const cleanEmail = (guest?.email || req.guest.email || '').trim().toLowerCase();
         const cleanPhone = (guest?.phoneNumber || '').replace(/\D/g, '');
         const cleanName = (guest?.name || '').trim().toLowerCase();
@@ -1630,8 +1631,8 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         if (found) roleUpper = found.displayRole.trim().toUpperCase();
       }
 
-      if (!['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) {
-        return reply.code(403).send({ error: 'Only Bride or Groom can lock/unlock photos' });
+      if (!isUniversalAdmin && !['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) {
+        return reply.code(403).send({ error: 'Only Bride, Groom or Universal Admin can lock/unlock photos' });
       }
 
       const photo = await prisma.photo.findUnique({ where: { id: photoId } });
