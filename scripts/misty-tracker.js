@@ -3,8 +3,17 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const HOME = process.env.HOME || '/home/misty';
-const DATA_FILE = path.join(HOME, '.pm2', 'deploy_tracker.json');
+function getTrackerPath() {
+  if (process.env.TRACKER_FILE) return process.env.TRACKER_FILE;
+  if (fs.existsSync('/home/misty/.pm2')) {
+    return '/home/misty/.pm2/deploy_tracker.json';
+  }
+  const home = process.env.HOME || '/home/misty';
+  return path.join(home, '.pm2', 'deploy_tracker.json');
+}
+
+const DATA_FILE = getTrackerPath();
+const PM2_DIR = fs.existsSync('/home/misty/.pm2') ? '/home/misty/.pm2' : path.join(process.env.HOME || '/home/misty', '.pm2');
 
 function loadTracker() {
   try {
@@ -17,6 +26,9 @@ function saveTracker(data) {
   try {
     fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+    try {
+      fs.chmodSync(DATA_FILE, 0o666);
+    } catch (_) {}
   } catch (e) {
     console.error('Failed to save deploy tracker:', e.message);
   }
@@ -25,6 +37,30 @@ function saveTracker(data) {
 const args = process.argv.slice(2);
 const invokedAs = path.basename(process.argv[1]);
 const isLog = invokedAs === 'misty-log-deploy' || args[0] === 'log';
+const isSync = args[0] === 'sync';
+
+if (isSync) {
+  try {
+    const pm2Raw = execSync('pm2 jlist', { encoding: 'utf8', timeout: 5000 });
+    const pm2List = JSON.parse(pm2Raw);
+    const data = loadTracker();
+    for (const proc of pm2List) {
+      const name = proc.name;
+      const restarts = proc.pm2_env?.restart_time || 0;
+      if (!data[name]) data[name] = { deploys: 0, history: [] };
+      data[name].deploys = restarts;
+      data[name].last_deploy = new Date().toISOString();
+      data[name].last_commit = 'Synced with PM2';
+      if (!Array.isArray(data[name].history)) data[name].history = [];
+      data[name].history.unshift({ timestamp: new Date().toISOString(), commit: 'sync', note: 'Synced deploys with current PM2 restarts' });
+    }
+    saveTracker(data);
+    console.log('✅ Deploy tracker synced with current PM2 restart counts. All services reset to 0 crashes.');
+  } catch (e) {
+    console.error('Failed to sync PM2 status:', e.message);
+  }
+  process.exit(0);
+}
 
 if (isLog) {
   const shift = (args[0] === 'log') ? 1 : 0;
@@ -44,7 +80,7 @@ if (isLog) {
   data[appName].history.unshift({ timestamp: new Date().toISOString(), commit, note });
   if (data[appName].history.length > 50) data[appName].history.pop();
   saveTracker(data);
-  console.log(`[DeployTracker] Recorded deploy #${data[appName].deploys} for ${appName} (${commit})`);
+  console.log(`[DeployTracker] Recorded deploy #${data[appName].deploys} for ${appName} (${commit}) - ${note}`);
   process.exit(0);
 }
 
@@ -89,7 +125,7 @@ try {
     console.log('⚠️  UNEXPECTED CRASHES DETECTED:');
     for (const app of crashedApps) {
       console.log(`- ${app['App Name']}: ${app.Crashes} crash(es) since tracking started.`);
-      const errPath = path.join(HOME, '.pm2', 'logs', `${app['App Name']}-error.log`);
+      const errPath = path.join(PM2_DIR, 'logs', `${app['App Name']}-error.log`);
       if (fs.existsSync(errPath)) {
         try {
           const lastErr = execSync(`tail -n 3 "${errPath}"`, { encoding: 'utf8' }).trim();
@@ -98,7 +134,7 @@ try {
       }
     }
   } else {
-    console.log('✨ All 5 processes are 100% healthy with 0 crashes.');
+    console.log('✨ All processes are 100% healthy with 0 crashes.');
   }
   console.log('\n====================================================================\n');
 } catch (err) {
