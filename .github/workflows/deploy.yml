@@ -32,9 +32,17 @@ jobs:
         id: changes
         env:
           SSHPASS: ${{ secrets.SERVER_PASSWORD }}
+          RAW_USER: ${{ secrets.SERVER_USER }}
+          RAW_HOST: ${{ secrets.SERVER_HOST }}
         run: |
+          CLEAN_USER="$(printf '%s' "$RAW_USER" | tr -d '[:space:]')"
+          CLEAN_HOST="$(printf '%s' "$RAW_HOST" | tr -d '[:space:]')"
+          if [[ -z "$CLEAN_USER" || -z "$CLEAN_HOST" ]]; then
+            echo "::error::SERVER_USER or SERVER_HOST secret is empty"
+            exit 1
+          fi
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-          REMOTE="${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
+          REMOTE="${CLEAN_USER}@${CLEAN_HOST}"
           SERVER_STATE=$(sshpass -e ssh $SSH_OPTS "$REMOTE" "git -C /var/www/mistyvisuals-mycircle rev-parse HEAD && (test -d /var/www/mistyvisuals-mycircle/frontend/.next && echo HAS_NEXT || echo NO_NEXT)")
           SERVER_HEAD=$(echo "$SERVER_STATE" | sed -n '1p')
           HAS_NEXT=$(echo "$SERVER_STATE" | sed -n '2p')
@@ -68,9 +76,13 @@ jobs:
         if: steps.changes.outputs.should_build == 'true'
         env:
           SSHPASS: ${{ secrets.SERVER_PASSWORD }}
+          RAW_USER: ${{ secrets.SERVER_USER }}
+          RAW_HOST: ${{ secrets.SERVER_HOST }}
         run: |
+          CLEAN_USER="$(printf '%s' "$RAW_USER" | tr -d '[:space:]')"
+          CLEAN_HOST="$(printf '%s' "$RAW_HOST" | tr -d '[:space:]')"
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-          REMOTE="${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
+          REMOTE="${CLEAN_USER}@${CLEAN_HOST}"
           sshpass -e scp $SSH_OPTS "$REMOTE:/var/www/mistyvisuals-mycircle/frontend/.env.local" frontend/.env.local 2>/dev/null || true
           sshpass -e scp $SSH_OPTS "$REMOTE:/var/www/mistyvisuals-mycircle/frontend/.env.production" frontend/.env.production 2>/dev/null || true
 
@@ -91,9 +103,13 @@ jobs:
         if: steps.changes.outputs.should_build == 'true'
         env:
           SSHPASS: ${{ secrets.SERVER_PASSWORD }}
+          RAW_USER: ${{ secrets.SERVER_USER }}
+          RAW_HOST: ${{ secrets.SERVER_HOST }}
         run: |
+          CLEAN_USER="$(printf '%s' "$RAW_USER" | tr -d '[:space:]')"
+          CLEAN_HOST="$(printf '%s' "$RAW_HOST" | tr -d '[:space:]')"
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-          REMOTE="${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
+          REMOTE="${CLEAN_USER}@${CLEAN_HOST}"
 
           sshpass -e ssh $SSH_OPTS "$REMOTE" "mkdir -p /var/www/mistyvisuals-mycircle/frontend/.next-staging"
           sshpass -e rsync -az --delete --exclude='/cache' -e "ssh $SSH_OPTS" \
@@ -109,9 +125,13 @@ jobs:
       - name: Run server deploy script
         env:
           SSHPASS: ${{ secrets.SERVER_PASSWORD }}
+          RAW_USER: ${{ secrets.SERVER_USER }}
+          RAW_HOST: ${{ secrets.SERVER_HOST }}
         run: |
+          CLEAN_USER="$(printf '%s' "$RAW_USER" | tr -d '[:space:]')"
+          CLEAN_HOST="$(printf '%s' "$RAW_HOST" | tr -d '[:space:]')"
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-          REMOTE="${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
+          REMOTE="${CLEAN_USER}@${CLEAN_HOST}"
           FORCE_VAL=""
           if [[ "${{ github.event.inputs.force }}" == "true" ]]; then
             FORCE_VAL="1"
