@@ -4,29 +4,121 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force full backend & frontend deploy'
+        required: false
+        default: 'false'
+        type: boolean
+
+concurrency:
+  group: deploy-mycircle-production
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Server Deploy Script
-        uses: appleboy/ssh-action@master
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
-          port: 22
-          script: |
+          fetch-depth: 0
+
+      - name: Install sshpass
+        run: command -v sshpass >/dev/null || (sudo apt-get update && sudo apt-get install -y sshpass)
+
+      - name: Check if frontend build is needed
+        id: changes
+        env:
+          SSHPASS: ${{ secrets.SERVER_PASSWORD }}
+        run: |
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          REMOTE="${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
+          SERVER_STATE=$(sshpass -e ssh $SSH_OPTS "$REMOTE" "git -C /var/www/mistyvisuals-mycircle rev-parse HEAD && (test -d /var/www/mistyvisuals-mycircle/frontend/.next && echo HAS_NEXT || echo NO_NEXT)")
+          SERVER_HEAD=$(echo "$SERVER_STATE" | sed -n '1p')
+          HAS_NEXT=$(echo "$SERVER_STATE" | sed -n '2p')
+
+          echo "Server HEAD: $SERVER_HEAD ($HAS_NEXT)"
+
+          if [[ "${{ github.event.inputs.force }}" == "true" || "$HAS_NEXT" != "HAS_NEXT" ]]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git cat-file -e "${SERVER_HEAD}^{commit}" 2>/dev/null; then
+            if git diff --name-only "$SERVER_HEAD" HEAD | grep -q '^frontend/'; then
+              echo "should_build=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "should_build=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node.js
+        if: steps.changes.outputs.should_build == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Fetch production frontend env & build in CI
+        if: steps.changes.outputs.should_build == 'true'
+        env:
+          SSHPASS: ${{ secrets.SERVER_PASSWORD }}
+        run: |
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          REMOTE="${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
+          sshpass -e scp $SSH_OPTS "$REMOTE:/var/www/mistyvisuals-mycircle/frontend/.env.local" frontend/.env.local 2>/dev/null || true
+          sshpass -e scp $SSH_OPTS "$REMOTE:/var/www/mistyvisuals-mycircle/frontend/.env.production" frontend/.env.production 2>/dev/null || true
+
+          # Load any NEXT_PUBLIC_ or API_URL vars from server backend/.env to match deploy.sh behavior
+          sshpass -e ssh $SSH_OPTS "$REMOTE" "grep -E '^(NEXT_PUBLIC_|API_URL)=' /var/www/mistyvisuals-mycircle/backend/.env 2>/dev/null || true" > frontend/.env.backend.tmp
+          if [ -s frontend/.env.backend.tmp ]; then
             set -a
-            source /var/www/mistyvisuals-mycircle/backend/.env 2>/dev/null || true
+            source frontend/.env.backend.tmp
             set +a
-            bash /var/www/mistyvisuals-mycircle/deploy.sh || {
-              echo "deploy.sh failed!"
-              LOG_FILE=$(ls -t /tmp/deploy-logs-mycircle-*/deploy_*.log 2>/dev/null | head -n 1 || true)
-              if [[ -f "$LOG_FILE" ]]; then
-                curl -s -H "Title: Deploy Log MyCircle" -d "$(tail -n 100 "$LOG_FILE")" https://ntfy.sh/mistyvisuals-deploy-debug || true
-              else
-                curl -s -d "Deploy failed. No log file found!" https://ntfy.sh/mistyvisuals-deploy-debug || true
-              fi
-              exit 1
-            }
+          fi
+          rm -f frontend/.env.backend.tmp
+
+          cd frontend
+          npm ci
+          NODE_ENV=production npm run build
+
+      - name: Upload prebuilt frontend to server
+        if: steps.changes.outputs.should_build == 'true'
+        env:
+          SSHPASS: ${{ secrets.SERVER_PASSWORD }}
+        run: |
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          REMOTE="${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
+
+          sshpass -e ssh $SSH_OPTS "$REMOTE" "mkdir -p /var/www/mistyvisuals-mycircle/frontend/.next-staging"
+          sshpass -e rsync -az --delete --exclude='/cache' -e "ssh $SSH_OPTS" \
+            frontend/.next/ "$REMOTE:/var/www/mistyvisuals-mycircle/frontend/.next-staging/"
+
+          shopt -s nullglob
+          PWA_FILES=(frontend/public/sw.js* frontend/public/workbox-*.js* frontend/public/worker-*.js*)
+          if [ ${#PWA_FILES[@]} -gt 0 ]; then
+            sshpass -e rsync -az -e "ssh $SSH_OPTS" \
+              "${PWA_FILES[@]}" "$REMOTE:/var/www/mistyvisuals-mycircle/frontend/public/"
+          fi
+
+      - name: Run server deploy script
+        env:
+          SSHPASS: ${{ secrets.SERVER_PASSWORD }}
+        run: |
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          REMOTE="${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
+          FORCE_VAL=""
+          if [[ "${{ github.event.inputs.force }}" == "true" ]]; then
+            FORCE_VAL="1"
+          fi
+
+          if ! sshpass -e ssh $SSH_OPTS "$REMOTE" "export SKIP_FRONTEND_BUILD=1 FORCE='$FORCE_VAL'; bash -s" < deploy.sh; then
+            echo "deploy.sh failed!"
+            sshpass -e ssh $SSH_OPTS "$REMOTE" 'LOG_FILE=$(ls -t /tmp/deploy-logs-mycircle-*/deploy_*.log 2>/dev/null | head -n 1 || true); if [[ -f "$LOG_FILE" ]]; then curl -s -H "Title: Deploy Log MyCircle" -d "$(tail -n 100 "$LOG_FILE")" https://ntfy.sh/mistyvisuals-deploy-debug || true; else curl -s -d "Deploy failed. No log file found!" https://ntfy.sh/mistyvisuals-deploy-debug || true; fi' || true
+            exit 1
+          fi

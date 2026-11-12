@@ -113,6 +113,12 @@ if [[ -f "$REPO_ROOT/scripts/misty-tracker.js" ]]; then
   sudo ln -sf "$HOME/.pm2/misty-tracker.js" /usr/local/bin/misty-status 2>/dev/null || true
   sudo ln -sf "$HOME/.pm2/misty-tracker.js" /usr/local/bin/misty-log-deploy 2>/dev/null || true
 fi
+# Check for manual force flag (--force or -f)
+FORCE_DEPLOY="${FORCE:-}"
+if [[ "${1:-}" == "--force" || "${1:-}" == "-f" ]]; then
+  FORCE_DEPLOY="1"
+fi
+
 CHANGED_FILES="$(git diff --name-only "$PREV_HASH" "$NEW_HASH")"
 BACKEND_CHANGED="$(echo "$CHANGED_FILES" | grep -E '^backend/' || true)"
 MIGRATIONS_CHANGED="$(git diff --name-only "$PREV_HASH" "$NEW_HASH" -- backend/migrations || true)"
@@ -121,10 +127,16 @@ BACKEND_DEPS_CHANGED="$(echo "$CHANGED_FILES" | grep -E '^backend/package(-lock)
 FRONTEND_DEPS_CHANGED="$(echo "$CHANGED_FILES" | grep -E '^frontend/package(-lock)?\.json$' || true)"
 FRONTEND_CHANGED="$(echo "$CHANGED_FILES" | grep -E '^frontend/' || true)"
 
+if [[ -n "$FORCE_DEPLOY" ]]; then
+  echo "[deploy] Force flag passed. Rebuilding and restarting backend and frontend..."
+  BACKEND_CHANGED="force"
+  FRONTEND_CHANGED="force"
+fi
+
 if [[ -n "$BACKEND_CHANGED" ]]; then
   echo "[deploy] Backend changes detected. Installing deps if needed..."
   cd "$REPO_ROOT/backend"
-  if [[ -n "$BACKEND_DEPS_CHANGED" ]]; then
+  if [[ -n "$BACKEND_DEPS_CHANGED" || -n "$FORCE_DEPLOY" ]]; then
     echo "[deploy] backend package.json changed → npm install"
     npm install
   else
@@ -134,7 +146,7 @@ if [[ -n "$BACKEND_CHANGED" ]]; then
   echo "[deploy] Running migrations..."
   bash "$REPO_ROOT/backend/migrate.sh"
 
-  if [[ -n "$PRISMA_CHANGED" || -n "$BACKEND_DEPS_CHANGED" ]]; then
+  if [[ -n "$PRISMA_CHANGED" || -n "$BACKEND_DEPS_CHANGED" || -n "$FORCE_DEPLOY" ]]; then
     echo "[deploy] Prisma schema or deps changed → running prisma generate..."
     npx prisma generate
   fi
@@ -149,25 +161,39 @@ else
   echo "[deploy] No backend changes → skipping backend steps"
 fi
 
-if [[ -n "$FRONTEND_CHANGED" ]]; then
-  echo "[deploy] Frontend changes detected. Installing deps if needed..."
+if [[ -n "$FRONTEND_CHANGED" || -d "$REPO_ROOT/frontend/.next-staging" ]]; then
+  echo "[deploy] Frontend changes detected."
   cd "$REPO_ROOT/frontend"
-  if [[ -n "$FRONTEND_DEPS_CHANGED" ]]; then
-    echo "[deploy] frontend package.json changed → npm install"
-    npm install --include=dev
+
+  if [[ "${SKIP_FRONTEND_BUILD:-0}" == "1" && -d "$REPO_ROOT/frontend/.next-staging" ]]; then
+    if [[ -n "$FRONTEND_DEPS_CHANGED" || -n "$FORCE_DEPLOY" ]]; then
+      echo "[deploy] frontend package.json changed → installing runtime deps..."
+      npm install --omit=dev
+    else
+      echo "[deploy] frontend package.json unchanged → skipping npm install"
+    fi
+
+    echo "[deploy] Swapping prebuilt .next-staging from CI..."
+    rm -rf .next
+    mv .next-staging .next
   else
-    echo "[deploy] frontend package.json unchanged → installing dev deps anyway for build"
-    npm install --include=dev
+    if [[ -n "$FRONTEND_DEPS_CHANGED" || -n "$FORCE_DEPLOY" ]]; then
+      echo "[deploy] frontend package.json changed → npm install"
+      npm install --include=dev
+    else
+      echo "[deploy] frontend package.json unchanged → installing dev deps anyway for build"
+      npm install --include=dev
+    fi
+
+    echo "[deploy] Cleaning up any orphaned build workers..."
+    pkill -f "jest-worker/processChild.js" || true
+
+    echo "[deploy] Building frontend..."
+    rm -f .next/lock
+    echo "[deploy] Memory status before main build:"
+    free -h || true
+    NODE_OPTIONS="--max-old-space-size=512" npm run build
   fi
-
-  echo "[deploy] Cleaning up any orphaned build workers..."
-  pkill -f "jest-worker/processChild.js" || true
-
-  echo "[deploy] Building frontend..."
-  rm -f .next/lock
-  echo "[deploy] Memory status before main build:"
-  free -h || true
-  NODE_OPTIONS="--max-old-space-size=512" npm run build
 
   echo "[deploy] Restarting frontend..."
   pm2 restart mycircle-frontend --update-env
