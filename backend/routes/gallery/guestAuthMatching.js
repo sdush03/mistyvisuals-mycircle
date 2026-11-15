@@ -636,9 +636,16 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         ? Math.min(120, Math.max(1, parseInt(req.query.limit, 10) || 60))
         : (req.query.all === 'true' ? undefined : 60);
 
+      const isUniversalAdmin = Boolean(req.guest?.isUniversalAdmin || req.guest?.role === 'admin');
+      const guestRole = (req.guest?.displayRole || '').toString().trim().toUpperCase();
+      const isBrideOrGroom = isUniversalAdmin || ['BRIDE', 'GROOM', 'COUPLE', 'ADMIN', 'UNIVERSAL_ADMIN'].includes(guestRole);
+
       const tDbStart = Date.now();
       const photos = await prisma.photo.findMany({
-        where: { id: { in: photoIds } },
+        where: {
+          id: { in: photoIds },
+          ...(!isBrideOrGroom ? { isPrivate: false } : {})
+        },
         select: {
           id: true,
           r2Url: true,
@@ -650,6 +657,7 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
           capturedAt: true,
           width: true,
           height: true,
+          isPrivate: true,
           _count: {
             select: {
               likes: true
@@ -681,7 +689,8 @@ module.exports = async function guestAuthMatchingRoutes(fastify, opts) {
         width: p.width,
         height: p.height,
         likeCount: p._count?.likes || 0,
-        isLiked: p.likes && p.likes.length > 0
+        isLiked: p.likes && p.likes.length > 0,
+        isPrivate: isBrideOrGroom ? (p.isPrivate || false) : undefined
       }));
 
       try {

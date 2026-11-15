@@ -326,27 +326,36 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
             }
           }
 
-          if (decoded.role === 'admin' || (decoded.roles && decoded.roles.includes('admin'))) {
+          let isUniversalAdmin = Boolean(
+            decoded.isUniversalAdmin ||
+            decoded.role === 'admin' ||
+            (decoded.roles && decoded.roles.includes('admin'))
+          );
+
+          if (isUniversalAdmin || (decoded.isAdminPreview && decoded.slug && decoded.slug.toLowerCase().trim() === slug)) {
             hasFullAccess = true;
-          } else if (decoded.isAdminPreview && decoded.slug && decoded.slug.toLowerCase().trim() === slug) {
-            hasFullAccess = true;
+            isBrideOrGroom = isUniversalAdmin;
+            const adminEmail = (decoded.email || 'admin@mistyvisuals.com').trim().toLowerCase();
             let adminGuest = await prisma.guest.findFirst({
-              where: { eventId: event.id, email: 'admin@mistyvisuals.com' }
+              where: { eventId: event.id, email: adminEmail }
             });
             if (!adminGuest) {
               adminGuest = await prisma.guest.create({
                 data: {
                   eventId: event.id,
-                  email: 'admin@mistyvisuals.com',
-                  name: 'Admin Preview',
+                  email: adminEmail,
+                  name: decoded.name || 'Universal Admin',
                   provider: 'system',
-                  providerId: 'admin-preview',
+                  providerId: isUniversalAdmin ? 'universal-admin' : 'admin-preview',
+                  displayRole: isUniversalAdmin ? 'ADMIN' : 'GUEST',
                   hasFullAccess: true
                 }
               });
             }
             dbGuest = adminGuest;
             guestId = adminGuest.id;
+            resolvedDisplayRole = (dbGuest.displayRole || (isUniversalAdmin ? 'ADMIN' : 'GUEST')).toString().trim().toUpperCase();
+            if (isUniversalAdmin) isBrideOrGroom = true;
           } else if (decoded.role === 'guest') {
             const eventIdMatches = decoded.eventId != null && String(decoded.eventId) === String(event.id);
             const slugMatches = decoded.slug && decoded.slug.toLowerCase().trim() === slug;
@@ -384,8 +393,32 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
 
               hasFullAccess = dbGuest.hasFullAccess;
               resolvedDisplayRole = (dbGuest.displayRole || '').toString().trim().toUpperCase() || 'GUEST';
-              isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(resolvedDisplayRole);
               circleUser = dbGuest.circleUser;
+
+              // Check Universal Admin
+              if (!isUniversalAdmin && ['ADMIN', 'UNIVERSAL_ADMIN'].includes(resolvedDisplayRole)) {
+                isUniversalAdmin = true;
+              }
+              if (!isUniversalAdmin && (decoded.userId || circleUser?.id)) {
+                const uid = Number(decoded.userId || circleUser?.id);
+                const uAdmin = await prisma.universalAdmin.findUnique({ where: { userId: uid } }).catch(() => null);
+                if (uAdmin) isUniversalAdmin = true;
+              }
+              if (!isUniversalAdmin && (dbGuest.email || decoded.email)) {
+                const em = (dbGuest.email || decoded.email).trim().toLowerCase();
+                const cu = circleUser || await prisma.circleUser.findUnique({ where: { email: em } }).catch(() => null);
+                if (cu) {
+                  const uAdmin = await prisma.universalAdmin.findUnique({ where: { userId: Number(cu.id) } }).catch(() => null);
+                  if (uAdmin) isUniversalAdmin = true;
+                }
+              }
+
+              if (isUniversalAdmin) {
+                hasFullAccess = true;
+                isBrideOrGroom = true;
+              } else {
+                isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(resolvedDisplayRole);
+              }
 
               // Reactivate if marked LEFT
               if (dbGuest.status === 'LEFT') {
@@ -461,7 +494,50 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
             guestId = dbGuest.id;
             hasFullAccess = dbGuest.hasFullAccess;
             resolvedDisplayRole = (dbGuest.displayRole || '').toString().trim().toUpperCase() || 'GUEST';
-            isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(resolvedDisplayRole);
+
+            // Check Universal Admin
+            if (!isUniversalAdmin && ['ADMIN', 'UNIVERSAL_ADMIN'].includes(resolvedDisplayRole)) {
+              isUniversalAdmin = true;
+            }
+            if (!isUniversalAdmin && (decoded.userId || circleUser?.id)) {
+              const uid = Number(decoded.userId || circleUser?.id);
+              const uAdmin = await prisma.universalAdmin.findUnique({ where: { userId: uid } }).catch(() => null);
+              if (uAdmin) isUniversalAdmin = true;
+            }
+            if (!isUniversalAdmin && (email || decoded.email)) {
+              const em = (email || decoded.email).trim().toLowerCase();
+              const cu = circleUser || await prisma.circleUser.findUnique({ where: { email: em } }).catch(() => null);
+              if (cu) {
+                const uAdmin = await prisma.universalAdmin.findUnique({ where: { userId: Number(cu.id) } }).catch(() => null);
+                if (uAdmin) isUniversalAdmin = true;
+              }
+            }
+
+            if (isUniversalAdmin) {
+              hasFullAccess = true;
+              isBrideOrGroom = true;
+            } else {
+              isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(resolvedDisplayRole);
+            }
+          }
+
+          if (!isBrideOrGroom && dbGuest) {
+            const cleanEmail = (dbGuest.email || decoded.email || '').trim().toLowerCase();
+            const cleanPhone = (dbGuest.phoneNumber || '').replace(/\D/g, '');
+            const candidateGuests = await prisma.guest.findMany({
+              where: { eventId: event.id, displayRole: { in: ['BRIDE', 'GROOM', 'COUPLE'] } }
+            }).catch(() => []);
+            const found = candidateGuests.find(g => {
+              const cgEmail = (g.email || '').trim().toLowerCase();
+              const cgPhone = (g.phoneNumber || '').replace(/\D/g, '');
+              if (cleanEmail && cgEmail && cleanEmail === cgEmail) return true;
+              if (cleanPhone && cgPhone && cleanPhone.length >= 10 && cgPhone.length >= 10 && cleanPhone === cgPhone) return true;
+              return false;
+            });
+            if (found) {
+              resolvedDisplayRole = found.displayRole.trim().toUpperCase();
+              isBrideOrGroom = true;
+            }
           }
         } catch (err) {
           return reply.code(401).send({ error: 'Session expired or invalid', code: 'TOKEN_EXPIRED' });
@@ -474,12 +550,13 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       if (dbGuest) {
         refreshPayload = {
           guestId: dbGuest.id,
-          userId: circleUser?.id || dbGuest.id,
+          userId: circleUser?.id || decoded?.userId || dbGuest.id,
           eventId: event.id,
           email: dbGuest.email,
-          role: 'guest',
+          role: (isUniversalAdmin || decoded?.role === 'admin') ? 'admin' : 'guest',
           displayRole: resolvedDisplayRole,
           hasFullAccess: hasFullAccess,
+          isUniversalAdmin: Boolean(isUniversalAdmin || decoded?.role === 'admin' || ['ADMIN', 'UNIVERSAL_ADMIN'].includes(resolvedDisplayRole)),
           sid: decoded?.sid,
           clientKind: decoded?.clientKind
         };
@@ -574,9 +651,25 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         ];
       }
 
-      const totalAllCount = await prisma.photo.count({ where: whereClause });
+      const totalAllCount = await prisma.photo.count({
+        where: {
+          ...whereClause,
+          isPrivate: false // All should count everything except locked!
+        }
+      });
       if (hasFullAccess) {
         tabCounts['ALL'] = totalAllCount;
+      }
+
+      let lockedPhotosCount = 0;
+      if (isBrideOrGroom) {
+        lockedPhotosCount = await prisma.photo.count({
+          where: { eventId: event.id, isPrivate: true }
+        });
+        if (lockedPhotosCount > 0) {
+          tabCounts['LOCKED'] = lockedPhotosCount;
+          tabCounts['LOCKED 🔐'] = lockedPhotosCount;
+        }
       }
       event.tabCounts = tabCounts;
 
@@ -605,8 +698,8 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
 
       const bundleLimit = (!hasFullAccess) ? 1000 : 60;
 
-      // Parallel data fetching: photos, favorites, cinema in single execution
-      const [photos, favorites, cinemaPhotos] = await Promise.all([
+      // Parallel data fetching: photos, favorites, cinema, locked in single execution
+      const [photos, favorites, cinemaPhotos, lockedDbPhotos] = await Promise.all([
         prisma.photo.findMany({
           where: whereClause,
           select: selectClause,
@@ -631,7 +724,12 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           select: selectClause,
           orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }],
           take: 60
-        })
+        }),
+        isBrideOrGroom ? prisma.photo.findMany({
+          where: { eventId: event.id, isPrivate: true },
+          select: selectClause,
+          orderBy: [{ capturedAt: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }]
+        }) : Promise.resolve([])
       ]);
 
       const formatPhoto = (p) => {
@@ -658,6 +756,8 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           likeCount: p._count?.likes || 0,
           isLiked: guestId ? (p.likes && p.likes.length > 0) : false,
           isPrivate: isBrideOrGroom ? (p.isPrivate || false) : undefined,
+          isLocked: isBrideOrGroom ? (p.isPrivate || false) : undefined,
+          isLocked: isBrideOrGroom ? (p.isPrivate || false) : undefined,
           isFeatured: Boolean(p.exif && p.exif.isFeatured),
           hasBakedCover: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked)),
           isCoverBaked: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked)),
@@ -676,6 +776,11 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       const mappedPhotos = photos.map(formatPhoto);
       const mappedFavorites = favorites.map(f => formatPhoto(f.photo));
       const mappedCinema = cinemaPhotos.map(formatPhoto);
+      const mappedLocked = lockedDbPhotos.map(p => ({
+        ...formatPhoto(p),
+        isPrivate: true,
+        isLocked: true
+      }));
 
       // Check matched photos if guest has selfie
       let matchedPhotosList = [];
@@ -722,6 +827,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           phoneNumber: dbGuest.phoneNumber,
           hasFullAccess,
           displayRole: resolvedDisplayRole,
+          isUniversalAdmin: Boolean(isUniversalAdmin || decoded?.role === 'admin' || ['ADMIN', 'UNIVERSAL_ADMIN'].includes(resolvedDisplayRole)),
           hasSelfie,
           selfieUrl: circleUser?.selfieUrl || null
         } : null,
@@ -733,9 +839,12 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         hasMoreMatched: matchedPhotosList.length < totalMatchedCount,
         favorites: mappedFavorites,
         cinema: mappedCinema,
+        locked: mappedLocked,
+        totalLocked: mappedLocked.length,
         tabCache: {
           ...(mappedFavorites.length > 0 ? { 'MY FAVOURITES': mappedFavorites } : {}),
           ...(mappedCinema.length > 0 ? { 'CINEMA': mappedCinema } : {}),
+          ...(mappedLocked.length > 0 ? { 'LOCKED 🔐': mappedLocked, 'LOCKED': mappedLocked } : {})
         }
       };
     } catch (err) {
@@ -797,21 +906,41 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
 
           isTokenValid = true;
 
-          if (decoded.role === 'admin' || (decoded.roles && decoded.roles.includes('admin'))) {
+          let isUniversalAdmin = Boolean(
+            decoded.isUniversalAdmin ||
+            decoded.role === 'admin' ||
+            (decoded.roles && decoded.roles.includes('admin'))
+          );
+          if (!isUniversalAdmin && (decoded.userId || decoded.guestId)) {
+            const uid = Number(decoded.userId || decoded.guestId);
+            const uAdmin = await prisma.universalAdmin.findUnique({ where: { userId: uid } }).catch(() => null);
+            if (uAdmin) isUniversalAdmin = true;
+          }
+          if (!isUniversalAdmin && decoded.email) {
+            const em = decoded.email.trim().toLowerCase();
+            const cu = await prisma.circleUser.findUnique({ where: { email: em } }).catch(() => null);
+            if (cu) {
+              const uAdmin = await prisma.universalAdmin.findUnique({ where: { userId: Number(cu.id) } }).catch(() => null);
+              if (uAdmin) isUniversalAdmin = true;
+            }
+          }
+
+          if (isUniversalAdmin || (decoded.isAdminPreview && decoded.slug.toLowerCase().trim() === slug)) {
             hasFullAccess = true;
-          } else if (decoded.isAdminPreview && decoded.slug.toLowerCase().trim() === slug) {
-            hasFullAccess = true;
+            isBrideOrGroom = isUniversalAdmin;
+            const adminEmail = (decoded.email || 'admin@mistyvisuals.com').trim().toLowerCase();
             let adminGuest = await prisma.guest.findFirst({
-              where: { eventId: event.id, email: 'admin@mistyvisuals.com' }
+              where: { eventId: event.id, email: adminEmail }
             });
             if (!adminGuest) {
               adminGuest = await prisma.guest.create({
                 data: {
                   eventId: event.id,
-                  email: 'admin@mistyvisuals.com',
-                  name: 'Admin Preview',
+                  email: adminEmail,
+                  name: decoded.name || 'Universal Admin',
                   provider: 'system',
-                  providerId: 'admin-preview',
+                  providerId: isUniversalAdmin ? 'universal-admin' : 'admin-preview',
+                  displayRole: isUniversalAdmin ? 'ADMIN' : 'GUEST',
                   hasFullAccess: true
                 }
               });
@@ -849,16 +978,21 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
               }
               hasFullAccess = dbGuest.hasFullAccess;
               const guestRole = (dbGuest.displayRole || '').toString().trim().toUpperCase();
-              isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(guestRole);
+              if (isUniversalAdmin || ['BRIDE', 'GROOM', 'COUPLE', 'ADMIN', 'UNIVERSAL_ADMIN'].includes(guestRole)) {
+                isBrideOrGroom = true;
+              } else {
+                isBrideOrGroom = false;
+              }
               // Fix 3: Capture payload to silently re-mint a fresh token in the response header
               refreshPayload = {
                 guestId: dbGuest.id,
                 userId: decoded.userId || 0,
                 eventId: event.id,
                 email: dbGuest.email,
-                role: 'guest',
+                role: (isUniversalAdmin || decoded.role === 'admin') ? 'admin' : 'guest',
                 displayRole: dbGuest.displayRole || null,
                 hasFullAccess: dbGuest.hasFullAccess,
+                isUniversalAdmin: Boolean(isUniversalAdmin),
                 sid: decoded?.sid,
                 clientKind: decoded?.clientKind
               };
@@ -890,9 +1024,22 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
             guestId = familyGuest.id;
             hasFullAccess = familyGuest.hasFullAccess;
             const guestRole = (familyGuest.displayRole || '').toString().trim().toUpperCase();
-            isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(guestRole);
+            if (isUniversalAdmin || ['BRIDE', 'GROOM', 'COUPLE', 'ADMIN', 'UNIVERSAL_ADMIN'].includes(guestRole)) {
+              isBrideOrGroom = true;
+            } else {
+              isBrideOrGroom = false;
+            }
           } else {
             return reply.code(403).send({ error: 'Token does not match this event' });
+          }
+
+          if (!isBrideOrGroom && (decoded.email || guestId)) {
+            const cleanEmail = (decoded.email || '').trim().toLowerCase();
+            const candidateGuests = await prisma.guest.findMany({
+              where: { eventId: event.id, displayRole: { in: ['BRIDE', 'GROOM', 'COUPLE'] } }
+            }).catch(() => []);
+            const found = candidateGuests.find(g => (g.email || '').trim().toLowerCase() === cleanEmail);
+            if (found) isBrideOrGroom = true;
           }
         } catch (err) {
           // If a guest token was provided but is expired or invalid, return 401.
@@ -914,17 +1061,28 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
 
       const offset = Math.max(0, parseInt(req.query.offset) || 0);
       const tabFilter = (req.query.tab || '').trim();
-      const defaultLimit = (tabFilter && tabFilter.toLowerCase() === 'highlights') ? 1000 : 60;
+      const isLockedRequest = tabFilter && tabFilter.toUpperCase().includes('LOCKED');
+      const defaultLimit = (tabFilter && tabFilter.toLowerCase() === 'highlights') ? 1000 : (isLockedRequest ? 1000 : 60);
       const limit  = Math.min(50000, Math.max(1, parseInt(req.query.limit) || defaultLimit));
 
       const whereClause = { eventId: event.id };
 
-      // Non-couple users never see private photos — enforced server-side
-      if (!isBrideOrGroom) {
-        whereClause.isPrivate = false;
+      if (isLockedRequest) {
+        if (!isBrideOrGroom) {
+          return reply.code(403).send({ error: 'Only Bride, Groom or Universal Admin can view locked photos', code: 'UNAUTHORIZED_LOCKED' });
+        }
+        whereClause.isPrivate = true;
+      } else {
+        // Non-couple / non-admin users never see private photos — enforced server-side
+        if (!isBrideOrGroom) {
+          whereClause.isPrivate = false;
+        }
       }
 
-      if (!hasFullAccess) {
+      if (isLockedRequest) {
+        // Locked photos can belong to any ceremony/tab — do not constrain by tabName!
+        delete whereClause.tabName;
+      } else if (!hasFullAccess) {
         if (tabFilter && tabFilter.trim().toLowerCase() === 'cinema') {
           let actualTab = 'Cinema';
           if (event.tabs && Array.isArray(event.tabs)) {
@@ -947,7 +1105,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
             if (matchedTab) actualTab = matchedTab;
           }
           whereClause.tabName = { equals: actualTab, mode: 'insensitive' };
-        } else if (tabFilter) {
+        } else if (tabFilter && tabFilter.toUpperCase() !== 'ALL') {
           let actualTab = tabFilter;
           if (event.tabs && Array.isArray(event.tabs)) {
             const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === tabFilter.toLowerCase());
@@ -1047,6 +1205,7 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
           likeCount: p._count?.likes || 0,
           isLiked: guestId ? (p.likes && p.likes.length > 0) : false,
           isPrivate: isBrideOrGroom ? (p.isPrivate || false) : undefined,
+          isLocked: isBrideOrGroom ? (p.isPrivate || false) : undefined,
           isFeatured: Boolean(p.exif && p.exif.isFeatured),
           hasBakedCover: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked)),
           isCoverBaked: Boolean(p.exif && (p.exif.hasBakedCover || p.exif.isCoverBaked)),
@@ -1131,8 +1290,28 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
               return reply.code(401).send({ error: 'Session terminated (logged in on another device)', code: 'SESSION_TERMINATED' });
             }
           }
-          if (decoded.role === 'admin' || (decoded.roles && decoded.roles.includes('admin'))) {
+          let isUniversalAdmin = Boolean(
+            decoded.isUniversalAdmin ||
+            decoded.role === 'admin' ||
+            (decoded.roles && decoded.roles.includes('admin'))
+          );
+          if (!isUniversalAdmin && (decoded.userId || decoded.guestId)) {
+            const uid = Number(decoded.userId || decoded.guestId);
+            const uAdmin = await prisma.universalAdmin.findUnique({ where: { userId: uid } }).catch(() => null);
+            if (uAdmin) isUniversalAdmin = true;
+          }
+          if (!isUniversalAdmin && decoded.email) {
+            const em = decoded.email.trim().toLowerCase();
+            const cu = await prisma.circleUser.findUnique({ where: { email: em } }).catch(() => null);
+            if (cu) {
+              const uAdmin = await prisma.universalAdmin.findUnique({ where: { userId: Number(cu.id) } }).catch(() => null);
+              if (uAdmin) isUniversalAdmin = true;
+            }
+          }
+
+          if (isUniversalAdmin || (decoded.role === 'admin' || (decoded.roles && decoded.roles.includes('admin')))) {
             hasFullAccess = true;
+            isBrideOrGroom = true;
           } else if (decoded.isAdminPreview && decoded.slug.toLowerCase().trim() === slug) {
             hasFullAccess = true;
           } else if (decoded.role === 'guest') {
@@ -1149,11 +1328,12 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
                 guestId = dbGuest.id;
                 hasFullAccess = dbGuest.hasFullAccess || hasFullAccess;
                 const guestRole = (dbGuest.displayRole || '').toString().trim().toUpperCase();
-                isBrideOrGroom = ['BRIDE', 'GROOM', 'COUPLE'].includes(guestRole);
+                isBrideOrGroom = isUniversalAdmin || ['BRIDE', 'GROOM', 'COUPLE', 'ADMIN', 'UNIVERSAL_ADMIN'].includes(guestRole);
               }
             }
           } else if (decoded.role === 'family') {
             hasFullAccess = true;
+            if (isUniversalAdmin) isBrideOrGroom = true;
           }
         } catch (_) {}
       }
@@ -1164,13 +1344,19 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
 
       const tabFilter = (req.query.tab || 'ALL').trim();
       const isAllTab = tabFilter.toUpperCase() === 'ALL';
+      const isLockedTab = tabFilter.toUpperCase().includes('LOCKED');
 
       const whereClause = {
         eventId: event.id,
         ...(!isBrideOrGroom ? { isPrivate: false } : {}),
       };
 
-      if (!isAllTab) {
+      if (isLockedTab) {
+        if (!isBrideOrGroom) {
+          return reply.code(403).send({ error: 'Access denied' });
+        }
+        whereClause.isPrivate = true;
+      } else if (!isAllTab) {
         let actualTab = tabFilter;
         if (event.tabs && Array.isArray(event.tabs)) {
           const matchedTab = event.tabs.find(t => t.trim().toLowerCase() === tabFilter.toLowerCase());
@@ -1538,8 +1724,9 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
       const guest = await prisma.guest.findUnique({ where: { id: guestId } });
 
       let roleUpper = (guest?.displayRole || req.guest.displayRole || '').toString().trim().toUpperCase();
+      const isUniversalAdmin = Boolean(req.guest?.isUniversalAdmin);
 
-      if (!['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) {
+      if (!isUniversalAdmin && !['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) {
         // Fallback candidate search
         const cleanEmail = (guest?.email || req.guest.email || '').trim().toLowerCase();
         const cleanPhone = (guest?.phoneNumber || '').replace(/\D/g, '');
@@ -1563,8 +1750,8 @@ module.exports = async function publicGalleryRoutes(fastify, opts) {
         }
       }
 
-      if (!['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) {
-        return reply.code(403).send({ error: 'Only Bride or Groom can delete photos' });
+      if (!isUniversalAdmin && !['BRIDE', 'GROOM', 'COUPLE'].includes(roleUpper)) {
+        return reply.code(403).send({ error: 'Only Bride, Groom or Universal Admin can delete photos' });
       }
 
       const photo = await prisma.photo.findUnique({ where: { id: photoId } });

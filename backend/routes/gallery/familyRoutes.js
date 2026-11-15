@@ -456,14 +456,21 @@ module.exports = async function familyRoutes(fastify, opts) {
           } catch (_) {}
         }
 
+        if (req.family?.isUniversalAdmin) {
+          if (!resolvedDisplayRole || resolvedDisplayRole === 'GUEST') {
+            resolvedDisplayRole = 'ADMIN';
+          }
+        }
+
         const eventToken = fastify.jwt.sign({
           guestId: g.id,
           userId: user.id,
           eventId: event.id,
           email: g.email,
-          role: 'guest',
+          role: req.family?.isUniversalAdmin ? 'admin' : 'guest',
           displayRole: resolvedDisplayRole,
-          hasFullAccess: g.hasFullAccess,
+          hasFullAccess: req.family?.isUniversalAdmin ? true : g.hasFullAccess,
+          isUniversalAdmin: Boolean(req.family?.isUniversalAdmin),
           sid: req.family?.sid,
           clientKind: req.family?.clientKind
         }, { expiresIn: '365d' });
@@ -481,6 +488,7 @@ module.exports = async function familyRoutes(fastify, opts) {
           highlightsPhotoCount,
           totalPhotoCount,
           eventToken,
+          isUniversalAdmin: Boolean(req.family?.isUniversalAdmin),
           galleryFacesComplete: event.galleryFacesComplete,
           allowDownloads: event.allowDownloads !== false,
           allowBulkDownloads: !!event.allowBulkDownloads,
@@ -489,8 +497,9 @@ module.exports = async function familyRoutes(fastify, opts) {
             name: user.name || g.name,
             email: g.email,
             phoneNumber: user.phoneNumber,
-            hasFullAccess: g.hasFullAccess,
+            hasFullAccess: req.family?.isUniversalAdmin ? true : g.hasFullAccess,
             displayRole: resolvedDisplayRole,
+            isUniversalAdmin: Boolean(req.family?.isUniversalAdmin),
             hasSelfie: userHasSelfie,
             selfieUrl: user.selfieUrl || null,
             selfieGuestId: user.id

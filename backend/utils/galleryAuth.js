@@ -19,7 +19,12 @@ async function verifyGuestAuth(req, reply) {
     // Access fastify instance via req.server
     const decoded = req.server.jwt.verify(token);
     let isAdminPreview = false;
-    if (decoded.role !== 'guest' && decoded.role !== 'family') {
+    let isUniversalAdmin = Boolean(
+      decoded.isUniversalAdmin ||
+      decoded.role === 'admin' ||
+      (decoded.roles && decoded.roles.includes('admin'))
+    );
+    if (decoded.role !== 'guest' && decoded.role !== 'family' && !isUniversalAdmin) {
       if (decoded.isAdminPreview && req.params.slug && decoded.slug.toLowerCase().trim() === req.params.slug.toLowerCase().trim()) {
         isAdminPreview = true;
       } else {
@@ -46,7 +51,26 @@ async function verifyGuestAuth(req, reply) {
     }
 
     let guestId = decoded.guestId;
-    if (isAdminPreview && event) {
+    if (isUniversalAdmin && event) {
+      const adminEmail = (decoded.email || 'admin@mistyvisuals.com').trim().toLowerCase();
+      let adminGuest = await prisma.guest.findFirst({
+        where: { eventId: event.id, email: adminEmail }
+      });
+      if (!adminGuest) {
+        adminGuest = await prisma.guest.create({
+          data: {
+            eventId: event.id,
+            email: adminEmail,
+            name: decoded.name || 'Universal Admin',
+            provider: 'system',
+            providerId: 'universal-admin',
+            displayRole: 'ADMIN',
+            hasFullAccess: true
+          }
+        });
+      }
+      guestId = adminGuest.id;
+    } else if (isAdminPreview && event) {
       // Find or create the Admin Preview guest
       let adminGuest = await prisma.guest.findFirst({
         where: { eventId: event.id, email: 'admin@mistyvisuals.com' }
@@ -91,7 +115,7 @@ async function verifyGuestAuth(req, reply) {
       where: { id: guestId }
     }) : null;
 
-    if (!isAdminPreview) {
+    if (!isAdminPreview && !isUniversalAdmin) {
       if (!dbGuest) {
         return reply.code(403).send({ error: 'Access denied: Participant removed from gallery' });
       }
@@ -116,18 +140,30 @@ async function verifyGuestAuth(req, reply) {
     }
 
     const resolvedUserId = decoded.userId || (dbGuest ? dbGuest.id : 0);
-    const universalAdminRecord = resolvedUserId ? await prisma.universalAdmin.findUnique({
-      where: { userId: Number(resolvedUserId) }
-    }).catch(() => null) : null;
-
-    const isUniversalAdmin = Boolean(universalAdminRecord);
+    if (!isUniversalAdmin && resolvedUserId) {
+      const universalAdminRecord = await prisma.universalAdmin.findUnique({
+        where: { userId: Number(resolvedUserId) }
+      }).catch(() => null);
+      if (universalAdminRecord) isUniversalAdmin = true;
+    }
+    if (!isUniversalAdmin && (decoded.email || dbGuest?.email)) {
+      const checkEmail = (decoded.email || dbGuest?.email).trim().toLowerCase();
+      const circleUser = await prisma.circleUser.findUnique({ where: { email: checkEmail } }).catch(() => null);
+      if (circleUser) {
+        const universalAdminRecord = await prisma.universalAdmin.findUnique({
+          where: { userId: Number(circleUser.id) }
+        }).catch(() => null);
+        if (universalAdminRecord) isUniversalAdmin = true;
+      }
+    }
 
     req.guest = {
       ...decoded,
       guestId,
       userId: resolvedUserId,
       eventId: event ? event.id : decoded.eventId,
-      role: isUniversalAdmin ? 'admin' : 'guest',
+      role: isUniversalAdmin ? 'admin' : (decoded.role || 'guest'),
+      displayRole: isUniversalAdmin ? (dbGuest?.displayRole || 'ADMIN') : (dbGuest ? dbGuest.displayRole : decoded.displayRole),
       hasFullAccess: isUniversalAdmin || (dbGuest ? dbGuest.hasFullAccess : decoded.hasFullAccess),
       isUniversalAdmin,
       isPreviewMode: isAdminPreview
@@ -151,7 +187,7 @@ async function verifyFamilyAuth(req, reply) {
     }
     const token = authHeader.split(' ')[1];
     const decoded = req.server.jwt.verify(token);
-    if (decoded.role !== 'family' && decoded.role !== 'guest') {
+    if (decoded.role !== 'family' && decoded.role !== 'guest' && decoded.role !== 'admin' && !decoded.isUniversalAdmin) {
       return reply.code(403).send({ error: 'Access denied' });
     }
     if (!decoded.email) {
